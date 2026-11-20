@@ -30,8 +30,9 @@ interface Ctx {
 const DataCtx = createContext<Ctx | null>(null);
 
 function makeStore(): Store {
-  const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+  const env = import.meta.env;
+  const url = (env.VITE_SUPABASE_URL ?? env.NEXT_PUBLIC_SUPABASE_URL) as string | undefined;
+  const key = (env.VITE_SUPABASE_ANON_KEY ?? env.NEXT_PUBLIC_SUPABASE_ANON_KEY) as string | undefined;
   return url && key ? new SupabaseStore(url, key) : new DemoStore();
 }
 

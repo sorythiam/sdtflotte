@@ -22,7 +22,8 @@ stockées dans le navigateur. À la connexion, le mot de passe choisit le profil
    `reset.sql` efface tout le schéma public (ex-tables Flotte365 comprises) ; les comptes et fichiers restent.
    Les deux scripts peuvent être relancés sans erreur.
 2. Dans Authentication › URL Configuration, mettre `https://yoonfleet.vercel.app` comme Site URL.
-3. Définir dans Vercel (ou `.env.local`) :
+3. Dans Vercel, connecter le store Supabase au projet « yoonfleet » (Storage › Connect Project) :
+   il fournit `NEXT_PUBLIC_SUPABASE_URL` et `NEXT_PUBLIC_SUPABASE_ANON_KEY`, lus directement. En local, `.env.local` :
    ```
    VITE_SUPABASE_URL=https://xxxx.supabase.co
    VITE_SUPABASE_ANON_KEY=eyJ...
