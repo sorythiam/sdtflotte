@@ -18,8 +18,10 @@ stockées dans le navigateur. À la connexion, le mot de passe choisit le profil
 
 ## Brancher Supabase
 
-1. Créer un projet Supabase **neuf** (ne pas réutiliser la base du POC Flotte365).
-2. Exécuter `supabase/schema.sql` dans l'éditeur SQL.
+1. Dans l'éditeur SQL du projet Supabase, exécuter `supabase/reset.sql` puis `supabase/schema.sql`.
+   `reset.sql` efface tout le schéma public (ex-tables Flotte365 comprises) ; les comptes et fichiers restent.
+   Les deux scripts peuvent être relancés sans erreur.
+2. Dans Authentication › URL Configuration, mettre `https://yoonfleet.vercel.app` comme Site URL.
 3. Définir dans Vercel (ou `.env.local`) :
    ```
    VITE_SUPABASE_URL=https://xxxx.supabase.co

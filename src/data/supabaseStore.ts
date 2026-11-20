@@ -39,6 +39,7 @@ export class SupabaseStore implements Store {
   readonly mode = 'supabase' as const;
   private sb: SupabaseClient;
   private orgId: string | null = null;
+  private creatingOrg = false;
 
   constructor(url: string, anonKey: string) {
     this.sb = createClient(url, anonKey);
@@ -55,7 +56,19 @@ export class SupabaseStore implements Store {
       .limit(1)
       .maybeSingle();
     if (error) throw friendly(error);
-    if (!m) return null;
+    if (!m) {
+      // Inscription confirmée par email : l'entreprise est créée à la première connexion.
+      const meta = user.user_metadata as { org_name?: string; country?: string };
+      if (!meta?.org_name || this.creatingOrg) return null;
+      this.creatingOrg = true;
+      try {
+        const { error: e2 } = await this.sb.rpc('create_organization', { p_name: meta.org_name, p_country: meta.country ?? 'SN' });
+        if (e2) throw friendly(e2);
+      } finally {
+        this.creatingOrg = false;
+      }
+      return this.session();
+    }
     const o = (m as unknown as { organizations: Record<string, unknown> }).organizations;
     this.orgId = o.id as string;
     const org: Organization = {
@@ -76,13 +89,16 @@ export class SupabaseStore implements Store {
   }
 
   async signUp(email: string, password: string, orgName: string, country: string): Promise<void> {
-    const { data, error } = await this.sb.auth.signUp({ email, password });
+    const { data, error } = await this.sb.auth.signUp({
+      email,
+      password,
+      options: { data: { org_name: orgName, country }, emailRedirectTo: window.location.origin },
+    });
     if (error) throw friendly(error);
     if (!data.session) {
-      throw new Error('Compte créé : confirmez votre email, puis connectez-vous pour créer votre entreprise.');
+      throw new Error('Compte créé. Ouvrez le lien reçu par email, puis connectez-vous : votre espace sera prêt.');
     }
-    const { error: e2 } = await this.sb.rpc('create_organization', { p_name: orgName, p_country: country });
-    if (e2) throw friendly(e2);
+    // Sans confirmation par email, session() crée l'entreprise à partir des métadonnées.
   }
 
   async signOut(): Promise<void> {
