@@ -20,6 +20,7 @@ export function Layout() {
     ['/clients', 'Clients'],
     ['/maintenance', 'Maintenance'],
     ['/tarifs', 'Tarifs'],
+    ...(can('direction', 'comptable') ? ([['/rapports', 'Rapports']] as [string, string][]) : []),
     ...(can('direction') ? ([['/equipe', 'Équipe']] as [string, string][]) : []),
     ['/parametres', 'Paramètres'],
   ];
