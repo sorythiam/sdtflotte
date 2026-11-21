@@ -119,3 +119,18 @@ export interface Tables {
   maintenances: Maintenance;
 }
 export type TableName = keyof Tables;
+
+export interface Member {
+  userId: string;
+  email: string;
+  role: Role;
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  role: Role;
+  token: string;
+  createdAt: string;
+  expiresAt: string;
+}

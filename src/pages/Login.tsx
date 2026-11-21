@@ -4,8 +4,10 @@ import { useData } from '../state/DataContext';
 
 export function Login() {
   const { store, setSession } = useData();
-  const [tab, setTab] = useState<'login' | 'signup'>('login');
-  const [email, setEmail] = useState('');
+  const params = new URLSearchParams(window.location.search);
+  const invited = params.has('invitation');
+  const [tab, setTab] = useState<'login' | 'signup' | 'join'>(invited ? 'join' : 'login');
+  const [email, setEmail] = useState(params.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [orgName, setOrgName] = useState('');
   const [country, setCountry] = useState('SN');
@@ -19,8 +21,18 @@ export function Login() {
     setBusy(true);
     try {
       if (tab === 'login') await store.signIn(email, password);
-      else await store.signUp(email, password, orgName, country);
-      setSession(await store.session());
+      else await store.signUp(email, password, tab === 'join' ? '' : orgName, country);
+      const s = await store.session();
+      if (!s) {
+        await store.signOut();
+        throw new Error(
+          tab === 'join'
+            ? 'Compte créé, mais aucune invitation valide pour cette adresse. Demandez à votre administrateur de vous inviter avec cet email.'
+            : 'Votre compte n’est rattaché à aucune entreprise. Demandez une invitation à votre administrateur, ou créez votre entreprise avec « Essai gratuit ».',
+        );
+      }
+      if (invited) window.history.replaceState(null, '', '/');
+      setSession(s);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -45,15 +57,27 @@ export function Login() {
           <button type="button" role="tab" aria-selected={tab === 'login'} onClick={() => setTab('login')}>
             Se connecter
           </button>
-          <button type="button" role="tab" aria-selected={tab === 'signup'} onClick={() => setTab('signup')}>
-            Essai gratuit 30 jours
-          </button>
+          {invited ? (
+            <button type="button" role="tab" aria-selected={tab === 'join'} onClick={() => setTab('join')}>
+              Rejoindre mon équipe
+            </button>
+          ) : (
+            <button type="button" role="tab" aria-selected={tab === 'signup'} onClick={() => setTab('signup')}>
+              Essai gratuit 30 jours
+            </button>
+          )}
         </div>
         {demo && (
           <div className="notice">
             <strong>Démo :</strong> n’importe quel email. Le mot de passe choisit le profil :{' '}
-            <code>direction</code>, <code>agent</code>, <code>comptable</code> ou <code>mecanicien</code>.
+            <code>admin</code>, <code>direction</code>, <code>agent</code>, <code>comptable</code> ou <code>mecanicien</code>.
           </div>
+        )}
+        {tab === 'join' && (
+          <p className="small" style={{ margin: 0 }}>
+            Vous avez été invité(e) sur Yoon Fleet. Créez votre mot de passe avec l’adresse qui a reçu l’invitation, puis
+            confirmez-la depuis l’email reçu.
+          </p>
         )}
         <form className="stack" onSubmit={submit}>
           {tab === 'signup' && (
@@ -92,11 +116,11 @@ export function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            {tab === 'signup' && !demo && <span className="hint">8 caractères minimum</span>}
+            {tab !== 'login' && !demo && <span className="hint">8 caractères minimum</span>}
           </label>
           <ErrorBox error={error} />
           <button className="btn btn-primary" disabled={busy}>
-            {busy ? 'Un instant…' : tab === 'login' ? 'Se connecter' : 'Créer mon espace'}
+            {busy ? 'Un instant…' : tab === 'login' ? 'Se connecter' : tab === 'join' ? 'Créer mon compte' : 'Créer mon espace'}
           </button>
         </form>
         <p className="xs muted" style={{ margin: 0, textAlign: 'center' }}>

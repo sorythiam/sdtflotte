@@ -1,4 +1,4 @@
-import type { Organization, Role, TableName, Tables } from '../domain/types';
+import type { Invitation, Member, Organization, Role, TableName, Tables } from '../domain/types';
 import { seed } from './seed';
 import type { NewRow, Row, SessionInfo, Store } from './store';
 
@@ -9,6 +9,18 @@ interface DemoState {
   db: Db;
   session: { email: string; role: Role } | null;
   org: Organization;
+  members?: Member[];
+  invitations?: Invitation[];
+}
+
+const SELF = 'u-moi';
+
+function demoTeam(): Member[] {
+  return [
+    { userId: 'u-agent', email: 'awa.agent@sdt.sn', role: 'agent' },
+    { userId: 'u-compta', email: 'moussa.compta@sdt.sn', role: 'comptable' },
+    { userId: 'u-meca', email: 'ibou.garage@sdt.sn', role: 'mecanicien' },
+  ];
 }
 
 function freshState(): DemoState {
@@ -17,6 +29,8 @@ function freshState(): DemoState {
   return {
     db: seed(),
     session: null,
+    members: demoTeam(),
+    invitations: [],
     org: {
       id: 'org-demo',
       name: 'Sénégal Découverte Touristique',
@@ -45,7 +59,12 @@ export class DemoStore implements Store {
   private load(): DemoState {
     try {
       const raw = this.storage?.getItem(KEY);
-      if (raw) return JSON.parse(raw) as DemoState;
+      if (raw) {
+        const st = JSON.parse(raw) as DemoState;
+        st.members ??= demoTeam();
+        st.invitations ??= [];
+        return st;
+      }
     } catch {
       /* stockage indisponible ou corrompu : on repart de l'exemple */
     }
@@ -69,18 +88,26 @@ export class DemoStore implements Store {
 
   async session(): Promise<SessionInfo | null> {
     const s = this.state.session;
-    return s ? { userEmail: s.email, role: s.role, org: this.state.org } : null;
+    return s ? { userId: SELF, userEmail: s.email, role: s.role, org: this.state.org } : null;
   }
 
-  /** En démo, le mot de passe sert à choisir le profil : direction, agent, comptable, mecanicien. */
+  /** En démo, le mot de passe sert à choisir le profil : admin (par défaut), direction, agent, comptable, mecanicien. */
   async signIn(email: string, password: string): Promise<void> {
     const roles: Role[] = ['admin', 'direction', 'agent', 'comptable', 'mecanicien'];
-    const role = (roles.find((r) => r === password.trim().toLowerCase()) ?? 'direction') as Role;
+    const role = (roles.find((r) => r === password.trim().toLowerCase()) ?? 'admin') as Role;
     this.state.session = { email: email || 'demo@yoonfleet.com', role };
     this.save();
   }
 
   async signUp(email: string, _password: string, orgName: string, country: string): Promise<void> {
+    if (!orgName) {
+      // Démo : rejoindre l'équipe d'exemple avec le profil de l'invitation, agent par défaut.
+      const inv = (this.state.invitations ?? []).find((i) => i.email === email.trim().toLowerCase());
+      this.state.invitations = (this.state.invitations ?? []).filter((i) => i !== inv);
+      this.state.session = { email, role: inv?.role ?? 'agent' };
+      this.save();
+      return;
+    }
     this.state = freshState();
     this.state.org.name = orgName;
     this.state.org.country = country;
@@ -122,6 +149,61 @@ export class DemoStore implements Store {
   async remove(table: TableName, id: string): Promise<void> {
     const list = this.state.db[table] as { id: string }[];
     this.state.db[table] = list.filter((r) => r.id !== id) as never;
+    this.save();
+  }
+
+  // ---------------------------------------------------------------- équipe
+  async listMembers(): Promise<Member[]> {
+    const s = this.state.session;
+    const me: Member[] = s ? [{ userId: SELF, email: s.email, role: s.role }] : [];
+    return [...me, ...(this.state.members ?? [])];
+  }
+
+  async listInvitations(): Promise<Invitation[]> {
+    return structuredClone(this.state.invitations ?? []);
+  }
+
+  async invite(email: string, role: Role): Promise<Invitation> {
+    const e = email.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new Error('Adresse email invalide.');
+    if ((await this.listMembers()).some((m) => m.email.toLowerCase() === e)) {
+      throw new Error("Cette personne fait déjà partie de l'équipe");
+    }
+    if ((this.state.invitations ?? []).some((i) => i.email === e)) throw new Error('Une invitation est déjà en attente pour cette adresse.');
+    const now = new Date();
+    const inv: Invitation = {
+      id: uid(), email: e, role, token: uid(), createdAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + 14 * 86400000).toISOString(),
+    };
+    (this.state.invitations ??= []).push(inv);
+    this.save();
+    return inv;
+  }
+
+  async cancelInvitation(id: string): Promise<void> {
+    this.state.invitations = (this.state.invitations ?? []).filter((i) => i.id !== id);
+    this.save();
+  }
+
+  private assertKeepsAdmin(userId: string, newRole: Role | null): void {
+    const all = [{ userId: SELF, role: this.state.session?.role }, ...(this.state.members ?? [])];
+    const target = all.find((m) => m.userId === userId);
+    if (target?.role === 'admin' && newRole !== 'admin' && !all.some((m) => m.userId !== userId && m.role === 'admin')) {
+      throw new Error("L'entreprise doit garder au moins un administrateur");
+    }
+  }
+
+  async updateMemberRole(userId: string, role: Role): Promise<void> {
+    this.assertKeepsAdmin(userId, role);
+    if (userId === SELF && this.state.session) this.state.session.role = role;
+    else this.state.members = (this.state.members ?? []).map((m) => (m.userId === userId ? { ...m, role } : m));
+    this.save();
+  }
+
+  async removeMember(userId: string): Promise<void> {
+    if (userId === SELF) throw new Error('Vous ne pouvez pas vous retirer vous-même.');
+    this.assertKeepsAdmin(userId, null);
+    this.state.members = (this.state.members ?? []).filter((m) => m.userId !== userId);
     this.save();
   }
 }

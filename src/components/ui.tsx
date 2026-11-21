@@ -1,5 +1,13 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import type { ClientScore, ReservationStatus, VehicleStatus } from '../domain/types';
+import type { ClientScore, ReservationStatus, Role, VehicleStatus } from '../domain/types';
+
+export const roleLabel: Record<Role, string> = {
+  admin: 'Administrateur',
+  direction: 'Direction',
+  agent: 'Agent de location',
+  comptable: 'Comptabilité',
+  mecanicien: 'Mécanicien',
+};
 
 export function Logo({ size = 36, inverse = true }: { size?: number; inverse?: boolean }) {
   const tile = inverse ? '#F6F1E7' : '#0B3C5D';

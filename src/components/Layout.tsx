@@ -1,13 +1,12 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import type { DemoStore } from '../data/demoStore';
 import { useData } from '../state/DataContext';
-import { Logo, Wordmark } from './ui';
+import { Logo, roleLabel, Wordmark } from './ui';
 
 const planLabel = { essentiel: 'Essentiel', pro: 'Pro', entreprise: 'Entreprise' };
-const roleLabel = { admin: 'Administrateur', direction: 'Direction', agent: 'Agent de location', comptable: 'Comptabilité', mecanicien: 'Mécanicien' };
 
 export function Layout() {
-  const { session, store, setSession, data, now, refresh, toast } = useData();
+  const { session, store, setSession, data, now, refresh, toast, can } = useData();
   const nav = useNavigate();
   if (!session) return null;
   const { org } = session;
@@ -21,6 +20,7 @@ export function Layout() {
     ['/clients', 'Clients'],
     ['/maintenance', 'Maintenance'],
     ['/tarifs', 'Tarifs'],
+    ...(can('direction') ? ([['/equipe', 'Équipe']] as [string, string][]) : []),
   ];
 
   async function logout() {

@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Organization, Role, TableName } from '../domain/types';
+import type { Invitation, Member, Organization, Role, TableName } from '../domain/types';
 import type { NewRow, Row, SessionInfo, Store } from './store';
 
 // Colonnes dont le nom diffère entre l'application (camelCase) et la base (snake_case).
@@ -57,13 +57,19 @@ export class SupabaseStore implements Store {
       .maybeSingle();
     if (error) throw friendly(error);
     if (!m) {
-      // Inscription confirmée par email : l'entreprise est créée à la première connexion.
-      const meta = user.user_metadata as { org_name?: string; country?: string };
-      if (!meta?.org_name || this.creatingOrg) return null;
+      // Première connexion : on rejoint d'abord l'entreprise qui a invité cette adresse,
+      // sinon on crée l'entreprise demandée à l'inscription.
+      if (this.creatingOrg) return null;
       this.creatingOrg = true;
       try {
-        const { error: e2 } = await this.sb.rpc('create_organization', { p_name: meta.org_name, p_country: meta.country ?? 'SN' });
-        if (e2) throw friendly(e2);
+        const { data: joined, error: e1 } = await this.sb.rpc('accept_invitations');
+        if (e1) throw friendly(e1);
+        if (!joined) {
+          const meta = user.user_metadata as { org_name?: string; country?: string };
+          if (!meta?.org_name) return null;
+          const { error: e2 } = await this.sb.rpc('create_organization', { p_name: meta.org_name, p_country: meta.country ?? 'SN' });
+          if (e2) throw friendly(e2);
+        }
       } finally {
         this.creatingOrg = false;
       }
@@ -80,7 +86,7 @@ export class SupabaseStore implements Store {
       vehicleQuota: o.vehicle_quota as number,
       trialEndsAt: (o.trial_ends_at as string) ?? null,
     };
-    return { userEmail: user.email ?? '', role: (m as { role: Role }).role, org };
+    return { userId: user.id, userEmail: user.email ?? '', role: (m as { role: Role }).role, org };
   }
 
   async signIn(email: string, password: string): Promise<void> {
@@ -92,7 +98,7 @@ export class SupabaseStore implements Store {
     const { data, error } = await this.sb.auth.signUp({
       email,
       password,
-      options: { data: { org_name: orgName, country }, emailRedirectTo: window.location.origin },
+      options: { data: orgName ? { org_name: orgName, country } : {}, emailRedirectTo: window.location.origin },
     });
     if (error) throw friendly(error);
     if (!data.session) {
@@ -133,6 +139,53 @@ export class SupabaseStore implements Store {
 
   async remove(table: TableName, id: string): Promise<void> {
     const { error } = await this.sb.from(table).delete().eq('id', id);
+    if (error) throw friendly(error);
+  }
+
+  // ---------------------------------------------------------------- équipe
+  async listMembers(): Promise<Member[]> {
+    const { data, error } = await this.sb.from('memberships').select('user_id, email, role').eq('org_id', this.orgId);
+    if (error) throw friendly(error);
+    return (data ?? []).map((r) => ({ userId: r.user_id as string, email: (r.email as string) ?? '', role: r.role as Role }));
+  }
+
+  async listInvitations(): Promise<Invitation[]> {
+    const { data, error } = await this.sb
+      .from('invitations')
+      .select('*')
+      .eq('org_id', this.orgId)
+      .is('accepted_at', null)
+      .order('created_at', { ascending: false });
+    if (error) throw friendly(error);
+    return (data ?? []).map((r) => rowToApp<Invitation>(r));
+  }
+
+  async invite(email: string, role: Role): Promise<Invitation> {
+    if (!this.orgId) throw new Error('Session expirée, reconnectez-vous.');
+    const { data, error } = await this.sb
+      .from('invitations')
+      .insert({ org_id: this.orgId, email: email.trim().toLowerCase(), role })
+      .select('*')
+      .single();
+    if (error) {
+      if (error.code === '23505') throw new Error('Une invitation est déjà en attente pour cette adresse.');
+      throw friendly(error);
+    }
+    return rowToApp<Invitation>(data);
+  }
+
+  async cancelInvitation(id: string): Promise<void> {
+    const { error } = await this.sb.from('invitations').delete().eq('id', id);
+    if (error) throw friendly(error);
+  }
+
+  async updateMemberRole(userId: string, role: Role): Promise<void> {
+    const { error } = await this.sb.from('memberships').update({ role }).eq('org_id', this.orgId).eq('user_id', userId);
+    if (error) throw friendly(error);
+  }
+
+  async removeMember(userId: string): Promise<void> {
+    const { error } = await this.sb.from('memberships').delete().eq('org_id', this.orgId).eq('user_id', userId);
     if (error) throw friendly(error);
   }
 }
