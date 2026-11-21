@@ -9,6 +9,7 @@ export function emptyClient(kind: ClientKind = 'particulier'): ClientInput {
     kind, name: '', phone: '', email: null, idNumber: null, licenseExpiry: null, score: 'fiable',
     address: null, city: null, taxId: null, tradeRegister: null,
     contactName: null, contactRole: null, contactPhone: null, contactEmail: null,
+    depositPercent: null, dueDays: null,
   };
 }
 
@@ -51,6 +52,8 @@ export function normalizeClient(c: ClientInput): ClientInput {
     contactRole: company ? t(c.contactRole) : null,
     contactPhone: company ? t(c.contactPhone) : null,
     contactEmail: company ? t(c.contactEmail) : null,
+    depositPercent: c.depositPercent ?? null,
+    dueDays: c.dueDays ?? null,
   };
 }
 

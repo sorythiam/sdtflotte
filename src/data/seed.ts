@@ -1,3 +1,4 @@
+import { billingSettings, buildInvoice, nextInvoiceNumber, type Invoice } from '../domain/billing';
 import type { Client, Expense, Maintenance, Payment, Rate, Reservation, Tables, Vehicle } from '../domain/types';
 
 // Données d'exemple, recalées sur la date du jour pour que la démo soit toujours parlante.
@@ -92,7 +93,22 @@ export function seed(now = new Date()): Db {
     { id: 'm-2', vehicleId: 'v-tucson', label: 'Vidange', start: at(now, 1, 8), end: at(now, 1, 18), cost: 45000 },
   ];
 
-  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now) };
+  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now) };
+}
+
+/** Factures des réservations d'exemple, numérotées dans l'ordre de création. */
+export function seedInvoices(db: { rates: Rate[]; vehicles: Vehicle[]; clients: Client[]; reservations: Reservation[] }, now = new Date()): Invoice[] {
+  const s = billingSettings('Sénégal Découverte Touristique', null);
+  const out: Invoice[] = [];
+  for (const r of [...db.reservations].sort((a, b) => a.start.localeCompare(b.start))) {
+    const c = db.clients.find((x) => x.id === r.clientId);
+    if (!c) continue;
+    const v = db.vehicles.find((x) => x.id === r.vehicleId);
+    const issueAt = new Date(Math.min(Date.parse(r.start) - 2 * 86400000, now.getTime()));
+    const inv = buildInvoice(r, c, v, db.rates.find((x) => x.category === v?.category), s, issueAt);
+    out.push({ ...inv, id: `inv-${r.id}`, number: nextInvoiceNumber(out.map((i) => i.number), 'FA', issueAt.getFullYear()) });
+  }
+  return out;
 }
 
 /** Quelques dépenses sur les trois derniers mois, pour des rapports parlants. */

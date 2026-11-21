@@ -91,6 +91,7 @@ export class SupabaseStore implements Store {
       vehicleQuota: o.vehicle_quota as number,
       trialEndsAt: (o.trial_ends_at as string) ?? null,
       contract: (o.contract as Organization['contract']) ?? null,
+      billing: (o.billing as Organization['billing']) ?? null,
       bookingSlug: (o.booking_slug as string) ?? null,
       bookingEnabled: !!o.booking_enabled,
     };
@@ -206,6 +207,7 @@ export class SupabaseStore implements Store {
       row.booking_enabled = patch.booking.enabled;
     }
     if (patch.contract !== undefined) row.contract = patch.contract;
+    if (patch.billing !== undefined) row.billing = patch.billing;
     if (patch.name !== undefined) row.name = patch.name.trim();
     if (patch.country !== undefined) row.country = patch.country;
     const { error } = await this.sb.from('organizations').update(row).eq('id', this.orgId);

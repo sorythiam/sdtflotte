@@ -25,6 +25,7 @@ export function Layout() {
     ...(can('direction', 'agent') ? ([['/demandes', 'Demandes en ligne']] as [string, string][]) : []),
     ['/vehicules', 'Véhicules'],
     ['/clients', 'Clients'],
+    ...(can('direction', 'agent', 'comptable') ? ([['/factures', 'Factures']] as [string, string][]) : []),
     ['/maintenance', 'Maintenance'],
     ['/depenses', 'Dépenses'],
     ['/tarifs', 'Tarifs'],

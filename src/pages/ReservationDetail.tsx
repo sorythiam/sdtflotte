@@ -5,6 +5,10 @@ import { dateTime, fromLocalInput, money, num, toLocalInput } from '../domain/fo
 import { balanceDue, billedDays, cautionHeld, lateDays, returnFees } from '../domain/rules';
 import type { Payment, PaymentKind, PaymentMethod } from '../domain/types';
 import { useData } from '../state/DataContext';
+import { useBilling } from '../state/useBilling';
+import { creditReservation, invoiceFees, invoiceReservation } from '../data/services';
+import { payeeLines, payState, payStatusLabel, termsFor } from '../domain/billing';
+import { COUNTRY_CALLING_CODE, whatsappLink } from '../domain/booking';
 
 export const methodLabel: Record<PaymentMethod, string> = {
   especes: 'Espèces',
@@ -15,6 +19,7 @@ export const methodLabel: Record<PaymentMethod, string> = {
   moov: 'Moov Money',
   carte: 'Carte bancaire',
   virement: 'Virement',
+  cheque: 'Chèque',
 };
 const kindLabel: Record<PaymentKind, string> = {
   acompte: 'Acompte',
@@ -22,13 +27,15 @@ const kindLabel: Record<PaymentKind, string> = {
   caution: 'Caution',
   frais: 'Frais',
   remboursement_caution: 'Remboursement de caution',
+  remboursement: 'Remboursement du trop-perçu',
 };
 
-type Dialog = null | 'pay' | 'checkout' | 'checkin' | 'refund' | 'cancel';
+type Dialog = null | 'pay' | 'checkout' | 'checkin' | 'refund' | 'cancel' | 'overpaid';
 
 export function ReservationDetail() {
   const { id } = useParams();
-  const { data, now, can } = useData();
+  const { data, now, can, session, store, refresh, toast } = useData();
+  const billing = useBilling(); // avant tout retour anticipé : l'ordre des hooks doit rester stable
   const [dialog, setDialog] = useState<Dialog>(null);
   const r = data.reservations.find((x) => x.id === id);
   if (!r) {
@@ -43,7 +50,10 @@ export function ReservationDetail() {
   const c = data.clients.find((x) => x.id === r.clientId);
   const rate = data.rates.find((x) => x.category === v?.category);
   const pays = data.payments.filter((p) => p.reservationId === r.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const due = balanceDue(r, data.payments);
+  const ps = payState(r, data.invoices, data.payments, now);
+  const invoices = data.invoices.filter((i) => i.reservationId === r.id).sort((a, b) => a.number.localeCompare(b.number));
+  const terms = termsFor(billing.settings, c);
+  const due = balanceDue(r, data.payments, data.invoices);
   const held = cautionHeld(r.id, data.payments);
   const late = lateDays(r, now);
   const days = billedDays(r.start, r.end);
@@ -156,11 +166,12 @@ export function ReservationDetail() {
                   <br />
                   <span className="muted">
                     {methodLabel[p.method]}
+                    {p.reference ? ` · réf. ${p.reference}` : ''}
                     {p.paidAt ? ` · ${new Date(p.paidAt).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
                   </span>
                 </span>
                 <span className="right">
-                  <strong className="num">{p.kind === 'remboursement_caution' ? '−' : ''}{num(p.amount)}</strong>
+                  <strong className="num">{p.kind === 'remboursement_caution' || p.kind === 'remboursement' ? '−' : ''}{num(p.amount)}</strong>
                   <br />
                   <span style={{ fontWeight: 600, color: p.status === 'paye' ? 'var(--success)' : p.status === 'echoue' ? 'var(--danger)' : 'var(--ocre-text)' }}>
                     {p.status === 'paye' ? 'Payé' : p.status === 'echoue' ? 'Échoué' : 'En attente'}
@@ -169,16 +180,63 @@ export function ReservationDetail() {
               </li>
             ))}
           </ul>
-          {canPay && r.status !== 'annulee' && (
+          <div className="stack" style={{ gap: 6 }}>
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <span className="kpi-label">Facturation</span>
+              <span className={`badge ${payStatusLabel[ps.status][1]}`}>{payStatusLabel[ps.status][0]}</span>
+            </div>
+            <span className="small muted">{terms.label}{ps.depositDue > 0 && ps.depositMissing > 0 ? ` · acompte attendu ${money(ps.depositMissing)}` : ''}</span>
+            {invoices.map((i) => (
+              <Link key={i.id} to={`/factures/${i.id}`} className="row small" style={{ justifyContent: 'space-between', textDecoration: 'none' }}>
+                <span>{i.kind === 'avoir' ? 'Avoir' : i.kind === 'complement' ? 'Facture de frais' : 'Facture'} {i.number}</span>
+                <span className="num">{money(i.totalTtc)}</span>
+              </Link>
+            ))}
+            {invoices.length === 0 && r.status !== 'annulee' && canPay && (
+              <button
+                className="btn btn-sm"
+                onClick={async () => {
+                  try {
+                    await invoiceReservation(store, billing, r);
+                    await refresh();
+                    toast('Facture établie');
+                  } catch (e) {
+                    toast((e as Error).message);
+                  }
+                }}
+              >
+                Établir la facture
+              </button>
+            )}
+          </div>
+          {canPay && (r.status !== 'annulee' || ps.status === 'trop_percu' || held > 0) && (
             <div className="stack" style={{ gap: 'var(--space-2)' }}>
-              <button className="btn btn-dark" onClick={() => setDialog('pay')}>Encaisser un paiement</button>
-              {r.status === 'terminee' && held > 0 && (
+              {r.status !== 'annulee' && <button className="btn btn-dark" onClick={() => setDialog('pay')}>Encaisser un paiement</button>}
+              {ps.status === 'trop_percu' && (
+                <button className="btn" onClick={() => setDialog('overpaid')}>Rembourser le trop-perçu ({money(ps.paid - ps.owed)})</button>
+              )}
+              {(r.status === 'terminee' || r.status === 'annulee') && held > 0 && (
                 <button className="btn" onClick={() => setDialog('refund')}>Rembourser la caution</button>
               )}
-              <button className="btn" disabled title="Disponible dès qu’un agrégateur est connecté dans les paramètres">
-                Envoyer un lien de paiement
-              </button>
-              <span className="hint">Le lien mobile money arrive avec la connexion à votre agrégateur (InTouch, PayDunya…).</span>
+              {c && ps.remaining > 0 && (
+                <a
+                  className="btn"
+                  target="_blank"
+                  rel="noreferrer"
+                  href={whatsappLink(
+                    c.contactPhone || c.phone,
+                    [
+                      `Bonjour ${(c.contactName || c.name).split(' ')[0]}, voici les modalités de paiement pour votre location ${r.number} (${session?.org.name}).`,
+                      ps.depositMissing > 0 ? `Acompte à régler : ${money(ps.depositMissing)}.` : `Reste à régler : ${money(ps.remaining)}${ps.dueDate ? `, avant le ${new Date(ps.dueDate + 'T12:00:00').toLocaleDateString('fr-FR')}` : ''}.`,
+                      ...payeeLines(billing.settings.payees),
+                      `Merci d'indiquer la référence ${r.number} avec votre paiement.`,
+                    ].join('\n'),
+                    COUNTRY_CALLING_CODE[session?.org.country ?? 'SN'],
+                  )}
+                >
+                  Envoyer les moyens de paiement (WhatsApp)
+                </a>
+              )}
             </div>
           )}
         </section>
@@ -187,6 +245,7 @@ export function ReservationDetail() {
 
       {dialog === 'pay' && <PayDialog onClose={() => setDialog(null)} />}
       {dialog === 'refund' && <PayDialog refund onClose={() => setDialog(null)} />}
+      {dialog === 'overpaid' && <PayDialog overpaid onClose={() => setDialog(null)} />}
       {dialog === 'checkout' && <CheckoutDialog onClose={() => setDialog(null)} />}
       {dialog === 'checkin' && <CheckinDialog onClose={() => setDialog(null)} />}
       {dialog === 'cancel' && <CancelDialog onClose={() => setDialog(null)} />}
@@ -202,28 +261,59 @@ function useCurrent() {
   return { ...ctx, r, v };
 }
 
-function PayDialog({ onClose, refund }: { onClose: () => void; refund?: boolean }) {
-  const { r, data, store, refresh, toast } = useCurrent();
-  const due = balanceDue(r, data.payments);
+const REF_LABEL: Partial<Record<PaymentMethod, string>> = {
+  wave: 'N° de transaction Wave',
+  orange_money: 'N° de transaction Orange Money',
+  free_money: 'N° de transaction Free Money',
+  mtn: 'N° de transaction MTN',
+  moov: 'N° de transaction Moov',
+  carte: 'N° d’autorisation de la carte',
+  virement: 'Référence du virement',
+  cheque: 'N° du chèque et banque',
+};
+
+function PayDialog({ onClose, refund, overpaid }: { onClose: () => void; refund?: boolean; overpaid?: boolean }) {
+  const { r, data, store, refresh, toast, now } = useCurrent();
+  const billing = useBilling();
+  const ps = payState(r, data.invoices, data.payments, now);
   const held = cautionHeld(r.id, data.payments);
   const hasCaution = data.payments.some((p) => p.reservationId === r.id && p.kind === 'caution' && p.status === 'paye');
-  const defKind: PaymentKind = refund ? 'remboursement_caution' : !hasCaution && r.status === 'reservee' ? 'caution' : due > 0 ? (r.fees > 0 && r.status === 'terminee' ? 'frais' : 'solde') : 'caution';
+  const paidSomething = ps.paid > 0;
+  // Proposition selon les modalités : acompte d'abord, puis solde, puis frais ; la caution au départ.
+  const defKind: PaymentKind = overpaid
+    ? 'remboursement'
+    : refund
+    ? 'remboursement_caution'
+    : ps.depositMissing > 0 && r.status === 'reservee'
+      ? 'acompte'
+      : ps.remaining > 0
+        ? r.fees > 0 && r.status === 'terminee' && paidSomething ? 'frais' : 'solde'
+        : !hasCaution && r.status !== 'terminee' ? 'caution' : 'solde';
+  const suggested = (k: PaymentKind) =>
+    k === 'remboursement' ? Math.max(0, ps.paid - ps.owed) : k === 'remboursement_caution' ? held : k === 'caution' ? r.caution : k === 'acompte' ? (ps.depositMissing || ps.remaining) : ps.remaining;
   const [kind, setKind] = useState<PaymentKind>(defKind);
-  const [amount, setAmount] = useState(String(refund ? held : defKind === 'caution' ? r.caution : due));
+  const [amount, setAmount] = useState(String(suggested(defKind)));
   const [method, setMethod] = useState<PaymentMethod>('wave');
+  const [reference, setReference] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const needsRef = method === 'cheque' || method === 'virement';
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     const a = Math.round(Number(amount));
     if (!(a > 0)) return setError('Montant invalide.');
     if (kind === 'remboursement_caution' && a > held) return setError(`La caution détenue est de ${money(held)}.`);
+    if (kind === 'remboursement' && a > ps.paid - ps.owed) return setError(`Le trop-perçu est de ${money(ps.paid - ps.owed)}.`);
+    if (needsRef && !reference.trim()) return setError(method === 'cheque' ? 'Indiquez le numéro du chèque.' : 'Indiquez la référence du virement.');
     try {
-      const now = new Date().toISOString();
-      const p: Omit<Payment, 'id'> = { reservationId: r.id, kind, amount: a, method, status: 'paye', paidAt: now, createdAt: now };
+      const at = new Date().toISOString();
+      const p: Omit<Payment, 'id'> = {
+        reservationId: r.id, kind, amount: a, method, status: 'paye', paidAt: at, createdAt: at,
+        reference: method === 'especes' ? null : reference.trim() || null,
+      };
       await store.insert('payments', p);
       await refresh();
-      toast(refund ? 'Remboursement enregistré' : 'Paiement enregistré');
+      toast(refund || overpaid ? 'Remboursement enregistré' : `${kindLabel[kind]} de ${money(a)} enregistré`);
       onClose();
     } catch (err) {
       setError((err as Error).message);
@@ -231,16 +321,23 @@ function PayDialog({ onClose, refund }: { onClose: () => void; refund?: boolean 
   }
 
   return (
-    <Modal title={refund ? 'Rembourser la caution' : 'Encaisser un paiement'} onClose={onClose}>
+    <Modal title={overpaid ? 'Rembourser le trop-perçu' : refund ? 'Rembourser la caution' : 'Encaisser un paiement'} onClose={onClose}>
       <form className="stack" onSubmit={submit}>
-        {!refund && (
+        {!refund && !overpaid && (
+          <div className="notice" style={{ margin: 0 }}>
+            {termsFor(billing.settings, data.clients.find((x) => x.id === r.clientId)).label}.{' '}
+            Facturé {money(ps.owed)} · déjà payé {money(ps.paid)} · <strong>reste {money(ps.remaining)}</strong>
+            {ps.depositMissing > 0 && <> · acompte attendu {money(ps.depositMissing)}</>}
+          </div>
+        )}
+        {!refund && !overpaid && (
           <label className="field">
             Nature
-            <select value={kind} onChange={(e) => setKind(e.target.value as PaymentKind)}>
+            <select value={kind} onChange={(e) => { const k = e.target.value as PaymentKind; setKind(k); setAmount(String(suggested(k))); }}>
               <option value="acompte">Acompte</option>
               <option value="solde">Solde de la location</option>
-              <option value="caution">Caution</option>
               <option value="frais">Frais au retour</option>
+              <option value="caution">Caution</option>
             </select>
           </label>
         )}
@@ -248,10 +345,11 @@ function PayDialog({ onClose, refund }: { onClose: () => void; refund?: boolean 
           <label className="field">
             Montant (FCFA)
             <input type="number" min={1} step={1} required value={amount} onChange={(e) => setAmount(e.target.value)} />
-            <span className="hint">{refund ? `Caution détenue : ${money(held)}` : `Reste dû : ${money(due)}`}</span>
+            {refund && <span className="hint">Caution détenue : {money(held)}</span>}
+            {overpaid && <span className="hint">Trop-perçu : {money(ps.paid - ps.owed)}</span>}
           </label>
           <label className="field">
-            Moyen
+            Moyen de paiement
             <select value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>
               {Object.entries(methodLabel).map(([k, l]) => (
                 <option key={k} value={k}>{l}</option>
@@ -259,6 +357,13 @@ function PayDialog({ onClose, refund }: { onClose: () => void; refund?: boolean 
             </select>
           </label>
         </div>
+        {method !== 'especes' && (
+          <label className="field">
+            {REF_LABEL[method] ?? 'Référence'}{needsRef ? '' : ' (recommandé)'}
+            <input value={reference} maxLength={80} onChange={(e) => setReference(e.target.value)} placeholder={method === 'cheque' ? '0012345 · CBAO' : ''} />
+            <span className="hint">Permet de retrouver le paiement en cas de contestation ou de rapprochement bancaire.</span>
+          </label>
+        )}
         <ErrorBox error={error} />
         <div className="modal-foot">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
@@ -311,6 +416,7 @@ function CheckoutDialog({ onClose }: { onClose: () => void }) {
 
 function CheckinDialog({ onClose }: { onClose: () => void }) {
   const { r, v, data, store, refresh, toast } = useCurrent();
+  const billing = useBilling();
   const rate = data.rates.find((x) => x.category === v?.category);
   const [mileage, setMileage] = useState(String(r.mileageOut ?? v?.mileage ?? 0));
   const [returnedAt, setReturnedAt] = useState(toLocalInput(new Date().toISOString()));
@@ -331,8 +437,17 @@ function CheckinDialog({ onClose }: { onClose: () => void }) {
     const m = Math.round(Number(mileage));
     if (r.mileageOut != null && m < r.mileageOut) return setError(`Le compteur ne peut pas être inférieur au départ (${num(r.mileageOut)} km).`);
     try {
-      await store.update('reservations', r.id, { status: 'terminee', mileageIn: m, fees: fees.total, end: fees.lateDays > 0 ? fromLocalInput(returnedAt) : r.end });
+      const end = fees.lateDays > 0 ? fromLocalInput(returnedAt) : r.end;
+      await store.update('reservations', r.id, { status: 'terminee', mileageIn: m, fees: fees.total, end });
       if (v) await store.update('vehicles', v.id, { mileage: m });
+      // Les frais font l'objet d'une facture complémentaire : la facture initiale ne se modifie pas.
+      const detail = [
+        fees.kmExtra ? `${fees.kmExtra} km supplémentaires` : '',
+        fees.fuelFee ? 'carburant' : '',
+        fees.lateDays ? `retard de ${fees.lateDays} jour(s)` : '',
+        fees.damages ? 'dégâts' : '',
+      ].filter(Boolean).join(', ');
+      if (fees.total > 0) await invoiceFees(store, billing, { ...r, fees: fees.total, end }, detail);
       await refresh();
       toast(fees.total ? `Retour enregistré · ${money(fees.total)} de frais` : 'Retour enregistré, sans frais');
       onClose();
@@ -394,16 +509,19 @@ function CheckinDialog({ onClose }: { onClose: () => void }) {
 }
 
 function CancelDialog({ onClose }: { onClose: () => void }) {
-  const { r, store, refresh, toast } = useCurrent();
+  const { r, store, refresh, toast, data } = useCurrent();
+  const hasInvoice = data.invoices.some((i) => i.reservationId === r.id && i.kind !== 'avoir');
   async function confirm() {
     await store.update('reservations', r.id, { status: 'annulee' });
+    // Une facture émise ne se supprime pas : un avoir l'annule.
+    await creditReservation(store, data.invoices, r.id);
     await refresh();
     toast('Réservation annulée, le véhicule est libéré');
     onClose();
   }
   return (
     <Modal title={`Annuler ${r.number} ?`} onClose={onClose}>
-      <p style={{ margin: 0 }}>Le véhicule redevient disponible sur cette période. Les paiements déjà reçus restent à rembourser à part.</p>
+      <p style={{ margin: 0 }}>Le véhicule redevient disponible sur cette période. Les paiements déjà reçus restent à rembourser à part.{hasInvoice ? ' Un avoir est établi pour annuler la facture.' : ''}</p>
       <div className="modal-foot">
         <button type="button" className="btn btn-ghost" onClick={onClose}>Garder la réservation</button>
         <button type="button" className="btn btn-danger" onClick={confirm}>Annuler la réservation</button>

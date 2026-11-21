@@ -5,6 +5,7 @@
 // constatés au retour sont rattachés au jour du retour. Les encaissements sont comptés
 // à leur date de paiement.
 
+import type { Invoice } from './billing';
 import { expensesIn } from './expenses';
 import type { Client, Expense, Maintenance, Payment, PaymentMethod, Reservation, Vehicle } from './types';
 
@@ -123,12 +124,8 @@ export function computeReport(
   }
 
   const collected = input.payments
-    .filter(
-      (x) =>
-        x.status === 'paye' && x.paidAt && Date.parse(x.paidAt) >= ps && Date.parse(x.paidAt) < pe &&
-        (x.kind === 'acompte' || x.kind === 'solde' || x.kind === 'frais'),
-    )
-    .reduce((s, x) => s + x.amount, 0);
+    .filter((x) => x.status === 'paye' && x.paidAt && Date.parse(x.paidAt) >= ps && Date.parse(x.paidAt) < pe)
+    .reduce((s, x) => s + (x.kind === 'acompte' || x.kind === 'solde' || x.kind === 'frais' ? x.amount : x.kind === 'remboursement' ? -x.amount : 0), 0);
 
   const inService = input.vehicles.filter((v) => !v.outOfService);
   const totalRented = inService.reduce((s, v) => s + rentedDays(v.id, input.reservations, p), 0);
@@ -176,6 +173,8 @@ export interface AccountPlan {
   mobileMoney: string; // Wave, Orange Money, etc.
   revenue: string; // locations et frais
   deposits: string; // cautions reçues
+  customers: string; // clients (factures émises, encaissements)
+  vat: string; // TVA facturée
 }
 
 /** Comptes proposés par défaut, à valider par le comptable. */
@@ -185,6 +184,8 @@ export const DEFAULT_ACCOUNTS: AccountPlan = {
   mobileMoney: '521800',
   revenue: '706100',
   deposits: '165000',
+  customers: '411100',
+  vat: '443100',
 };
 
 export interface JournalLine {
@@ -199,7 +200,7 @@ export interface JournalLine {
 
 function treasuryAccount(m: PaymentMethod, plan: AccountPlan): { account: string; journal: string } {
   if (m === 'especes') return { account: plan.cash, journal: 'CA' };
-  if (m === 'virement' || m === 'carte') return { account: plan.bank, journal: 'BQ' };
+  if (m === 'virement' || m === 'carte' || m === 'cheque') return { account: plan.bank, journal: 'BQ' };
   return { account: plan.mobileMoney, journal: 'MM' };
 }
 
@@ -209,6 +210,7 @@ const kindText: Record<Payment['kind'], string> = {
   frais: 'Frais au retour',
   caution: 'Caution reçue',
   remboursement_caution: 'Remboursement caution',
+  remboursement: 'Remboursement trop-perçu',
 };
 
 /**
@@ -217,16 +219,39 @@ const kindText: Record<Payment['kind'], string> = {
  * caution reçue → trésorerie / dépôts reçus ; remboursement → l'inverse.
  * Montants HT tels que saisis : la TVA éventuelle est à traiter par le comptable.
  */
+const pad2 = (n: number) => String(n).padStart(2, '0');
+function localDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
 export function journalEntries(
   payments: Payment[],
   reservations: Reservation[],
   clients: Client[],
   p: Period,
   plan: AccountPlan = DEFAULT_ACCOUNTS,
+  invoices: Invoice[] = [],
 ): JournalLine[] {
   const ps = Date.parse(p.from);
   const pe = Date.parse(p.to);
   const out: JournalLine[] = [];
+  const acc = { ...DEFAULT_ACCOUNTS, ...plan };
+
+  // Journal des ventes : chaque facture émise (avoir en sens inverse) au débit du client, HT et TVA au crédit.
+  const firstDay = localDate(p.from);
+  const lastDay = localDate(new Date(pe - 1).toISOString());
+  for (const inv of invoices.filter((i) => i.issueDate >= firstDay && i.issueDate <= lastDay).sort((a, b) => a.number.localeCompare(b.number))) {
+    const label = `${inv.kind === 'avoir' ? 'Avoir' : 'Facture'} ${inv.number} ${inv.billTo.name}`;
+    const line = (account: string, amount: number, clientSide: boolean) =>
+      amount === 0 ? null : {
+        date: inv.issueDate, journal: 'VT', piece: inv.number, account, label,
+        debit: (clientSide ? amount : -amount) > 0 ? Math.abs(amount) : 0,
+        credit: (clientSide ? amount : -amount) < 0 ? Math.abs(amount) : 0,
+      };
+    for (const l of [line(acc.customers, inv.totalTtc, true), line(acc.revenue, inv.totalHt, false), line(acc.vat, inv.vat, false)]) if (l) out.push(l);
+  }
+  const invoiced = new Set(invoices.map((i) => i.reservationId));
   const list = payments
     .filter((x) => x.status === 'paye' && x.paidAt && Date.parse(x.paidAt) >= ps && Date.parse(x.paidAt) < pe)
     .sort((a, b) => a.paidAt!.localeCompare(b.paidAt!));
@@ -236,9 +261,10 @@ export function journalEntries(
     const t = treasuryAccount(x.method, plan);
     const date = new Date(x.paidAt!).toISOString().slice(0, 10);
     const piece = r?.number ?? '';
-    const label = `${kindText[x.kind]} ${piece} ${c?.name ?? ''}`.trim();
-    const other = x.kind === 'caution' || x.kind === 'remboursement_caution' ? plan.deposits : plan.revenue;
-    if (x.kind === 'remboursement_caution') {
+    const label = `${kindText[x.kind]} ${piece} ${c?.name ?? ''}${x.reference ? ` réf. ${x.reference}` : ''}`.trim();
+    // Réservation facturée : l'encaissement solde le compte client ; sinon (ancien fonctionnement) il va en produits.
+    const other = x.kind === 'caution' || x.kind === 'remboursement_caution' ? acc.deposits : invoiced.has(x.reservationId) ? acc.customers : acc.revenue;
+    if (x.kind === 'remboursement_caution' || x.kind === 'remboursement') {
       out.push({ date, journal: t.journal, piece, account: other, label, debit: x.amount, credit: 0 });
       out.push({ date, journal: t.journal, piece, account: t.account, label, debit: 0, credit: x.amount });
     } else {

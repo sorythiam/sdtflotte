@@ -12,6 +12,8 @@ import { Contract } from './pages/Contract';
 import { PublicBooking } from './pages/PublicBooking';
 import { BookingRequests } from './pages/BookingRequests';
 import { Expenses } from './pages/Expenses';
+import { Invoices } from './pages/Invoices';
+import { InvoicePage } from './pages/Invoice';
 import { Login } from './pages/Login';
 import { Maintenance } from './pages/Maintenance';
 import { Planning } from './pages/Planning';
@@ -47,6 +49,8 @@ function App() {
         <Route path="alertes" element={<Alerts />} />
         <Route path="demandes" element={<BookingRequests />} />
         <Route path="depenses" element={<Expenses />} />
+        <Route path="factures" element={<Invoices />} />
+        <Route path="factures/:id" element={<InvoicePage />} />
         <Route path="*" element={<Dashboard />} />
       </Route>
     </Routes>

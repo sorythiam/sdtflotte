@@ -57,3 +57,30 @@ describe('createReservation (mode démo)', () => {
     await expect(store.insert('vehicles', { ...base, plate: 'TROP' })).rejects.toThrow(/Quota de 40/);
   });
 });
+
+describe('facturation (mode démo)', () => {
+  it('facture à la validation, puis avoir à l’annulation, numéros continus', async () => {
+    const { billingSettings } = await import('../domain/billing');
+    const { creditReservation } = await import('./services');
+    const store = new DemoStore(memory());
+    const snap = await snapshot(store);
+    const before = await store.list('invoices');
+    const ctx = { settings: billingSettings('SDT', { vatEnabled: true }), clients: await store.list('clients'), vehicles: snap.vehicles, rates: snap.rates, invoices: before };
+    const start = new Date(Date.now() + 30 * 86400000);
+    start.setHours(9, 0, 0, 0);
+    const end = new Date(start.getTime() + 2 * 86400000);
+    const r = await createReservation(store, snap, {
+      vehicleId: 'v-picanto', clientId: 'c-diop', start: start.toISOString(), end: end.toISOString(), withDriver: false, notes: null,
+    }, new Date(), ctx);
+    const after = await store.list('invoices');
+    const inv = after.find((i) => i.reservationId === r.id)!;
+    expect(after).toHaveLength(before.length + 1);
+    expect(inv.number).toMatch(/^FA-\d{4}-\d{4}$/);
+    expect(inv.totalTtc).toBe(Math.round(r.total * 1.18));
+    await expect(store.update('invoices', inv.id, { totalTtc: 1 } as never)).rejects.toThrow(/avoir/);
+    const [av] = await creditReservation(store, after, r.id);
+    expect(av.number).toMatch(/^AV-\d{4}-0001$/);
+    expect(av.totalTtc).toBe(-inv.totalTtc);
+    expect(await creditReservation(store, await store.list('invoices'), r.id)).toHaveLength(0);
+  });
+});

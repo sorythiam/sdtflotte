@@ -1,7 +1,8 @@
 import { categoryPhotos } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
-import { seed, seedExpenses } from './seed';
+import { seed, seedExpenses, seedInvoices } from './seed';
+import { invoicePrefix, nextInvoiceNumber, type Invoice } from '../domain/billing';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
 import {
   availableByCategory, SLUG_RE, validateBookingRequest,
@@ -105,6 +106,7 @@ export class DemoStore implements Store {
         st.invitations ??= [];
         st.bookingRequests ??= demoBookingRequests();
         st.db.expenses ??= seedExpenses();
+        st.db.invoices ??= seedInvoices(st.db);
         st.org.bookingSlug ??= 'sdt-demo';
         st.org.bookingEnabled ??= true;
         return st;
@@ -175,6 +177,15 @@ export class DemoStore implements Store {
         throw new Error(`Quota de ${this.state.org.vehicleQuota} véhicules atteint pour votre formule`);
       }
     }
+    if (table === 'invoices') {
+      // Numérotation continue, comme le fait la base en production.
+      const inv = row as unknown as Omit<Invoice, 'id'>;
+      const number = nextInvoiceNumber(this.state.db.invoices.map((i) => i.number), invoicePrefix(inv.kind), Number(inv.issueDate.slice(0, 4)));
+      const created = { ...inv, id: uid(), number } as Invoice;
+      this.state.db.invoices.push(created);
+      this.save();
+      return structuredClone(created) as unknown as Row<T>;
+    }
     const full = { ...row, id: uid() } as Row<T>;
     (this.state.db[table] as Row<T>[]).push(full);
     this.save();
@@ -182,6 +193,7 @@ export class DemoStore implements Store {
   }
 
   async update<T extends TableName>(table: T, id: string, patch: Partial<NewRow<T>>): Promise<Row<T>> {
+    if (table === 'invoices') throw new Error('Une facture émise ne se modifie pas : établissez un avoir.');
     const list = this.state.db[table] as Row<T>[];
     const i = list.findIndex((r) => r.id === id);
     if (i < 0) throw new Error('Élément introuvable');
@@ -191,6 +203,7 @@ export class DemoStore implements Store {
   }
 
   async remove(table: TableName, id: string): Promise<void> {
+    if (table === 'invoices') throw new Error('Une facture émise ne se supprime pas : établissez un avoir.');
     const list = this.state.db[table] as { id: string }[];
     this.state.db[table] = list.filter((r) => r.id !== id) as never;
     this.save();
@@ -263,6 +276,7 @@ export class DemoStore implements Store {
       ...(name ? { name } : {}),
       ...(patch.country ? { country: patch.country } : {}),
       ...(patch.contract ? { contract: patch.contract } : {}),
+      ...(patch.billing ? { billing: patch.billing } : {}),
       ...(patch.booking ? { bookingSlug: patch.booking.slug, bookingEnabled: patch.booking.enabled } : {}),
     };
     this.save();

@@ -120,16 +120,18 @@ export function lateDays(r: Reservation, now: Date): number {
 }
 
 /** Ce qui reste à payer sur la location et les frais (hors caution). */
-export function balanceDue(r: Reservation, payments: Payment[]): number {
-  const paid = payments
-    .filter(
-      (p) =>
-        p.reservationId === r.id &&
-        p.status === 'paye' &&
-        (p.kind === 'acompte' || p.kind === 'solde' || p.kind === 'frais'),
-    )
-    .reduce((s, p) => s + p.amount, 0);
-  return Math.max(0, r.total + (r.fees ?? 0) - paid);
+/**
+ * Reste à payer sur la location et les frais (hors caution). Avec les factures, la base est leur
+ * total TTC (avoirs déduits) ; sans facture, le montant de la réservation.
+ */
+export function balanceDue(r: Reservation, payments: Payment[], invoices: { reservationId: string; totalTtc: number }[] = []): number {
+  const mine = payments.filter((p) => p.reservationId === r.id && p.status === 'paye');
+  const paid =
+    mine.filter((p) => p.kind === 'acompte' || p.kind === 'solde' || p.kind === 'frais').reduce((s, p) => s + p.amount, 0) -
+    mine.filter((p) => p.kind === 'remboursement').reduce((s, p) => s + p.amount, 0);
+  const inv = invoices.filter((i) => i.reservationId === r.id);
+  const owed = inv.length ? inv.reduce((s, i) => s + i.totalTtc, 0) : r.total + (r.fees ?? 0);
+  return Math.max(0, owed - paid);
 }
 
 export function cautionHeld(reservationId: string, payments: Payment[]): number {

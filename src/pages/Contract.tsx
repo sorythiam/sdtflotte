@@ -1,3 +1,5 @@
+import { payeeLines, termsFor } from '../domain/billing';
+import { useBilling } from '../state/useBilling';
 import { Link, useParams } from 'react-router-dom';
 import { methodLabel } from './ReservationDetail';
 import { taxIdLabel } from '../domain/clients';
@@ -6,12 +8,13 @@ import { dateLong, dateTime, money, num } from '../domain/format';
 import { balanceDue, billedDays, cautionHeld } from '../domain/rules';
 import { useData } from '../state/DataContext';
 
-const kindText = { acompte: 'Acompte', solde: 'Solde', caution: 'Caution', frais: 'Frais', remboursement_caution: 'Remboursement de caution' };
+const kindText = { acompte: 'Acompte', solde: 'Solde', caution: 'Caution', frais: 'Frais', remboursement_caution: 'Remboursement de caution', remboursement: 'Remboursement du trop-perçu' };
 const blank = '……………………';
 
 export function Contract() {
   const { id } = useParams();
   const { data, session } = useData();
+  const billing = useBilling();
   const org = session!.org;
   const r = data.reservations.find((x) => x.id === id);
   if (!r) {
@@ -24,12 +27,13 @@ export function Contract() {
   }
   const s = contractSettings(org.name, org.contract);
   const taxLabel = taxIdLabel(org.country);
+  const invoices = data.invoices.filter((i) => i.reservationId === r.id);
   const v = data.vehicles.find((x) => x.id === r.vehicleId);
   const c = data.clients.find((x) => x.id === r.clientId);
   const rate = data.rates.find((x) => x.category === v?.category);
   const days = billedDays(r.start, r.end);
   const pays = data.payments.filter((p) => p.reservationId === r.id && p.status === 'paye').sort((a, b) => (a.paidAt ?? '').localeCompare(b.paidAt ?? ''));
-  const due = balanceDue(r, data.payments);
+  const due = balanceDue(r, data.payments, data.invoices);
   const held = cautionHeld(r.id, data.payments);
   // Part chauffeur bornée au total, au cas où le tarif aurait changé depuis la réservation.
   const driverTotal = r.withDriver && rate ? Math.min(r.total, rate.driverDaily * days) : 0;
@@ -141,6 +145,11 @@ export function Contract() {
           <p className="ct-small">
             Kilométrage inclus : {rate ? `${num(rate.kmPerDay * days)} km (${num(rate.kmPerDay)} km par jour)` : blank}, puis {rate ? money(rate.extraKm) : blank} par km
             supplémentaire. Au-delà d’une heure de retard, chaque journée entamée est facturée au tarif journalier.
+          </p>
+          <p className="ct-small">
+            <strong>Modalités de paiement :</strong> {termsFor(billing.settings, c).label}.
+            {invoices.length > 0 && <> Facture{invoices.length > 1 ? 's' : ''} {invoices.map((i) => i.number).join(', ')}.</>}
+            {payeeLines(billing.settings.payees).length > 0 && <> Moyens de paiement : {payeeLines(billing.settings.payees).join(' · ')}.</>}
           </p>
           {pays.length > 0 && (
             <table className="ct-table">

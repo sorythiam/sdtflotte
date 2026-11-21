@@ -13,6 +13,8 @@ export interface Organization {
   trialEndsAt: string | null; // ISO
   /** Coordonnées, logo et conditions générales du contrat. */
   contract?: Partial<import('./contract').ContractSettings> | null;
+  /** Modalités de paiement, TVA et moyens d'encaissement. */
+  billing?: Partial<import('./billing').BillingSettings> | null;
   /** Page publique de réservation : /r/<bookingSlug>. */
   bookingSlug?: string | null;
   bookingEnabled?: boolean;
@@ -72,6 +74,9 @@ export interface Client {
   contactRole?: string | null;
   contactPhone?: string | null;
   contactEmail?: string | null;
+  // Modalités propres à ce client (vide = celles de l'entreprise)
+  depositPercent?: number | null;
+  dueDays?: number | null;
 }
 
 export type ReservationStatus = 'reservee' | 'en_cours' | 'terminee' | 'annulee';
@@ -95,7 +100,7 @@ export interface Reservation {
   createdAt: string;
 }
 
-export type PaymentKind = 'acompte' | 'solde' | 'caution' | 'frais' | 'remboursement_caution';
+export type PaymentKind = 'acompte' | 'solde' | 'caution' | 'frais' | 'remboursement_caution' | 'remboursement';
 export type PaymentMethod =
   | 'especes'
   | 'wave'
@@ -104,7 +109,8 @@ export type PaymentMethod =
   | 'mtn'
   | 'moov'
   | 'carte'
-  | 'virement';
+  | 'virement'
+  | 'cheque';
 export type PaymentStatus = 'paye' | 'en_attente' | 'echoue';
 
 export interface Payment {
@@ -116,6 +122,7 @@ export interface Payment {
   status: PaymentStatus;
   paidAt: string | null;
   createdAt: string;
+  reference?: string | null; // n° de transaction Wave/Orange Money, n° de chèque, référence du virement
 }
 
 export interface Maintenance {
@@ -149,6 +156,7 @@ export interface Tables {
   payments: Payment;
   maintenances: Maintenance;
   expenses: Expense;
+  invoices: import('./billing').Invoice;
 }
 export type TableName = keyof Tables;
 

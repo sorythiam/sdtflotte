@@ -1,3 +1,4 @@
+import { BillingSettingsForm } from '../components/BillingSettingsForm';
 import { BookingSettingsForm } from '../components/BookingSettingsForm';
 import { ContractSettingsForm } from '../components/ContractSettingsForm';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
@@ -276,6 +277,8 @@ export function Settings() {
               )}
             </form>
           </section>
+
+          <BillingSettingsForm editable={admin} />
 
           <ContractSettingsForm editable={admin} />
 

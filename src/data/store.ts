@@ -1,3 +1,4 @@
+import type { BillingSettings } from '../domain/billing';
 import type { BookingRequest, BookingRequestInput, BookingStatus, PublicBookingInfo } from '../domain/booking';
 import type { ContractSettings } from '../domain/contract';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
@@ -55,6 +56,7 @@ export interface OrgPatch {
   country?: string;
   contract?: Partial<ContractSettings>;
   booking?: { enabled: boolean; slug: string };
+  billing?: Partial<BillingSettings>;
 }
 
 export class StoreError extends Error {}

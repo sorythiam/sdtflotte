@@ -63,7 +63,7 @@ export function Reports() {
   const r = useMemo(() => computeReport(data, period), [data, period]);
   const months = useMemo(() => monthlyRevenue(data.reservations, now, 6), [data.reservations, now]);
   const maxMonth = Math.max(1, ...months.map((m) => m.revenue));
-  const journal = useMemo(() => journalEntries(data.payments, data.reservations, data.clients, period, plan), [data, period, plan]);
+  const journal = useMemo(() => journalEntries(data.payments, data.reservations, data.clients, period, plan, data.invoices), [data, period, plan]);
   const label = `${new Date(period.from).toLocaleDateString('fr-FR')} – ${new Date(Date.parse(period.to) - 1).toLocaleDateString('fr-FR')}`;
   const fileTag = `${period.from.slice(0, 10)}_${new Date(Date.parse(period.to) - 1).toISOString().slice(0, 10)}`;
 
@@ -168,10 +168,12 @@ export function Reports() {
   ];
   const accountFields: [keyof AccountPlan, string][] = [
     ['cash', 'Caisse (espèces)'],
-    ['bank', 'Banque (virement, carte)'],
+    ['bank', 'Banque (virement, carte, chèque)'],
     ['mobileMoney', 'Mobile money'],
     ['revenue', 'Produits de location'],
     ['deposits', 'Cautions reçues'],
+    ['customers', 'Clients'],
+    ['vat', 'TVA facturée'],
   ];
 
   return (
@@ -297,14 +299,14 @@ export function Reports() {
 
       <section className="card" aria-labelledby="journal">
         <div className="row" style={{ justifyContent: 'space-between' }}>
-          <h2 id="journal">Journal des encaissements (SYSCOHADA)</h2>
+          <h2 id="journal">Journal des ventes et encaissements (SYSCOHADA)</h2>
           <button type="button" className="btn btn-sm" onClick={() => setShowPlan(!showPlan)}>
             {showPlan ? 'Masquer le plan de comptes' : 'Plan de comptes'}
           </button>
         </div>
         <p className="small muted" style={{ margin: 0 }}>
-          Une écriture équilibrée par paiement reçu sur la période. Journaux : CA caisse, BQ banque, MM mobile money. Montants HT tels que
-          saisis ; la TVA éventuelle est à traiter par votre comptable, qui doit aussi valider les comptes.
+          Journal des ventes (VT) pour les factures et avoirs émis, et une écriture par paiement reçu : CA caisse, BQ banque et chèques, MM mobile money.
+          Les comptes proposés sont à faire valider par votre comptable.
         </p>
         {showPlan && (
           <div className="grid-2">

@@ -34,6 +34,7 @@ export interface AlertInput {
   reservations: Reservation[];
   payments: Payment[];
   maintenances: Maintenance[];
+  invoices?: { reservationId: string; totalTtc: number }[];
   bookingRequests?: { id: string; status: string; name: string; companyName?: string | null; category: string; start: string; end: string; createdAt: string }[];
 }
 
@@ -140,7 +141,7 @@ export function buildAlerts(input: AlertInput, now: Date, offsetMin = -now.getTi
     }
 
     if (r.status === 'terminee') {
-      const due = balanceDue(r, input.payments);
+      const due = balanceDue(r, input.payments, input.invoices);
       if (due > 0) {
         out.push({
           id: `impaye:${r.id}`, kind: 'impaye', level: 'attention', link, roles: FIN,

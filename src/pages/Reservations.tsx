@@ -1,3 +1,4 @@
+import { useBilling } from '../state/useBilling';
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Empty, ErrorBox, Modal, ReservationBadge } from '../components/ui';
@@ -83,7 +84,7 @@ export function Reservations() {
               <tbody>
                 {list.map((r) => {
                   const v = veh.get(r.vehicleId);
-                  const due = r.status === 'annulee' ? 0 : balanceDue(r, data.payments);
+                  const due = r.status === 'annulee' ? 0 : balanceDue(r, data.payments, data.invoices);
                   return (
                     <tr key={r.id} className="clickable" onClick={() => nav(`/reservations/${r.id}`)}>
                       <td className="num"><strong>{r.number}</strong></td>
@@ -118,6 +119,7 @@ export function Reservations() {
 
 function NewReservation({ onClose }: { onClose: () => void }) {
   const { data, store, refresh, toast, now } = useData();
+  const billing = useBilling();
   const nav = useNavigate();
   const defStart = new Date(now);
   defStart.setHours(defStart.getHours() + 1, 0, 0, 0);
@@ -154,7 +156,7 @@ function NewReservation({ onClose }: { onClose: () => void }) {
     setError(null);
     setBusy(true);
     try {
-      const r = await createReservation(store, data, { vehicleId, clientId, start: sIso, end: eIso, withDriver, notes: notes || null });
+      const r = await createReservation(store, data, { vehicleId, clientId, start: sIso, end: eIso, withDriver, notes: notes || null }, new Date(), billing);
       await refresh();
       toast(`Réservation ${r.number} créée`);
       nav(`/reservations/${r.id}`);

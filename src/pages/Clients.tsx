@@ -1,3 +1,5 @@
+import { termsFor } from '../domain/billing';
+import { useBilling } from '../state/useBilling';
 import { useState, type FormEvent } from 'react';
 import { ImportDialog } from '../components/ImportDialog';
 import { Empty, ErrorBox, Modal, ScoreBadge } from '../components/ui';
@@ -98,6 +100,7 @@ function ClientForm({ id, onClose }: { id: string; onClose: () => void }) {
     onChange: (e: { target: { value: string } }) => set(k, (e.target.value || null) as never),
   });
   const company = f.kind === 'entreprise';
+  const billing = useBilling().settings;
   const taxLabel = taxIdLabel(session!.org.country);
 
   async function submit(e: FormEvent) {
@@ -167,6 +170,22 @@ function ClientForm({ id, onClose }: { id: string; onClose: () => void }) {
           </div>
         )}
 
+        <fieldset className="form-group stack">
+          <legend>Modalités de paiement de ce client (facultatif)</legend>
+          <div className="grid-2">
+            <label className="field">
+              Acompte (%)
+              <input type="number" min={0} max={100} placeholder={`${billing.depositPercent} (par défaut)`} value={f.depositPercent ?? ''}
+                onChange={(e) => set('depositPercent', e.target.value === '' ? null : Math.min(100, Math.max(0, Math.round(Number(e.target.value)))))} />
+            </label>
+            <label className="field">
+              Délai de paiement (jours)
+              <input type="number" min={0} max={180} placeholder={`${company ? billing.companyDueDays : 0} (par défaut)`} value={f.dueDays ?? ''}
+                onChange={(e) => set('dueDays', e.target.value === '' ? null : Math.min(180, Math.max(0, Math.round(Number(e.target.value)))))} />
+            </label>
+          </div>
+          <span className="hint">Appliqué aux prochaines factures : {termsFor(billing, f).label.toLowerCase()}.</span>
+        </fieldset>
         <label className="field">
           Scoring
           <select value={f.score} onChange={(e) => set('score', e.target.value as ClientScore)}>

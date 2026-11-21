@@ -1,3 +1,4 @@
+import { useBilling } from '../state/useBilling';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Empty, ErrorBox, Modal } from '../components/ui';
@@ -115,6 +116,7 @@ export function BookingRequests() {
 
 function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => void }) {
   const { data, store, refresh, toast } = useData();
+  const billing = useBilling();
   const nav = useNavigate();
   const known = matchClient(data.clients, req.phone, req.email);
   const company = !!req.companyName;
@@ -148,7 +150,7 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
       const r = await createReservation(store, data, {
         vehicleId, clientId: client.id, start: req.start, end: req.end, withDriver: req.withDriver,
         notes: [notes.trim(), 'Demande reçue en ligne.'].filter(Boolean).join('\n'),
-      });
+      }, new Date(), { ...billing, clients: known ? data.clients : [...data.clients, client] });
       await store.updateBookingRequest(req.id, { status: 'acceptee', reservationId: r.id });
       await refresh();
       toast(`Réservation ${r.number} créée. Pensez à prévenir le client.`);

@@ -113,3 +113,22 @@ describe('6 derniers mois', () => {
     expect(m[2].revenue).toBeGreaterThan(0);
   });
 });
+
+describe('journal avec factures et TVA', () => {
+  it('passe la facture au journal des ventes et solde le client à l’encaissement', async () => {
+    const { buildInvoice, billingSettings } = await import('./billing');
+    const r = res('9', { start: '2026-11-10T09:00:00Z', end: '2026-11-12T09:00:00Z', total: 100000, status: 'terminee' });
+    const c = { id: 'c1', kind: 'particulier', name: 'Aïssatou Diop', phone: '1', email: null, idNumber: null, licenseExpiry: null, score: 'fiable' } as Client;
+    const inv = { ...buildInvoice(r, c, undefined, undefined, billingSettings('SDT', { vatEnabled: true }), new Date('2026-11-05T10:00:00Z')), id: 'i', number: 'FA-2026-0001' };
+    const pay: Payment[] = [{ id: 'p', reservationId: '9', kind: 'solde', amount: 118000, method: 'cheque', status: 'paye', paidAt: '2026-11-12T10:00:00Z', createdAt: '', reference: '0012345' }];
+    const j = journalEntries(pay, [r], [c], NOV, undefined, [inv]);
+    expect(j.map((l) => [l.journal, l.account, l.debit, l.credit])).toEqual([
+      ['VT', '411100', 118000, 0],
+      ['VT', '706100', 0, 100000],
+      ['VT', '443100', 0, 18000],
+      ['BQ', '521100', 118000, 0],
+      ['BQ', '411100', 0, 118000],
+    ]);
+    expect(j[j.length - 1].label).toContain('réf. 0012345');
+  });
+});
