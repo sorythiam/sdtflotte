@@ -24,7 +24,8 @@ export function PublicBooking({ slug }: { slug: string }) {
   const [withDriver, setWithDriver] = useState(false);
   const [avail, setAvail] = useState<Record<string, number> | null>(null);
   const [category, setCategory] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', phone: '', email: '', message: '' });
+  const [form, setForm] = useState({ name: '', phone: '', email: '', message: '', companyName: '', companyTaxId: '' });
+  const [forCompany, setForCompany] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -59,6 +60,8 @@ export function PublicBooking({ slug }: { slug: string }) {
     const req = {
       category: category ?? '', start: dates.start, end: dates.end, withDriver,
       name: form.name, phone: form.phone, email: form.email.trim() || null, message: form.message.trim() || null,
+      companyName: forCompany ? form.companyName : null,
+      companyTaxId: forCompany ? form.companyTaxId.trim() || null : null,
     };
     const err = validateBookingRequest(req, new Date());
     if (err) return setError(err);
@@ -105,7 +108,7 @@ export function PublicBooking({ slug }: { slug: string }) {
           <div style={{ fontSize: 40 }} aria-hidden="true">✓</div>
           <h2>Demande envoyée</h2>
           <p style={{ margin: '0 auto', maxWidth: 520 }}>
-            Merci {form.name.split(' ')[0]}. L’agence vérifie la disponibilité et vous recontacte au <strong>{form.phone}</strong> pour confirmer la
+            Merci {form.name.split(' ')[0]}{forCompany && form.companyName ? ` (${form.companyName.trim()})` : ''}. L’agence vérifie la disponibilité et vous recontacte au <strong>{form.phone}</strong> pour confirmer la
             réservation{chosen ? ` (${chosen.category}, du ${dateTime(dates.start)} au ${dateTime(dates.end)})` : ''}. Rien n’est encore payé ni
             confirmé à ce stade.
           </p>
@@ -178,8 +181,18 @@ export function PublicBooking({ slug }: { slug: string }) {
                 </div>
               )}
               <form className="stack" onSubmit={submit} noValidate>
+                <label className="row" style={{ gap: 8 }}>
+                  <input type="checkbox" checked={forCompany} onChange={(e) => setForCompany(e.target.checked)} style={{ width: 18, height: 18 }} />
+                  Je réserve pour une entreprise ou une organisation
+                </label>
+                {forCompany && (
+                  <div className="grid-2">
+                    <label className="field">Nom de l’entreprise<input required autoComplete="organization" value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} /></label>
+                    <label className="field">NINEA ou identifiant fiscal (facultatif)<input value={form.companyTaxId} onChange={(e) => setForm({ ...form, companyTaxId: e.target.value })} /></label>
+                  </div>
+                )}
                 <div className="grid-2">
-                  <label className="field">Nom et prénom (ou société)<input required autoComplete="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+                  <label className="field">{forCompany ? 'Votre nom et prénom (personne de contact)' : 'Nom et prénom'}<input required autoComplete="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
                   <label className="field">Téléphone (WhatsApp de préférence)<input required inputMode="tel" autoComplete="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
                   <label className="field">Email (facultatif)<input type="email" autoComplete="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
                 </div>

@@ -33,6 +33,8 @@ describe('réservation en ligne', () => {
     expect(validateBookingRequest({ ...ok, end: ok.start }, NOW)).toMatch(/après/);
     expect(validateBookingRequest({ ...ok, phone: '12' }, NOW)).toMatch(/téléphone/);
     expect(validateBookingRequest({ ...ok, email: 'pas-un-email' }, NOW)).toMatch(/email/);
+    expect(validateBookingRequest({ ...ok, companyName: ' ' }, NOW)).toMatch(/entreprise/);
+    expect(validateBookingRequest({ ...ok, companyName: 'Baobab Logistique', companyTaxId: '005871234' }, NOW)).toBeNull();
   });
 
   it('retrouve un client existant', () => {

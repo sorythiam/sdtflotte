@@ -34,7 +34,7 @@ export interface AlertInput {
   reservations: Reservation[];
   payments: Payment[];
   maintenances: Maintenance[];
-  bookingRequests?: { id: string; status: string; name: string; category: string; start: string; end: string; createdAt: string }[];
+  bookingRequests?: { id: string; status: string; name: string; companyName?: string | null; category: string; start: string; end: string; createdAt: string }[];
 }
 
 const DAY = 86400000;
@@ -187,7 +187,7 @@ export function buildAlerts(input: AlertInput, now: Date, offsetMin = -now.getTi
     const soon = Date.parse(b.start) - t < 2 * DAY;
     out.push({
       id: `demande:${b.id}`, kind: 'demande_en_ligne', level: soon ? 'urgent' : 'attention', link: '/demandes', roles: OPS,
-      title: `Demande en ligne à traiter : ${b.name}`,
+      title: `Demande en ligne à traiter : ${b.companyName ? `${b.companyName} (${b.name})` : b.name}`,
       detail: `${b.category} du ${dmy(b.start)} au ${dmy(b.end)}${soon ? ' · départ dans moins de 48 h' : ''}`,
     });
   }

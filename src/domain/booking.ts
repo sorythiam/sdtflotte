@@ -15,13 +15,15 @@ export interface BookingRequest {
   phone: string;
   email: string | null;
   message: string | null;
+  companyName?: string | null; // réservation pour le compte d'une entreprise
+  companyTaxId?: string | null; // NINEA ou équivalent, facultatif
   status: BookingStatus;
   reservationId: string | null;
   declineReason: string | null;
   createdAt: string;
 }
 
-export type BookingRequestInput = Pick<BookingRequest, 'category' | 'start' | 'end' | 'withDriver' | 'name' | 'phone' | 'email' | 'message'>;
+export type BookingRequestInput = Pick<BookingRequest, 'category' | 'start' | 'end' | 'withDriver' | 'name' | 'phone' | 'email' | 'message' | 'companyName' | 'companyTaxId'>;
 
 export interface PublicCategory {
   category: string;
@@ -95,6 +97,11 @@ export function validateBookingRequest(r: BookingRequestInput, now: Date): strin
   if (digits.length < 8 || digits.length > 15) return 'Indiquez un numéro de téléphone valide.';
   if (r.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email.trim())) return 'Adresse email invalide.';
   if ((r.message ?? '').length > 1000) return 'Message trop long (1 000 caractères maximum).';
+  if (r.companyName != null) {
+    const c = r.companyName.trim();
+    if (c.length < 2 || c.length > 160) return 'Indiquez le nom de l’entreprise.';
+  }
+  if ((r.companyTaxId ?? '').length > 40) return 'Identifiant fiscal trop long.';
   return null;
 }
 

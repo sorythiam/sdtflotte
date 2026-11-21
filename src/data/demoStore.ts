@@ -40,6 +40,7 @@ function demoBookingRequests(now = new Date()): BookingRequest[] {
   return [
     {
       id: 'br-1', category: '4x4', start: at(3, 9), end: at(6, 18), withDriver: true, name: 'Khadija Sow', phone: '+221 77 455 12 30',
+      companyName: 'Cabinet Sow & Associés', companyTaxId: null,
       email: 'khadija.sow@example.com', message: 'Mission à Saint-Louis pour 3 personnes, départ de l’hôtel Terrou-Bi.', status: 'nouvelle',
       reservationId: null, declineReason: null, createdAt: at(0, 8),
     },
@@ -311,7 +312,7 @@ export class DemoStore implements Store {
     this.state.bookingRequests = [
       {
         ...req, id: uid(), name: req.name.trim(), phone: req.phone.trim(), email: req.email?.trim() || null,
-        message: req.message?.trim() || null, status: 'nouvelle', reservationId: null, declineReason: null, createdAt: new Date().toISOString(),
+        message: req.message?.trim() || null, companyName: req.companyName?.trim() || null, companyTaxId: req.companyTaxId?.trim() || null, status: 'nouvelle', reservationId: null, declineReason: null, createdAt: new Date().toISOString(),
       },
       ...(this.state.bookingRequests ?? []),
     ];

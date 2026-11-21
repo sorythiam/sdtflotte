@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Empty, ErrorBox, Modal } from '../components/ui';
 import { createReservation } from '../data/services';
 import { availableByCategory, COUNTRY_CALLING_CODE, matchClient, whatsappLink, type BookingRequest } from '../domain/booking';
+import { taxIdLabel } from '../domain/clients';
 import { dateTime, money } from '../domain/format';
 import { findConflicts, quote } from '../domain/rules';
 import { useData } from '../state/DataContext';
@@ -15,6 +16,7 @@ export function BookingRequests() {
   const [dialog, setDialog] = useState<Dialog>(null);
   const org = session!.org;
   const cc = COUNTRY_CALLING_CODE[org.country] ?? '221';
+  const taxLabel = taxIdLabel(org.country);
   const canAct = can('direction', 'agent');
   const list = data.bookingRequests.filter((r) => (tab === 'nouvelle' ? r.status === 'nouvelle' : r.status !== 'nouvelle'));
   const pending = data.bookingRequests.filter((r) => r.status === 'nouvelle').length;
@@ -58,10 +60,15 @@ export function BookingRequests() {
                 ? `Bonjour ${first}, merci pour votre demande. Malheureusement nous ne pouvons pas y donner suite${req.declineReason ? ` : ${req.declineReason}` : ''}. ${org.name}`
                 : `Bonjour ${first}, nous avons bien reçu votre demande de ${req.category} du ${dateTime(req.start)} au ${dateTime(req.end)}. `;
           return (
-            <section key={req.id} className="card" aria-label={`Demande de ${req.name}`}>
+            <section key={req.id} className="card" aria-label={`Demande de ${req.companyName ?? req.name}`}>
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <h2 style={{ margin: 0 }}>{req.name}</h2>
+                  <h2 style={{ margin: 0 }}>{req.companyName ?? req.name}</h2>
+                  {req.companyName && (
+                    <div className="small">
+                      Entreprise · contact : <strong>{req.name}</strong>{req.companyTaxId ? ` · ${taxLabel} ${req.companyTaxId}` : ''}
+                    </div>
+                  )}
                   <div className="small muted">
                     Reçue le {dateTime(req.createdAt)}
                     {known && <> · client connu : <strong>{known.name}</strong></>}
@@ -110,6 +117,7 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
   const { data, store, refresh, toast } = useData();
   const nav = useNavigate();
   const known = matchClient(data.clients, req.phone, req.email);
+  const company = !!req.companyName;
   const free = useMemo(
     () =>
       data.vehicles
@@ -128,9 +136,15 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
     try {
       const client =
         known ??
-        (await store.insert('clients', {
-          kind: 'particulier', name: req.name, phone: req.phone, email: req.email, idNumber: null, licenseExpiry: null, score: 'fiable',
-        }));
+        (await store.insert(
+          'clients',
+          company
+            ? {
+                kind: 'entreprise', name: req.companyName!, phone: req.phone, email: req.email, idNumber: null, licenseExpiry: null,
+                score: 'fiable', taxId: req.companyTaxId ?? null, contactName: req.name, contactPhone: req.phone, contactEmail: req.email,
+              }
+            : { kind: 'particulier', name: req.name, phone: req.phone, email: req.email, idNumber: null, licenseExpiry: null, score: 'fiable' },
+        ));
       const r = await createReservation(store, data, {
         vehicleId, clientId: client.id, start: req.start, end: req.end, withDriver: req.withDriver,
         notes: [notes.trim(), 'Demande reçue en ligne.'].filter(Boolean).join('\n'),
@@ -148,10 +162,16 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
   }
 
   return (
-    <Modal title={`Réservation pour ${req.name}`} onClose={onClose}>
+    <Modal title={`Réservation pour ${req.companyName ?? req.name}`} onClose={onClose}>
       <p className="small" style={{ margin: 0 }}>
         {req.category}{req.withDriver ? ' avec chauffeur' : ''}, du {dateTime(req.start)} au {dateTime(req.end)}.{' '}
-        {known ? <>Client existant : <strong>{known.name}</strong>.</> : <>Nouveau client créé avec ce nom et ce téléphone ; complétez sa pièce et son permis ensuite.</>}
+        {known ? (
+          <>Client existant : <strong>{known.name}</strong>.</>
+        ) : company ? (
+          <>Nouveau client entreprise « {req.companyName} », contact {req.name}. Complétez ensuite son adresse, son RCCM et la pièce du conducteur.</>
+        ) : (
+          <>Nouveau client créé avec ce nom et ce téléphone ; complétez sa pièce et son permis ensuite.</>
+        )}
       </p>
       <label className="field">
         Véhicule
