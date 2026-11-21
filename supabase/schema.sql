@@ -1,12 +1,11 @@
 -- Yoon Fleet — schéma Supabase multi-entreprise (V1)
--- À exécuter une fois dans l'éditeur SQL d'un projet Supabase NEUF.
--- Ne pas exécuter sur la base du POC Flotte365 : les tables n'ont pas la même structure.
+-- À exécuter après supabase/reset.sql dans l'éditeur SQL de Supabase.
 --
 -- Principe : chaque loueur est une « organisation ». Chaque ligne métier porte
 -- org_id, et les règles RLS ne laissent voir que les organisations dont
 -- l'utilisateur est membre. Un loueur ne peut jamais lire les données d'un autre.
 
-create extension if not exists btree_gist;
+create extension if not exists btree_gist with schema extensions;
 
 -- ---------------------------------------------------------------- organisations
 create table public.organizations (
@@ -73,7 +72,7 @@ create policy members_admin on public.memberships for all
 
 -- Empêche un administrateur de modifier lui-même la formule ou le quota (réservé à Yoon Fleet).
 create or replace function public.protect_billing_fields()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 begin
   if coalesce(auth.role(), '') = 'authenticated' and (
     new.plan is distinct from old.plan or
@@ -234,3 +233,15 @@ create policy payments_write on public.payments for all
 create policy maintenances_write on public.maintenances for all
   using (has_role(org_id, array['admin', 'direction', 'mecanicien']))
   with check (has_role(org_id, array['admin', 'direction', 'mecanicien']));
+
+-- ---------------------------------------------------------------- droits d'exécution
+-- Les fonctions SECURITY DEFINER ne sont pas appelables sans connexion ;
+-- celles des déclencheurs ne sont pas appelables du tout via l'API.
+revoke execute on function public.create_organization(text, text) from public, anon;
+revoke execute on function public.is_member(uuid) from public, anon;
+revoke execute on function public.has_role(uuid, text[]) from public, anon;
+revoke execute on function public.enforce_vehicle_quota() from public, anon, authenticated;
+revoke execute on function public.protect_billing_fields() from public, anon, authenticated;
+grant execute on function public.create_organization(text, text) to authenticated;
+grant execute on function public.is_member(uuid) to authenticated;
+grant execute on function public.has_role(uuid, text[]) to authenticated;
