@@ -1,4 +1,6 @@
+import { useMemo } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { alertsFor, buildAlerts } from '../domain/alerts';
 import type { DemoStore } from '../data/demoStore';
 import { useData } from '../state/DataContext';
 import { Logo, roleLabel, Wordmark } from './ui';
@@ -8,12 +10,15 @@ const planLabel = { essentiel: 'Essentiel', pro: 'Pro', entreprise: 'Entreprise'
 export function Layout() {
   const { session, store, setSession, data, now, refresh, toast, can } = useData();
   const nav = useNavigate();
+  const alerts = useMemo(() => (session ? alertsFor(buildAlerts(data, now), session.role) : []), [data, now, session]);
   if (!session) return null;
+  const urgent = alerts.filter((a) => a.level === 'urgent').length;
   const { org } = session;
   const trialDays = org.trialEndsAt ? Math.ceil((Date.parse(org.trialEndsAt) - now.getTime()) / 86400000) : null;
 
   const links: [string, string][] = [
     ['/', 'Tableau de bord'],
+    ['/alertes', 'Alertes'],
     ['/planning', 'Planning'],
     ['/reservations', 'Réservations et contrats'],
     ['/vehicules', 'Véhicules'],
@@ -48,6 +53,11 @@ export function Layout() {
           {links.map(([to, label]) => (
             <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => (isActive ? 'active' : undefined)}>
               {label}
+              {to === '/alertes' && alerts.length > 0 && (
+                <span className={`nav-count${urgent ? ' urgent' : ''}`} aria-label={`${alerts.length} alerte(s), dont ${urgent} urgente(s)`}>
+                  {urgent || alerts.length}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

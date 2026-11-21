@@ -1,3 +1,4 @@
+import { defaultDailyDigest } from '../domain/alerts';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
 import { seed } from './seed';
 import type { NewRow, Row, SessionInfo, Store } from './store';
@@ -7,7 +8,7 @@ const KEY = 'yoonfleet-demo-v1';
 type Db = { [K in keyof Tables]: Tables[K][] };
 interface DemoState {
   db: Db;
-  session: { email: string; role: Role } | null;
+  session: { email: string; role: Role; dailyDigest?: boolean } | null;
   org: Organization;
   members?: Member[];
   invitations?: Invitation[];
@@ -89,7 +90,7 @@ export class DemoStore implements Store {
 
   async session(): Promise<SessionInfo | null> {
     const s = this.state.session;
-    return s ? { userId: SELF, userEmail: s.email, role: s.role, org: this.state.org } : null;
+    return s ? { userId: SELF, userEmail: s.email, role: s.role, org: this.state.org, dailyDigest: s.dailyDigest ?? defaultDailyDigest(s.role) } : null;
   }
 
   /** En démo, le mot de passe sert à choisir le profil : admin (par défaut), direction, agent, comptable, mecanicien. */
@@ -218,6 +219,12 @@ export class DemoStore implements Store {
 
   async changePassword(password: string): Promise<void> {
     if (password.length < 8) throw new Error('8 caractères minimum.');
+  }
+
+  async setDailyDigest(on: boolean): Promise<void> {
+    if (!this.state.session) return;
+    this.state.session.dailyDigest = on;
+    this.save();
   }
 
   async listSubscriptionRequests(): Promise<SubscriptionRequest[]> {

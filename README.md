@@ -56,3 +56,14 @@ dans `src/styles/app.css`.
 - État des lieux mobile avec photos, signature et mode hors-ligne
 - Import Excel des véhicules et clients, export SYSCOHADA
 - Notifications WhatsApp, console Yoon Fleet, gestion des utilisateurs
+
+## Récapitulatif quotidien des alertes
+
+La fonction Supabase `daily-digest` (source : `supabase/functions/daily-digest/source.ts`, bundle : `npm run build:functions`)
+est appelée chaque jour à 7 h UTC par pg_cron (migration 005). Elle réutilise `src/domain/alerts.ts`.
+
+Pour activer l'envoi réel, ajouter dans Supabase > Edge Functions > Secrets :
+- `RESEND_API_KEY` : clé API Resend ;
+- `ALERTS_FROM` : expéditeur sur un domaine vérifié chez Resend, ex. `Yoon Fleet <alertes@yoonfleet.com>`.
+
+Sans clé, la fonction tourne en simulation et n'envoie rien. Un journal (`digest_log`) empêche les doublons.

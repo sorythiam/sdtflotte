@@ -275,6 +275,35 @@ export function Settings() {
             </form>
           </section>
 
+          <section className="card" aria-labelledby="notifications">
+            <h2 id="notifications">Notifications</h2>
+            <label className="row" style={{ alignItems: 'flex-start', gap: 'var(--space-3)', flexWrap: 'nowrap' }}>
+              <input
+                type="checkbox"
+                checked={session!.dailyDigest}
+                onChange={async (e) => {
+                  const on = e.target.checked;
+                  try {
+                    await store.setDailyDigest(on);
+                    setSession(await store.session());
+                    toast(on ? 'Récapitulatif du matin activé' : 'Récapitulatif du matin désactivé');
+                  } catch (err) {
+                    toast((err as Error).message);
+                  }
+                }}
+                style={{ width: 18, height: 18, marginTop: 2, flex: 'none' }}
+              />
+              <span>
+                <strong>Recevoir le récapitulatif des alertes par email</strong>
+                <br />
+                <span className="small muted">
+                  Chaque matin à 7 h, à {session!.userEmail}, seulement s’il y a quelque chose à signaler pour votre profil :
+                  retards, départs et retours du jour, documents à renouveler, soldes impayés, cautions à rendre.
+                </span>
+              </span>
+            </label>
+          </section>
+
           <section className="card" aria-labelledby="compte">
             <h2 id="compte">Mon compte</h2>
             <p className="small" style={{ margin: 0 }}>

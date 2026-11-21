@@ -1,3 +1,4 @@
+import { defaultDailyDigest } from '../domain/alerts';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName } from '../domain/types';
 import type { NewRow, Row, SessionInfo, Store } from './store';
@@ -51,7 +52,7 @@ export class SupabaseStore implements Store {
     if (!user) return null;
     const { data: m, error } = await this.sb
       .from('memberships')
-      .select('role, organizations(*)')
+      .select('role, daily_digest, organizations(*)')
       .eq('user_id', user.id)
       .limit(1)
       .maybeSingle();
@@ -86,7 +87,8 @@ export class SupabaseStore implements Store {
       vehicleQuota: o.vehicle_quota as number,
       trialEndsAt: (o.trial_ends_at as string) ?? null,
     };
-    return { userId: user.id, userEmail: user.email ?? '', role: (m as { role: Role }).role, org };
+    const mm = m as { role: Role; daily_digest: boolean | null };
+    return { userId: user.id, userEmail: user.email ?? '', role: mm.role, org, dailyDigest: mm.daily_digest ?? defaultDailyDigest(mm.role) };
   }
 
   async signIn(email: string, password: string): Promise<void> {
@@ -204,6 +206,11 @@ export class SupabaseStore implements Store {
   async changePassword(password: string): Promise<void> {
     if (password.length < 8) throw new Error('8 caractères minimum.');
     const { error } = await this.sb.auth.updateUser({ password });
+    if (error) throw friendly(error);
+  }
+
+  async setDailyDigest(on: boolean): Promise<void> {
+    const { error } = await this.sb.rpc('set_daily_digest', { p_org: this.orgId, p_on: on });
     if (error) throw friendly(error);
   }
 

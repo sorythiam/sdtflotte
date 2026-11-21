@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "build:functions": "esbuild supabase/functions/daily-digest/source.ts --bundle --format=esm --platform=neutral --target=es2022 --external:'npm:*' --outfile=supabase/functions/daily-digest/index.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.45.4",

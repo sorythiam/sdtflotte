@@ -8,6 +8,8 @@ export interface SessionInfo {
   userEmail: string;
   role: Role;
   org: Organization;
+  /** Reçoit le récapitulatif des alertes par email chaque matin. */
+  dailyDigest: boolean;
 }
 
 /** Ce que l'application attend d'une source de données : le mode démo ou Supabase. */
@@ -32,6 +34,7 @@ export interface Store {
   // Paramètres
   updateOrganization(patch: { name?: string; country?: string }): Promise<void>;
   changePassword(password: string): Promise<void>;
+  setDailyDigest(on: boolean): Promise<void>;
   listSubscriptionRequests(): Promise<SubscriptionRequest[]>;
   requestSubscription(req: Omit<SubscriptionRequest, 'id' | 'status' | 'createdAt'>): Promise<SubscriptionRequest>;
 }
