@@ -1,3 +1,4 @@
+import type { ContractSettings } from '../domain/contract';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
 
 export type Row<T extends TableName> = Tables[T];
@@ -32,7 +33,7 @@ export interface Store {
   updateMemberRole(userId: string, role: Role): Promise<void>;
   removeMember(userId: string): Promise<void>;
   // Paramètres
-  updateOrganization(patch: { name?: string; country?: string }): Promise<void>;
+  updateOrganization(patch: { name?: string; country?: string; contract?: Partial<ContractSettings> }): Promise<void>;
   changePassword(password: string): Promise<void>;
   setDailyDigest(on: boolean): Promise<void>;
   listSubscriptionRequests(): Promise<SubscriptionRequest[]>;

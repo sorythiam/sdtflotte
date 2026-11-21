@@ -8,6 +8,7 @@ import { Team } from './pages/Team';
 import { Settings } from './pages/Settings';
 import { Reports } from './pages/Reports';
 import { Alerts } from './pages/Alerts';
+import { Contract } from './pages/Contract';
 import { Login } from './pages/Login';
 import { Maintenance } from './pages/Maintenance';
 import { Planning } from './pages/Planning';
@@ -28,6 +29,7 @@ function App() {
         <Route path="planning" element={<Planning />} />
         <Route path="reservations" element={<Reservations />} />
         <Route path="reservations/:id" element={<ReservationDetail />} />
+        <Route path="reservations/:id/contrat" element={<Contract />} />
         <Route path="vehicules" element={<Vehicles />} />
         <Route path="clients" element={<Clients />} />
         <Route path="maintenance" element={<Maintenance />} />

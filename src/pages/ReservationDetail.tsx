@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ErrorBox, Logo, Modal, ReservationBadge, ScoreBadge } from '../components/ui';
+import { ErrorBox, Modal, ReservationBadge, ScoreBadge } from '../components/ui';
 import { dateTime, fromLocalInput, money, num, toLocalInput } from '../domain/format';
 import { balanceDue, billedDays, cautionHeld, lateDays, returnFees } from '../domain/rules';
 import type { Payment, PaymentKind, PaymentMethod } from '../domain/types';
@@ -28,7 +28,7 @@ type Dialog = null | 'pay' | 'checkout' | 'checkin' | 'refund' | 'cancel';
 
 export function ReservationDetail() {
   const { id } = useParams();
-  const { data, now, can, session } = useData();
+  const { data, now, can } = useData();
   const [dialog, setDialog] = useState<Dialog>(null);
   const r = data.reservations.find((x) => x.id === id);
   if (!r) {
@@ -72,7 +72,7 @@ export function ReservationDetail() {
           {r.status === 'en_cours' && canRent && (
             <button className="btn btn-primary" onClick={() => setDialog('checkin')}>Retour du véhicule</button>
           )}
-          <button className="btn" onClick={() => window.print()}>Imprimer le contrat</button>
+          <Link className="btn" to={`/reservations/${r.id}/contrat`}>Contrat PDF</Link>
         </div>
       </header>
 
@@ -184,7 +184,6 @@ export function ReservationDetail() {
         </section>
       </div>
 
-      <ContractPrint orgName={session?.org.name ?? ''} />
 
       {dialog === 'pay' && <PayDialog onClose={() => setDialog(null)} />}
       {dialog === 'refund' && <PayDialog refund onClose={() => setDialog(null)} />}
@@ -410,37 +409,5 @@ function CancelDialog({ onClose }: { onClose: () => void }) {
         <button type="button" className="btn btn-danger" onClick={confirm}>Annuler la réservation</button>
       </div>
     </Modal>
-  );
-}
-
-function ContractPrint({ orgName }: { orgName: string }) {
-  const { r, v, data } = useCurrent();
-  const c = data.clients.find((x) => x.id === r.clientId);
-  const rate = data.rates.find((x) => x.category === v?.category);
-  return (
-    <section className="print-only" style={{ fontSize: 12, lineHeight: '18px' }}>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <div className="row"><Logo inverse={false} size={32} /><strong style={{ fontSize: 16 }}>{orgName}</strong></div>
-        <strong>Contrat de location {r.number}</strong>
-      </div>
-      <p>
-        Entre <strong>{orgName}</strong> (le loueur) et <strong>{c?.name}</strong>, {c?.phone}
-        {c?.idNumber ? `, pièce n° ${c.idNumber}` : ''} (le locataire).
-      </p>
-      <p>
-        Véhicule : {v?.brand} {v?.model}, immatriculé {v?.plate}, {r.withDriver ? 'avec' : 'sans'} chauffeur. Kilométrage au départ :{' '}
-        {r.mileageOut != null ? `${num(r.mileageOut)} km` : '__________ km'}.
-      </p>
-      <p>
-        Période : du {dateTime(r.start)} au {dateTime(r.end)}, soit {billedDays(r.start, r.end)} jour(s) à {money(r.dailyRate)}, total {money(r.total)}. Caution :{' '}
-        {money(r.caution)}. Kilométrage inclus : {rate?.kmPerDay ?? '—'} km par jour, puis {money(rate?.extraKm ?? 0)} par km. Toute journée de retard entamée au-delà d’une heure est facturée au tarif journalier.
-      </p>
-      <p>Le carburant manquant et les dégâts constatés à l’état des lieux de retour sont déduits de la caution.</p>
-      <div className="grid-2" style={{ marginTop: 40 }}>
-        <div>Signature du loueur</div>
-        <div>Signature du locataire, précédée de « lu et approuvé »</div>
-      </div>
-      <p className="xs muted" style={{ marginTop: 40 }}>Contrat généré par Yoon Fleet.</p>
-    </section>
   );
 }

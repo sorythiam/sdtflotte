@@ -1,3 +1,4 @@
+import { ContractSettingsForm } from '../components/ContractSettingsForm';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ErrorBox, roleLabel } from '../components/ui';
 import { dateLong, money } from '../domain/format';
@@ -274,6 +275,8 @@ export function Settings() {
               )}
             </form>
           </section>
+
+          <ContractSettingsForm editable={admin} />
 
           <section className="card" aria-labelledby="notifications">
             <h2 id="notifications">Notifications</h2>

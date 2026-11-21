@@ -1,3 +1,4 @@
+import type { ContractSettings } from '../domain/contract';
 import { defaultDailyDigest } from '../domain/alerts';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
 import { seed } from './seed';
@@ -41,6 +42,14 @@ function freshState(): DemoState {
       plan: 'pro',
       vehicleQuota: 40,
       trialEndsAt: trial.toISOString(),
+      contract: {
+        legalName: 'Sénégal Découverte Touristique SARL',
+        address: 'Route de Ngor, Almadies',
+        city: 'Dakar',
+        phone: '+221 33 820 00 00',
+        email: 'location@sdt.sn',
+        registration: 'RCCM SN-DKR-2015-B-0000 · NINEA 000000000',
+      },
     },
   };
 }
@@ -210,10 +219,15 @@ export class DemoStore implements Store {
   }
 
   // ---------------------------------------------------------------- paramètres
-  async updateOrganization(patch: { name?: string; country?: string }): Promise<void> {
+  async updateOrganization(patch: { name?: string; country?: string; contract?: Partial<ContractSettings> }): Promise<void> {
     const name = patch.name?.trim();
     if (name !== undefined && (name.length < 2 || name.length > 120)) throw new Error('Le nom doit faire entre 2 et 120 caractères.');
-    this.state.org = { ...this.state.org, ...(name ? { name } : {}), ...(patch.country ? { country: patch.country } : {}) };
+    this.state.org = {
+      ...this.state.org,
+      ...(name ? { name } : {}),
+      ...(patch.country ? { country: patch.country } : {}),
+      ...(patch.contract ? { contract: patch.contract } : {}),
+    };
     this.save();
   }
 

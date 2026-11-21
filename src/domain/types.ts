@@ -11,6 +11,8 @@ export interface Organization {
   plan: Plan;
   vehicleQuota: number;
   trialEndsAt: string | null; // ISO
+  /** Coordonnées, logo et conditions générales du contrat. */
+  contract?: Partial<import('./contract').ContractSettings> | null;
 }
 
 export type VehicleStatus = 'disponible' | 'loue' | 'maintenance' | 'hors_service';

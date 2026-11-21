@@ -1,3 +1,4 @@
+import type { ContractSettings } from '../domain/contract';
 import { defaultDailyDigest } from '../domain/alerts';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName } from '../domain/types';
@@ -86,6 +87,7 @@ export class SupabaseStore implements Store {
       plan: o.plan as Organization['plan'],
       vehicleQuota: o.vehicle_quota as number,
       trialEndsAt: (o.trial_ends_at as string) ?? null,
+      contract: (o.contract as Organization['contract']) ?? null,
     };
     const mm = m as { role: Role; daily_digest: boolean | null };
     return { userId: user.id, userEmail: user.email ?? '', role: mm.role, org, dailyDigest: mm.daily_digest ?? defaultDailyDigest(mm.role) };
@@ -192,13 +194,14 @@ export class SupabaseStore implements Store {
   }
 
   // ---------------------------------------------------------------- paramètres
-  async updateOrganization(patch: { name?: string; country?: string }): Promise<void> {
-    const row: Record<string, string> = {};
+  async updateOrganization(patch: { name?: string; country?: string; contract?: Partial<ContractSettings> }): Promise<void> {
+    const row: Record<string, unknown> = {};
+    if (patch.contract !== undefined) row.contract = patch.contract;
     if (patch.name !== undefined) row.name = patch.name.trim();
     if (patch.country !== undefined) row.country = patch.country;
     const { error } = await this.sb.from('organizations').update(row).eq('id', this.orgId);
     if (error) {
-      if (error.code === '23514') throw new Error('Le nom doit faire entre 2 et 120 caractères.');
+      if (error.code === '23514') throw new Error(patch.contract ? 'Réglages du contrat trop volumineux : choisissez un logo plus léger.' : 'Le nom doit faire entre 2 et 120 caractères.');
       throw friendly(error);
     }
   }
