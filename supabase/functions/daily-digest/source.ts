@@ -43,14 +43,15 @@ Deno.serve(async (req) => {
     if (recipients.length === 0) continue;
 
     const since = new Date(now.getTime() - 180 * 86400000).toISOString();
-    const [vehicles, clients, reservations, payments, maintenances] = await Promise.all([
+    const [vehicles, clients, reservations, payments, maintenances, requests] = await Promise.all([
       sb.from('vehicles').select('*').eq('org_id', org.id),
       sb.from('clients').select('*').eq('org_id', org.id),
       sb.from('reservations').select('*').eq('org_id', org.id).or(`status.in.(reservee,en_cours),and(status.eq.terminee,end.gte.${since})`),
       sb.from('payments').select('*').eq('org_id', org.id),
       sb.from('maintenances').select('*').eq('org_id', org.id).gte('start', new Date(now.getTime() - 2 * 86400000).toISOString()),
+      sb.from('booking_requests').select('id, status, name, category, start, end, created_at').eq('org_id', org.id).eq('status', 'nouvelle'),
     ]);
-    const failed = [vehicles, clients, reservations, payments, maintenances].find((r) => r.error);
+    const failed = [vehicles, clients, reservations, payments, maintenances, requests].find((r) => r.error);
     if (failed) {
       report.push({ org: org.name, error: failed.error!.message });
       continue;
@@ -64,6 +65,7 @@ Deno.serve(async (req) => {
         reservations: toApp(reservations.data) as never,
         payments: toApp(payments.data) as never,
         maintenances: toApp(maintenances.data) as never,
+        bookingRequests: toApp(requests.data) as never,
       },
       now,
       offset,

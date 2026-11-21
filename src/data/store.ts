@@ -1,3 +1,4 @@
+import type { BookingRequest, BookingRequestInput, BookingStatus, PublicBookingInfo } from '../domain/booking';
 import type { ContractSettings } from '../domain/contract';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
 
@@ -33,11 +34,24 @@ export interface Store {
   updateMemberRole(userId: string, role: Role): Promise<void>;
   removeMember(userId: string): Promise<void>;
   // Paramètres
-  updateOrganization(patch: { name?: string; country?: string; contract?: Partial<ContractSettings> }): Promise<void>;
+  updateOrganization(patch: OrgPatch): Promise<void>;
   changePassword(password: string): Promise<void>;
   setDailyDigest(on: boolean): Promise<void>;
+  // Réservation en ligne : pages publiques (sans connexion) et traitement des demandes
+  publicBookingInfo(slug: string): Promise<PublicBookingInfo | null>;
+  publicAvailability(slug: string, start: string, end: string): Promise<Record<string, number>>;
+  submitBookingRequest(slug: string, req: BookingRequestInput): Promise<void>;
+  listBookingRequests(): Promise<BookingRequest[]>;
+  updateBookingRequest(id: string, patch: { status: BookingStatus; reservationId?: string | null; declineReason?: string | null }): Promise<void>;
   listSubscriptionRequests(): Promise<SubscriptionRequest[]>;
   requestSubscription(req: Omit<SubscriptionRequest, 'id' | 'status' | 'createdAt'>): Promise<SubscriptionRequest>;
+}
+
+export interface OrgPatch {
+  name?: string;
+  country?: string;
+  contract?: Partial<ContractSettings>;
+  booking?: { enabled: boolean; slug: string };
 }
 
 export class StoreError extends Error {}

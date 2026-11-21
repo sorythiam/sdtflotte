@@ -1,8 +1,8 @@
-import type { ContractSettings } from '../domain/contract';
 import { defaultDailyDigest } from '../domain/alerts';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName } from '../domain/types';
-import type { NewRow, Row, SessionInfo, Store } from './store';
+import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
+import type { BookingRequest, BookingRequestInput, BookingStatus, PublicBookingInfo } from '../domain/booking';
 
 // Colonnes dont le nom diffère entre l'application (camelCase) et la base (snake_case).
 const toSnake = (k: string) => k.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase());
@@ -88,6 +88,8 @@ export class SupabaseStore implements Store {
       vehicleQuota: o.vehicle_quota as number,
       trialEndsAt: (o.trial_ends_at as string) ?? null,
       contract: (o.contract as Organization['contract']) ?? null,
+      bookingSlug: (o.booking_slug as string) ?? null,
+      bookingEnabled: !!o.booking_enabled,
     };
     const mm = m as { role: Role; daily_digest: boolean | null };
     return { userId: user.id, userEmail: user.email ?? '', role: mm.role, org, dailyDigest: mm.daily_digest ?? defaultDailyDigest(mm.role) };
@@ -194,13 +196,19 @@ export class SupabaseStore implements Store {
   }
 
   // ---------------------------------------------------------------- paramètres
-  async updateOrganization(patch: { name?: string; country?: string; contract?: Partial<ContractSettings> }): Promise<void> {
+  async updateOrganization(patch: OrgPatch): Promise<void> {
     const row: Record<string, unknown> = {};
+    if (patch.booking) {
+      row.booking_slug = patch.booking.slug;
+      row.booking_enabled = patch.booking.enabled;
+    }
     if (patch.contract !== undefined) row.contract = patch.contract;
     if (patch.name !== undefined) row.name = patch.name.trim();
     if (patch.country !== undefined) row.country = patch.country;
     const { error } = await this.sb.from('organizations').update(row).eq('id', this.orgId);
     if (error) {
+      if (patch.booking && error.code === '23505') throw new Error('Cette adresse est déjà prise par une autre entreprise. Choisissez-en une autre.');
+      if (patch.booking && error.code === '23514') throw new Error('Adresse invalide : 3 à 40 caractères, lettres minuscules, chiffres et tirets.');
       if (error.code === '23514') throw new Error(patch.contract ? 'Réglages du contrat trop volumineux : choisissez un logo plus léger.' : 'Le nom doit faire entre 2 et 120 caractères.');
       throw friendly(error);
     }
@@ -209,6 +217,46 @@ export class SupabaseStore implements Store {
   async changePassword(password: string): Promise<void> {
     if (password.length < 8) throw new Error('8 caractères minimum.');
     const { error } = await this.sb.auth.updateUser({ password });
+    if (error) throw friendly(error);
+  }
+
+  // ---------------------------------------------------------------- réservation en ligne
+  async publicBookingInfo(slug: string): Promise<PublicBookingInfo | null> {
+    const { data, error } = await this.sb.rpc('public_booking_info', { p_slug: slug });
+    if (error) throw friendly(error);
+    return (data as PublicBookingInfo | null) ?? null;
+  }
+
+  async publicAvailability(slug: string, start: string, end: string): Promise<Record<string, number>> {
+    const { data, error } = await this.sb.rpc('public_availability', { p_slug: slug, p_start: start, p_end: end });
+    if (error) throw friendly(error);
+    return (data as Record<string, number>) ?? {};
+  }
+
+  async submitBookingRequest(slug: string, req: BookingRequestInput): Promise<void> {
+    const { error } = await this.sb.rpc('submit_booking_request', {
+      p_slug: slug, p_category: req.category, p_start: req.start, p_end: req.end, p_with_driver: req.withDriver,
+      p_name: req.name, p_phone: req.phone, p_email: req.email, p_message: req.message,
+    });
+    if (error) throw friendly(error);
+  }
+
+  async listBookingRequests(): Promise<BookingRequest[]> {
+    const { data, error } = await this.sb
+      .from('booking_requests')
+      .select('id, category, start, end, with_driver, name, phone, email, message, status, reservation_id, decline_reason, created_at')
+      .eq('org_id', this.orgId)
+      .order('created_at', { ascending: false })
+      .limit(300);
+    if (error) throw friendly(error);
+    return (data ?? []).map((r) => rowToApp<BookingRequest>(r));
+  }
+
+  async updateBookingRequest(id: string, patch: { status: BookingStatus; reservationId?: string | null; declineReason?: string | null }): Promise<void> {
+    const row: Record<string, unknown> = { status: patch.status };
+    if (patch.reservationId !== undefined) row.reservation_id = patch.reservationId;
+    if (patch.declineReason !== undefined) row.decline_reason = patch.declineReason;
+    const { error } = await this.sb.from('booking_requests').update(row).eq('id', id);
     if (error) throw friendly(error);
   }
 

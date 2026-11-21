@@ -15,7 +15,8 @@ export type AlertKind =
   | 'liste_noire'
   | 'impaye'
   | 'caution_a_rendre'
-  | 'entretien_jour';
+  | 'entretien_jour'
+  | 'demande_en_ligne';
 
 export interface Alert {
   id: string; // stable : sert de clé et de repère dans l'email
@@ -33,6 +34,7 @@ export interface AlertInput {
   reservations: Reservation[];
   payments: Payment[];
   maintenances: Maintenance[];
+  bookingRequests?: { id: string; status: string; name: string; category: string; start: string; end: string; createdAt: string }[];
 }
 
 const DAY = 86400000;
@@ -178,6 +180,16 @@ export function buildAlerts(input: AlertInput, now: Date, offsetMin = -now.getTi
         detail: `${m.label} à ${hhmm(m.start, offsetMin)}`,
       });
     }
+  }
+
+  for (const b of input.bookingRequests ?? []) {
+    if (b.status !== 'nouvelle') continue;
+    const soon = Date.parse(b.start) - t < 2 * DAY;
+    out.push({
+      id: `demande:${b.id}`, kind: 'demande_en_ligne', level: soon ? 'urgent' : 'attention', link: '/demandes', roles: OPS,
+      title: `Demande en ligne à traiter : ${b.name}`,
+      detail: `${b.category} du ${dmy(b.start)} au ${dmy(b.end)}${soon ? ' · départ dans moins de 48 h' : ''}`,
+    });
   }
 
   return out.sort((a, b) => rank[a.level] - rank[b.level] || a.title.localeCompare(b.title, 'fr'));

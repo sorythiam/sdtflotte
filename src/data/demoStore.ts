@@ -1,8 +1,11 @@
-import type { ContractSettings } from '../domain/contract';
 import { defaultDailyDigest } from '../domain/alerts';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
 import { seed } from './seed';
-import type { NewRow, Row, SessionInfo, Store } from './store';
+import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
+import {
+  availableByCategory, SLUG_RE, validateBookingRequest,
+  type BookingRequest, type BookingRequestInput, type BookingStatus, type PublicBookingInfo,
+} from '../domain/booking';
 
 const KEY = 'yoonfleet-demo-v1';
 
@@ -14,6 +17,7 @@ interface DemoState {
   members?: Member[];
   invitations?: Invitation[];
   subscriptionRequests?: SubscriptionRequest[];
+  bookingRequests?: BookingRequest[];
 }
 
 const SELF = 'u-moi';
@@ -26,6 +30,26 @@ function demoTeam(): Member[] {
   ];
 }
 
+function demoBookingRequests(now = new Date()): BookingRequest[] {
+  const at = (days: number, hour: number) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + days);
+    d.setHours(hour, 0, 0, 0);
+    return d.toISOString();
+  };
+  return [
+    {
+      id: 'br-1', category: '4x4', start: at(3, 9), end: at(6, 18), withDriver: true, name: 'Khadija Sow', phone: '+221 77 455 12 30',
+      email: 'khadija.sow@example.com', message: 'Mission à Saint-Louis pour 3 personnes, départ de l’hôtel Terrou-Bi.', status: 'nouvelle',
+      reservationId: null, declineReason: null, createdAt: at(0, 8),
+    },
+    {
+      id: 'br-2', category: 'Citadine', start: at(1, 10), end: at(2, 10), withDriver: false, name: 'Ousmane Fall', phone: '76 220 33 44',
+      email: null, message: null, status: 'nouvelle', reservationId: null, declineReason: null, createdAt: at(-1, 19),
+    },
+  ];
+}
+
 function freshState(): DemoState {
   const trial = new Date();
   trial.setDate(trial.getDate() + 30);
@@ -34,6 +58,7 @@ function freshState(): DemoState {
     session: null,
     members: demoTeam(),
     invitations: [],
+    bookingRequests: demoBookingRequests(),
     org: {
       id: 'org-demo',
       name: 'Sénégal Découverte Touristique',
@@ -42,6 +67,8 @@ function freshState(): DemoState {
       plan: 'pro',
       vehicleQuota: 40,
       trialEndsAt: trial.toISOString(),
+      bookingSlug: 'sdt-demo',
+      bookingEnabled: true,
       contract: {
         legalName: 'Sénégal Découverte Touristique SARL',
         address: 'Route de Ngor, Almadies',
@@ -74,6 +101,9 @@ export class DemoStore implements Store {
         const st = JSON.parse(raw) as DemoState;
         st.members ??= demoTeam();
         st.invitations ??= [];
+        st.bookingRequests ??= demoBookingRequests();
+        st.org.bookingSlug ??= 'sdt-demo';
+        st.org.bookingEnabled ??= true;
         return st;
       }
     } catch {
@@ -219,7 +249,10 @@ export class DemoStore implements Store {
   }
 
   // ---------------------------------------------------------------- paramètres
-  async updateOrganization(patch: { name?: string; country?: string; contract?: Partial<ContractSettings> }): Promise<void> {
+  async updateOrganization(patch: OrgPatch): Promise<void> {
+    if (patch.booking && !SLUG_RE.test(patch.booking.slug)) {
+      throw new Error('Adresse invalide : 3 à 40 caractères, lettres minuscules, chiffres et tirets.');
+    }
     const name = patch.name?.trim();
     if (name !== undefined && (name.length < 2 || name.length > 120)) throw new Error('Le nom doit faire entre 2 et 120 caractères.');
     this.state.org = {
@@ -227,12 +260,70 @@ export class DemoStore implements Store {
       ...(name ? { name } : {}),
       ...(patch.country ? { country: patch.country } : {}),
       ...(patch.contract ? { contract: patch.contract } : {}),
+      ...(patch.booking ? { bookingSlug: patch.booking.slug, bookingEnabled: patch.booking.enabled } : {}),
     };
     this.save();
   }
 
   async changePassword(password: string): Promise<void> {
     if (password.length < 8) throw new Error('8 caractères minimum.');
+  }
+
+  // ---------------------------------------------------------------- réservation en ligne
+  private publicOrg(slug: string) {
+    const o = this.state.org;
+    return o.bookingEnabled && o.bookingSlug === slug.toLowerCase() ? o : null;
+  }
+
+  async publicBookingInfo(slug: string): Promise<PublicBookingInfo | null> {
+    const o = this.publicOrg(slug);
+    if (!o) return null;
+    const c = o.contract ?? {};
+    const vehicles = this.state.db.vehicles.filter((v) => !v.outOfService);
+    const categories = [...this.state.db.rates]
+      .filter((r) => vehicles.some((v) => v.category === r.category))
+      .sort((a, b) => a.daily - b.daily)
+      .map((r) => {
+        const inCat = vehicles.filter((v) => v.category === r.category);
+        return {
+          category: r.category, daily: r.daily, weekly: r.weekly, monthly: r.monthly, driverDaily: r.driverDaily,
+          kmPerDay: r.kmPerDay, extraKm: r.extraKm, caution: r.caution, vehicles: inCat.length,
+          models: [...new Set(inCat.map((v) => `${v.brand} ${v.model}`))].sort().slice(0, 3),
+        };
+      });
+    return {
+      name: c.legalName || o.name, logo: c.logo ?? null, phone: c.phone ?? '', email: c.email ?? '',
+      address: c.address ?? '', city: c.city ?? '', categories,
+    };
+  }
+
+  async publicAvailability(slug: string, start: string, end: string): Promise<Record<string, number>> {
+    if (!this.publicOrg(slug) || !(Date.parse(end) > Date.parse(start))) return {};
+    return availableByCategory(this.state.db.vehicles, this.state.db.reservations, this.state.db.maintenances, start, end);
+  }
+
+  async submitBookingRequest(slug: string, req: BookingRequestInput): Promise<void> {
+    if (!this.publicOrg(slug)) throw new Error('Cette page de réservation n’est pas disponible.');
+    const err = validateBookingRequest(req, new Date());
+    if (err) throw new Error(err);
+    if (!this.state.db.rates.some((r) => r.category === req.category)) throw new Error('Choisissez un type de véhicule.');
+    this.state.bookingRequests = [
+      {
+        ...req, id: uid(), name: req.name.trim(), phone: req.phone.trim(), email: req.email?.trim() || null,
+        message: req.message?.trim() || null, status: 'nouvelle', reservationId: null, declineReason: null, createdAt: new Date().toISOString(),
+      },
+      ...(this.state.bookingRequests ?? []),
+    ];
+    this.save();
+  }
+
+  async listBookingRequests(): Promise<BookingRequest[]> {
+    return structuredClone(this.state.bookingRequests ?? []).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async updateBookingRequest(id: string, patch: { status: BookingStatus; reservationId?: string | null; declineReason?: string | null }): Promise<void> {
+    this.state.bookingRequests = (this.state.bookingRequests ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r));
+    this.save();
   }
 
   async setDailyDigest(on: boolean): Promise<void> {

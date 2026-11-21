@@ -13,6 +13,7 @@ export function Layout() {
   const alerts = useMemo(() => (session ? alertsFor(buildAlerts(data, now), session.role) : []), [data, now, session]);
   if (!session) return null;
   const urgent = alerts.filter((a) => a.level === 'urgent').length;
+  const pendingRequests = data.bookingRequests.filter((r) => r.status === 'nouvelle').length;
   const { org } = session;
   const trialDays = org.trialEndsAt ? Math.ceil((Date.parse(org.trialEndsAt) - now.getTime()) / 86400000) : null;
 
@@ -21,6 +22,7 @@ export function Layout() {
     ['/alertes', 'Alertes'],
     ['/planning', 'Planning'],
     ['/reservations', 'Réservations et contrats'],
+    ...(can('direction', 'agent') ? ([['/demandes', 'Demandes en ligne']] as [string, string][]) : []),
     ['/vehicules', 'Véhicules'],
     ['/clients', 'Clients'],
     ['/maintenance', 'Maintenance'],
@@ -53,6 +55,9 @@ export function Layout() {
           {links.map(([to, label]) => (
             <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => (isActive ? 'active' : undefined)}>
               {label}
+              {to === '/demandes' && pendingRequests > 0 && (
+                <span className="nav-count" aria-label={`${pendingRequests} demande(s) à traiter`}>{pendingRequests}</span>
+              )}
               {to === '/alertes' && alerts.length > 0 && (
                 <span className={`nav-count${urgent ? ' urgent' : ''}`} aria-label={`${alerts.length} alerte(s), dont ${urgent} urgente(s)`}>
                   {urgent || alerts.length}

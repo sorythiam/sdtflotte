@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { DemoStore } from '../data/demoStore';
 import type { SessionInfo, Store } from '../data/store';
 import { SupabaseStore } from '../data/supabaseStore';
+import type { BookingRequest } from '../domain/booking';
 import type { Client, Maintenance, Payment, Rate, Reservation, Role, Vehicle } from '../domain/types';
 
 export interface Data {
@@ -11,9 +12,10 @@ export interface Data {
   reservations: Reservation[];
   payments: Payment[];
   maintenances: Maintenance[];
+  bookingRequests: BookingRequest[];
 }
 
-const empty: Data = { vehicles: [], clients: [], rates: [], reservations: [], payments: [], maintenances: [] };
+const empty: Data = { vehicles: [], clients: [], rates: [], reservations: [], payments: [], maintenances: [], bookingRequests: [] };
 
 interface Ctx {
   store: Store;
@@ -48,15 +50,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [vehicles, clients, rates, reservations, payments, maintenances] = await Promise.all([
+      const [vehicles, clients, rates, reservations, payments, maintenances, bookingRequests] = await Promise.all([
         store.list('vehicles'),
         store.list('clients'),
         store.list('rates'),
         store.list('reservations'),
         store.list('payments'),
         store.list('maintenances'),
+        // Réservées à la direction et aux agents : les autres profils reçoivent une liste vide.
+        store.listBookingRequests().catch(() => [] as BookingRequest[]),
       ]);
-      setData({ vehicles, clients, rates, reservations, payments, maintenances });
+      setData({ vehicles, clients, rates, reservations, payments, maintenances, bookingRequests });
       setNow(new Date());
     } finally {
       setLoading(false);

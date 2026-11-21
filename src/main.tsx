@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Clients } from './pages/Clients';
 import { Dashboard } from './pages/Dashboard';
@@ -9,6 +9,8 @@ import { Settings } from './pages/Settings';
 import { Reports } from './pages/Reports';
 import { Alerts } from './pages/Alerts';
 import { Contract } from './pages/Contract';
+import { PublicBooking } from './pages/PublicBooking';
+import { BookingRequests } from './pages/BookingRequests';
 import { Login } from './pages/Login';
 import { Maintenance } from './pages/Maintenance';
 import { Planning } from './pages/Planning';
@@ -21,6 +23,10 @@ import './styles/app.css';
 
 function App() {
   const { session } = useData();
+  const { pathname } = useLocation();
+  // Page publique de réservation : accessible sans compte.
+  const pub = pathname.match(/^\/r\/([a-z0-9-]+)\/?$/i);
+  if (pub) return <PublicBooking slug={pub[1].toLowerCase()} />;
   if (!session) return <Login />;
   return (
     <Routes>
@@ -38,6 +44,7 @@ function App() {
         <Route path="parametres" element={<Settings />} />
         <Route path="rapports" element={<Reports />} />
         <Route path="alertes" element={<Alerts />} />
+        <Route path="demandes" element={<BookingRequests />} />
         <Route path="*" element={<Dashboard />} />
       </Route>
     </Routes>

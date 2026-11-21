@@ -13,6 +13,9 @@ export interface Organization {
   trialEndsAt: string | null; // ISO
   /** Coordonnées, logo et conditions générales du contrat. */
   contract?: Partial<import('./contract').ContractSettings> | null;
+  /** Page publique de réservation : /r/<bookingSlug>. */
+  bookingSlug?: string | null;
+  bookingEnabled?: boolean;
 }
 
 export type VehicleStatus = 'disponible' | 'loue' | 'maintenance' | 'hors_service';

@@ -1,3 +1,4 @@
+import { BookingSettingsForm } from '../components/BookingSettingsForm';
 import { ContractSettingsForm } from '../components/ContractSettingsForm';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ErrorBox, roleLabel } from '../components/ui';
@@ -277,6 +278,8 @@ export function Settings() {
           </section>
 
           <ContractSettingsForm editable={admin} />
+
+          <BookingSettingsForm editable={admin} />
 
           <section className="card" aria-labelledby="notifications">
             <h2 id="notifications">Notifications</h2>

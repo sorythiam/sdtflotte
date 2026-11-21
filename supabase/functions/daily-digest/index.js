@@ -228,6 +228,19 @@ function buildAlerts(input, now, offsetMin = -now.getTimezoneOffset()) {
       });
     }
   }
+  for (const b of input.bookingRequests ?? []) {
+    if (b.status !== "nouvelle") continue;
+    const soon = Date.parse(b.start) - t < 2 * DAY;
+    out.push({
+      id: `demande:${b.id}`,
+      kind: "demande_en_ligne",
+      level: soon ? "urgent" : "attention",
+      link: "/demandes",
+      roles: OPS,
+      title: `Demande en ligne \xE0 traiter : ${b.name}`,
+      detail: `${b.category} du ${dmy(b.start)} au ${dmy(b.end)}${soon ? " \xB7 d\xE9part dans moins de 48 h" : ""}`
+    });
+  }
   return out.sort((a, b) => rank[a.level] - rank[b.level] || a.title.localeCompare(b.title, "fr"));
 }
 function defaultDailyDigest(role) {
@@ -308,14 +321,15 @@ Deno.serve(async (req) => {
     const recipients = (members ?? []).filter((m) => m.email && (m.daily_digest ?? defaultDailyDigest(m.role)));
     if (recipients.length === 0) continue;
     const since = new Date(now.getTime() - 180 * 864e5).toISOString();
-    const [vehicles, clients, reservations, payments, maintenances] = await Promise.all([
+    const [vehicles, clients, reservations, payments, maintenances, requests] = await Promise.all([
       sb.from("vehicles").select("*").eq("org_id", org.id),
       sb.from("clients").select("*").eq("org_id", org.id),
       sb.from("reservations").select("*").eq("org_id", org.id).or(`status.in.(reservee,en_cours),and(status.eq.terminee,end.gte.${since})`),
       sb.from("payments").select("*").eq("org_id", org.id),
-      sb.from("maintenances").select("*").eq("org_id", org.id).gte("start", new Date(now.getTime() - 2 * 864e5).toISOString())
+      sb.from("maintenances").select("*").eq("org_id", org.id).gte("start", new Date(now.getTime() - 2 * 864e5).toISOString()),
+      sb.from("booking_requests").select("id, status, name, category, start, end, created_at").eq("org_id", org.id).eq("status", "nouvelle")
     ]);
-    const failed = [vehicles, clients, reservations, payments, maintenances].find((r) => r.error);
+    const failed = [vehicles, clients, reservations, payments, maintenances, requests].find((r) => r.error);
     if (failed) {
       report.push({ org: org.name, error: failed.error.message });
       continue;
@@ -327,7 +341,8 @@ Deno.serve(async (req) => {
         clients: toApp(clients.data),
         reservations: toApp(reservations.data),
         payments: toApp(payments.data),
-        maintenances: toApp(maintenances.data)
+        maintenances: toApp(maintenances.data),
+        bookingRequests: toApp(requests.data)
       },
       now,
       offset
