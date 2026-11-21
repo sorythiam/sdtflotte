@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { ImportDialog } from '../components/ImportDialog';
 import { Empty, ErrorBox, Modal, VehicleBadge } from '../components/ui';
 import { num } from '../domain/format';
 import { expiryAlerts, vehicleStatusAt } from '../domain/rules';
@@ -10,6 +11,7 @@ export function Vehicles() {
   const { data, now, can, session } = useData();
   const [params, setParams] = useSearchParams();
   const [q, setQ] = useState('');
+  const [importing, setImporting] = useState(false);
   const editing = params.get('v');
   const alerts = expiryAlerts(data.vehicles, now, 30);
   const list = data.vehicles
@@ -27,9 +29,14 @@ export function Vehicles() {
           </p>
         </div>
         {editable && (
-          <button className="btn btn-primary" onClick={() => setParams({ v: 'nouveau' })}>
-            Ajouter un véhicule
-          </button>
+          <div className="row">
+            <button className="btn" onClick={() => setImporting(true)}>
+              Importer depuis Excel
+            </button>
+            <button className="btn btn-primary" onClick={() => setParams({ v: 'nouveau' })}>
+              Ajouter un véhicule
+            </button>
+          </div>
         )}
       </header>
       <label className="field">
@@ -37,7 +44,7 @@ export function Vehicles() {
       </label>
       <section className="card">
         {list.length === 0 ? (
-          <Empty>Aucun véhicule. Ajoutez le premier pour commencer.</Empty>
+          <Empty>Aucun véhicule. Ajoutez le premier, ou importez toute votre flotte depuis Excel.</Empty>
         ) : (
           <div className="table-wrap">
             <table className="data">
@@ -83,6 +90,7 @@ export function Vehicles() {
         )}
       </section>
       {editing && <VehicleForm id={editing} onClose={() => setParams({})} />}
+      {importing && <ImportDialog kind="vehicles" onClose={() => setImporting(false)} />}
     </>
   );
 }

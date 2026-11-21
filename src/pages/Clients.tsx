@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { ImportDialog } from '../components/ImportDialog';
 import { Empty, ErrorBox, Modal, ScoreBadge } from '../components/ui';
 import { money } from '../domain/format';
 import type { Client, ClientKind, ClientScore } from '../domain/types';
@@ -8,6 +9,7 @@ export function Clients() {
   const { data, can } = useData();
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   const editable = can('direction', 'agent');
   const stats = (id: string) => {
     const rs = data.reservations.filter((r) => r.clientId === id && r.status !== 'annulee');
@@ -24,7 +26,12 @@ export function Clients() {
           <h1>Clients</h1>
           <p className="muted small">{data.clients.length} client(s)</p>
         </div>
-        {editable && <button className="btn btn-primary" onClick={() => setEditing('nouveau')}>Ajouter un client</button>}
+        {editable && (
+          <div className="row">
+            <button className="btn" onClick={() => setImporting(true)}>Importer depuis Excel</button>
+            <button className="btn btn-primary" onClick={() => setEditing('nouveau')}>Ajouter un client</button>
+          </div>
+        )}
       </header>
       <label className="field">
         <input type="search" aria-label="Rechercher un client" placeholder="Rechercher un nom, un téléphone…" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -57,6 +64,7 @@ export function Clients() {
         )}
       </section>
       {editing && <ClientForm id={editing} onClose={() => setEditing(null)} />}
+      {importing && <ImportDialog kind="clients" onClose={() => setImporting(false)} />}
     </>
   );
 }
