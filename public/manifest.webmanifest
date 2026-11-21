@@ -1,0 +1,17 @@
+{
+  "name": "Yoon Fleet",
+  "short_name": "Yoon Fleet",
+  "description": "Gestion de flotte et de location de véhicules",
+  "lang": "fr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F6F1E7",
+  "theme_color": "#0B3C5D",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

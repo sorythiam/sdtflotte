@@ -8,7 +8,7 @@ import { Logo, roleLabel, Wordmark } from './ui';
 const planLabel = { essentiel: 'Essentiel', pro: 'Pro', entreprise: 'Entreprise' };
 
 export function Layout() {
-  const { session, store, setSession, data, now, refresh, toast, can } = useData();
+  const { session, store, setSession, data, now, refresh, toast, can, offline, outboxCount, syncNow } = useData();
   const nav = useNavigate();
   const alerts = useMemo(() => (session ? alertsFor(buildAlerts(data, now), session.role) : []), [data, now, session]);
   if (!session) return null;
@@ -97,6 +97,16 @@ export function Layout() {
         {store.mode === 'demo' && (
           <div className="notice no-print">
             <strong>Mode démo.</strong> Les données sont fictives et restent dans ce navigateur.
+          </div>
+        )}
+        {(offline || outboxCount > 0) && (
+          <div className={`sync-banner no-print${offline ? ' off' : ''}`} role="status">
+            <span>
+              {offline ? <strong>Hors connexion.</strong> : null}{' '}
+              {offline && 'Vous voyez les données de la dernière synchronisation. Les états des lieux restent possibles et sont gardés sur le téléphone. '}
+              {outboxCount > 0 && <>{outboxCount} état{outboxCount > 1 ? 's' : ''} des lieux en attente d’envoi.</>}
+            </span>
+            {!offline && outboxCount > 0 && <button className="btn btn-sm" onClick={() => void syncNow()}>Envoyer maintenant</button>}
           </div>
         )}
         <Outlet />

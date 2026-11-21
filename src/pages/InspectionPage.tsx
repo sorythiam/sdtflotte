@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Lightbox, shrinkPhoto } from '../components/photos';
 import { SignaturePad } from '../components/SignaturePad';
@@ -13,6 +13,7 @@ import { returnFees } from '../domain/rules';
 import { useData } from '../state/DataContext';
 import { useBilling } from '../state/useBilling';
 import { useSignedUrls } from '../state/useSignedUrls';
+import { enqueue, isNetworkError, keepPhoto, localRefs, pending, type PendingInspection } from '../offline/outbox';
 
 export function InspectionPage({ kind }: { kind: InspectionKind }) {
   const { id } = useParams();
@@ -27,13 +28,35 @@ export function InspectionPage({ kind }: { kind: InspectionKind }) {
     );
   }
   const done = data.inspections.find((i) => i.reservationId === r.id && i.kind === kind);
-  return done ? <InspectionView inspection={done} /> : <InspectionForm kind={kind} reservationId={r.id} />;
+  if (done) return <InspectionView inspection={done} />;
+  return <PendingGate reservationId={r.id} kind={kind} />;
+}
+
+/** Un état des lieux déjà fait hors connexion attend d'être envoyé : on ne le refait pas. */
+function PendingGate({ reservationId, kind }: { reservationId: string; kind: InspectionKind }) {
+  const { session, outboxCount, syncNow, offline } = useData();
+  const [entry, setEntry] = useState<PendingInspection | null | undefined>(undefined);
+  useEffect(() => {
+    void pending(session?.org.id).then((l) => setEntry(l.find((p) => p.inspection.reservationId === reservationId && p.inspection.kind === kind) ?? null));
+  }, [session, reservationId, kind, outboxCount]);
+  if (entry === undefined) return null;
+  if (!entry) return <InspectionForm kind={kind} reservationId={reservationId} />;
+  return (
+    <>
+      <InspectionView inspection={{ ...entry.inspection, id: entry.id }} pendingSince={entry.createdAt} />
+      <div className="card notice" role="status">
+        <strong>Enregistré sur ce téléphone, en attente d’envoi.</strong> Il partira automatiquement dès que le réseau revient.
+        {entry.lastError && <> Dernière tentative : {entry.lastError}</>}
+        {!offline && <div style={{ marginTop: 8 }}><button className="btn btn-sm btn-dark" onClick={() => void syncNow()}>Envoyer maintenant</button></div>}
+      </div>
+    </>
+  );
 }
 
 // ---------------------------------------------------------------- saisie
 
 function InspectionForm({ kind, reservationId }: { kind: InspectionKind; reservationId: string }) {
-  const { data, store, refresh, toast, can } = useData();
+  const { data, store, refresh, toast, can, session, syncNow, offline } = useData();
   const billing = useBilling();
   const nav = useNavigate();
   const r = data.reservations.find((x) => x.id === reservationId)!;
@@ -83,11 +106,21 @@ function InspectionForm({ kind, reservationId }: { kind: InspectionKind; reserva
     try {
       for (const f of [...files].slice(0, 4)) {
         const blob = await shrinkPhoto(f, store.mode === 'demo' ? 720 : 1440, store.mode === 'demo' ? 0.65 : 0.78);
-        const path = await store.uploadInspectionPhoto(blob, r.id);
+        let path: string;
+        if (navigator.onLine === false) path = await keepPhoto(blob);
+        else {
+          try {
+            path = await store.uploadInspectionPhoto(blob, r.id);
+          } catch (e) {
+            // Réseau coupé pendant l'envoi : la photo reste sur le téléphone et partira plus tard.
+            if (!isNetworkError(e)) throw e;
+            path = await keepPhoto(blob);
+          }
+        }
         setItems((list) => list.map((x) => (x.zone === zone ? { ...x, photos: [...x.photos, path] } : x)));
       }
     } catch (e) {
-      setError(`${(e as Error).message} Vérifiez la connexion puis reprenez la photo.`);
+      setError((e as Error).message);
     } finally {
       setUploading(null);
     }
@@ -101,25 +134,59 @@ function InspectionForm({ kind, reservationId }: { kind: InspectionKind; reserva
     setProblems(p);
     if (p.length) return window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
     setBusy(true);
+    const now = new Date().toISOString();
+    const ins: NewInspection = {
+      reservationId: r.id, kind, mileage: m, fuelQuarters: fuel!, items, signature, signerName: signerName.trim(),
+      agentSignature, notes: notes.trim(), doneAt: now,
+    };
+    const detailText = isReturn
+      ? [
+          fees!.kmExtra ? `${fees!.kmExtra} km supplémentaires` : '',
+          fees!.fuelFee ? 'carburant' : '',
+          fees!.lateDays ? `retard de ${fees!.lateDays} jour(s)` : '',
+          fees!.damages ? `dégâts : ${cmp!.newDamages.map((d) => d.label.toLowerCase()).join(', ') || 'voir état des lieux'}` : '',
+        ].filter(Boolean).join(', ')
+      : '';
+    const queue = async () => {
+      await enqueue({
+        orgId: session!.org.id,
+        inspection: ins,
+        effects: {
+          kind, vehicleId: v?.id ?? null, mileage: m,
+          fees: isReturn ? fees!.total : 0, end: isReturn && fees!.lateDays > 0 ? now : null, detail: detailText,
+        },
+      });
+      toast('État des lieux enregistré sur le téléphone. Il sera envoyé dès le retour du réseau.');
+      if (navigator.onLine !== false) void syncNow();
+      nav(`/reservations/${r.id}`);
+    };
+    // Sans réseau, ou avec des photos encore sur le téléphone : on passe par la file d'envoi.
+    if (navigator.onLine === false || localRefs(items).length > 0) {
+      try {
+        await queue();
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     try {
-      const now = new Date().toISOString();
-      const ins: NewInspection = {
-        reservationId: r.id, kind, mileage: m, fuelQuarters: fuel!, items, signature, signerName: signerName.trim(),
-        agentSignature, notes: notes.trim(), doneAt: now,
-      };
-      await store.insert('inspections', ins);
+      try {
+        await store.insert('inspections', ins);
+      } catch (e) {
+        if (isNetworkError(e)) {
+          await queue();
+          return;
+        }
+        throw e;
+      }
       if (!isReturn) {
         await store.update('reservations', r.id, { status: 'en_cours', mileageOut: m });
       } else {
         const end = fees!.lateDays > 0 ? now : r.end;
         await store.update('reservations', r.id, { status: 'terminee', mileageIn: m, fees: fees!.total, end });
-        const detail = [
-          fees!.kmExtra ? `${fees!.kmExtra} km supplémentaires` : '',
-          fees!.fuelFee ? 'carburant' : '',
-          fees!.lateDays ? `retard de ${fees!.lateDays} jour(s)` : '',
-          fees!.damages ? `dégâts : ${cmp!.newDamages.map((d) => d.label.toLowerCase()).join(', ') || 'voir état des lieux'}` : '',
-        ].filter(Boolean).join(', ');
-        if (fees!.total > 0) await invoiceFees(store, billing, { ...r, fees: fees!.total, end }, detail);
+        if (fees!.total > 0) await invoiceFees(store, billing, { ...r, fees: fees!.total, end }, detailText);
       }
       if (v) await store.update('vehicles', v.id, { mileage: m });
       await refresh();
@@ -147,6 +214,7 @@ function InspectionForm({ kind, reservationId }: { kind: InspectionKind; reserva
           <p className="small muted" style={{ margin: 0 }}>
             {v ? `${v.brand} ${v.model} · ${v.plate}` : ''} · {doneZones}/{ZONES.length} zones photographiées
           </p>
+          {offline && <p className="small" style={{ margin: '4px 0 0', color: 'var(--ocre)', fontWeight: 600 }}>Hors connexion : photos et signatures sont gardées sur le téléphone.</p>}
         </div>
       </header>
 
@@ -293,7 +361,7 @@ function InspectionForm({ kind, reservationId }: { kind: InspectionKind; reserva
 
 // ---------------------------------------------------------------- consultation
 
-export function InspectionView({ inspection: ins }: { inspection: Inspection }) {
+export function InspectionView({ inspection: ins, pendingSince }: { inspection: Inspection; pendingSince?: string }) {
   const { data } = useData();
   const r = data.reservations.find((x) => x.id === ins.reservationId);
   const urls = useSignedUrls(ins.items.flatMap((i) => i.photos));
@@ -303,7 +371,7 @@ export function InspectionView({ inspection: ins }: { inspection: Inspection }) 
       <header className="page-head">
         <div>
           <span className="small muted">{r && <Link to={`/reservations/${r.id}`}>{r.number}</Link>}</span>
-          <h1>État des lieux de {ins.kind === 'depart' ? 'départ' : 'retour'}</h1>
+          <h1>État des lieux de {ins.kind === 'depart' ? 'départ' : 'retour'}{pendingSince ? ' (en attente d’envoi)' : ''}</h1>
           <p className="small muted" style={{ margin: 0 }}>
             {dateTime(ins.doneAt)} · {num(ins.mileage)} km · carburant {FUEL_LABELS[ins.fuelQuarters]} · signé par {ins.signerName}
           </p>

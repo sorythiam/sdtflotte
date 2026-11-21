@@ -6,6 +6,29 @@ import type { BookingRequest } from '../domain/booking';
 import type { Invoice } from '../domain/billing';
 import type { Inspection } from '../domain/inspection';
 import type { Client, Expense, Maintenance, Payment, Rate, Reservation, Role, Vehicle } from '../domain/types';
+import { billingSettings } from '../domain/billing';
+import { idbGet, idbSet } from '../offline/idb';
+import { isNetworkError, onOutboxChange, pending } from '../offline/outbox';
+import { syncOutbox } from '../offline/sync';
+
+// Dernière session et dernières données, pour ouvrir l'application sans réseau.
+const SESSION_CACHE = 'yoonfleet-session-cache';
+const readSessionCache = (): SessionInfo | null => {
+  try {
+    return JSON.parse(localStorage.getItem(SESSION_CACHE) ?? 'null') as SessionInfo | null;
+  } catch {
+    return null;
+  }
+};
+const writeSessionCache = (s: SessionInfo | null) => {
+  try {
+    if (s) localStorage.setItem(SESSION_CACHE, JSON.stringify(s));
+    else localStorage.removeItem(SESSION_CACHE);
+  } catch {
+    /* stockage plein ou interdit : sans conséquence en ligne */
+  }
+};
+const dataKey = (s: SessionInfo) => `data:${s.org.id}:${s.userId}`;
 
 export interface Data {
   vehicles: Vehicle[];
@@ -32,6 +55,11 @@ interface Ctx {
   setSession: (s: SessionInfo | null) => void;
   can: (...roles: Role[]) => boolean;
   toast: (msg: string) => void;
+  /** Pas de réseau : données de la dernière synchronisation, en lecture. */
+  offline: boolean;
+  /** États des lieux enregistrés sur le téléphone, en attente d'envoi. */
+  outboxCount: number;
+  syncNow: () => Promise<void>;
 }
 
 const DataCtx = createContext<Ctx | null>(null);
@@ -45,7 +73,16 @@ function makeStore(): Store {
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const store = useMemo(makeStore, []);
-  const [session, setSession] = useState<SessionInfo | null>(null);
+  const [session, setSessionState] = useState<SessionInfo | null>(null);
+  const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && navigator.onLine === false);
+  const [outboxCount, setOutboxCount] = useState(0);
+  const setSession = useCallback(
+    (s: SessionInfo | null) => {
+      setSessionState(s);
+      if (store.mode === 'supabase') writeSessionCache(s);
+    },
+    [store],
+  );
   const [booting, setBooting] = useState(true);
   const [data, setData] = useState<Data>(empty);
   const [loading, setLoading] = useState(false);
@@ -68,23 +105,93 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // Réservées à la direction et aux agents : les autres profils reçoivent une liste vide.
         store.listBookingRequests().catch(() => [] as BookingRequest[]),
       ]);
-      setData({ vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, bookingRequests });
+      const fresh = { vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, bookingRequests };
+      setData(fresh);
+      setOffline(navigator.onLine === false);
       setNow(new Date());
+      if (session && store.mode === 'supabase') void idbSet('cache', dataKey(session), fresh).catch(() => undefined);
+    } catch (e) {
+      // Pas de réseau : on affiche la dernière copie gardée sur l'appareil.
+      if (session && isNetworkError(e)) {
+        const cached = await idbGet<Data>('cache', dataKey(session)).catch(() => undefined);
+        if (cached) {
+          setData({ ...empty, ...cached });
+          setOffline(true);
+          return;
+        }
+      }
+      throw e;
     } finally {
       setLoading(false);
     }
-  }, [store]);
+  }, [store, session]);
 
   useEffect(() => {
+    const cached = store.mode === 'supabase' ? readSessionCache() : null;
     store
       .session()
-      .then(setSession)
-      .catch(() => setSession(null))
+      .then((s) => {
+        // Sans réseau, la vérification échoue : on reprend la dernière session connue.
+        if (!s && cached && !navigator.onLine) {
+          setSessionState(cached);
+          setOffline(true);
+        } else setSession(s);
+      })
+      .catch(() => {
+        if (cached) {
+          setSessionState(cached);
+          setOffline(true);
+        } else setSession(null);
+      })
       .finally(() => setBooting(false));
-  }, [store]);
+  }, [store, setSession]);
+
+  // File d'envoi : compteur, et envoi automatique dès que le réseau revient.
+  const billing = useCallback(
+    () => ({ settings: billingSettings(session?.org.name ?? '', session?.org.billing), clients: data.clients, vehicles: data.vehicles, rates: data.rates, invoices: data.invoices }),
+    [session, data],
+  );
+  const countOutbox = useCallback(async () => {
+    setOutboxCount(session ? (await pending(session.org.id)).length : 0);
+  }, [session]);
+  useEffect(() => {
+    void countOutbox();
+    return onOutboxChange(() => void countOutbox());
+  }, [countOutbox]);
+
+  const syncNow = useCallback(async () => {
+    if (!session || !navigator.onLine) return;
+    // La session est revérifiée en ligne avant d'écrire (elle fixe l'entreprise côté serveur).
+    const s = await store.session().catch(() => null);
+    if (!s) return;
+    if (offline) setSessionState(s);
+    if (!(await pending(s.org.id)).length) {
+      if (offline) await refresh().catch(() => undefined);
+      return;
+    }
+    const res = await syncOutbox(store, s.org.id, billing);
+    await refresh().catch(() => undefined);
+    if (res.sent) toast(`${res.sent} état(s) des lieux envoyé(s)`);
+    else if (res.error && !isNetworkError(new Error(res.error))) toast(`Envoi impossible : ${res.error}`);
+  }, [session, store, offline, refresh, billing]);
 
   useEffect(() => {
-    if (session) void refresh();
+    const goOnline = () => void syncNow();
+    const goOffline = () => setOffline(true);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    const t = setInterval(() => {
+      if (navigator.onLine && outboxCount > 0) void syncNow();
+    }, 30_000);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+      clearInterval(t);
+    };
+  }, [syncNow, outboxCount]);
+
+  useEffect(() => {
+    if (session) void refresh().catch(() => undefined);
     else setData(empty);
   }, [session, refresh]);
 
@@ -107,7 +214,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   if (booting) return null;
 
   return (
-    <DataCtx.Provider value={{ store, session, data, loading, now, refresh, setSession, can, toast }}>
+    <DataCtx.Provider value={{ store, session, data, loading, now, refresh, setSession, can, toast, offline, outboxCount, syncNow }}>
       {children}
       {toastMsg && (
         <div className="toast" role="status">

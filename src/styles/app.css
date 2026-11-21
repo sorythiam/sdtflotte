@@ -344,3 +344,5 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
 .sig { margin: 0; border: 1px solid var(--sable-line); border-radius: 8px; padding: 8px; background: #fff; }
 .sig img { width: 100%; max-width: 360px; display: block; }
 .ct-sig-img { max-height: 54px; max-width: 100%; object-fit: contain; margin-top: auto; }
+.sync-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-radius: 10px; background: #fff4e5; border: 1px solid var(--ocre); margin-bottom: var(--space-4); font-size: 14px; }
+.sync-banner.off { background: #fdecea; border-color: var(--danger); }
