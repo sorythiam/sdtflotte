@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from 'react';
+import { shrinkPhoto } from '../components/photos';
+import { MAX_PHOTOS } from '../domain/photos';
 import { useSearchParams } from 'react-router-dom';
 import { ImportDialog } from '../components/ImportDialog';
 import { Empty, ErrorBox, Modal, VehicleBadge } from '../components/ui';
@@ -63,9 +65,14 @@ export function Vehicles() {
                   return (
                     <tr key={v.id} className={editable ? 'clickable' : undefined} onClick={() => editable && setParams({ v: v.id })}>
                       <td>
-                        <strong>{v.brand} {v.model}</strong>
-                        <br />
-                        <span className="muted">{v.plate}{v.year ? ` · ${v.year}` : ''}</span>
+                        <div className="row" style={{ gap: 12, flexWrap: 'nowrap' }}>
+                          {v.photos?.length ? <img className="thumb" src={v.photos[0]} alt="" /> : <span className="thumb thumb-empty" aria-hidden="true" />}
+                          <span>
+                            <strong>{v.brand} {v.model}</strong>
+                            <br />
+                            <span className="muted">{v.plate}{v.year ? ` · ${v.year}` : ''}{v.photos?.length ? ` · ${v.photos.length} photo${v.photos.length > 1 ? 's' : ''}` : ''}</span>
+                          </span>
+                        </div>
                       </td>
                       <td>{v.category}</td>
                       <td className="right num">{num(v.mileage)} km</td>
@@ -106,21 +113,55 @@ function VehicleForm({ id, onClose }: { id: string; onClose: () => void }) {
     },
   );
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  // Photos : celles déjà enregistrées (adresse) et les nouvelles, réduites mais pas encore envoyées.
+  type Pic = { url: string; blob?: Blob };
+  const [pics, setPics] = useState<Pic[]>(() => (existing?.photos ?? []).map((url) => ({ url })));
+  const [preparing, setPreparing] = useState(false);
   const set = <K extends keyof typeof f>(k: K, val: (typeof f)[K]) => setF({ ...f, [k]: val });
+
+  async function addPhotos(files: FileList | null) {
+    if (!files?.length) return;
+    setError(null);
+    const room = MAX_PHOTOS - pics.length;
+    if (room <= 0) return setError(`${MAX_PHOTOS} photos au plus par véhicule.`);
+    setPreparing(true);
+    try {
+      const added: Pic[] = [];
+      for (const file of [...files].slice(0, room)) {
+        const blob = await shrinkPhoto(file, store.mode === 'demo' ? 720 : 1600, store.mode === 'demo' ? 0.7 : 0.82);
+        added.push({ url: URL.createObjectURL(blob), blob });
+      }
+      setPics((p) => [...p, ...added]);
+      if (files.length > room) setError(`Seules ${room} photo(s) ont été ajoutées : ${MAX_PHOTOS} au plus par véhicule.`);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setPreparing(false);
+    }
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     const plate = f.plate.trim().toUpperCase();
     if (data.vehicles.some((v) => v.plate === plate && v.id !== id)) return setError('Cette immatriculation existe déjà.');
+    setBusy(true);
     try {
-      const row = { ...f, plate };
+      const photos: string[] = [];
+      for (const p of pics) photos.push(p.blob ? await store.uploadVehiclePhoto(p.blob) : p.url);
+      const row = { ...f, plate, photos };
       if (existing) await store.update('vehicles', id, row);
       else await store.insert('vehicles', row);
+      // Photos retirées : supprimées du stockage une fois la fiche enregistrée.
+      for (const old of existing?.photos ?? []) if (!photos.includes(old)) await store.deleteVehiclePhoto(old).catch(() => undefined);
+      pics.forEach((p) => p.blob && URL.revokeObjectURL(p.url));
       await refresh();
       toast(existing ? 'Véhicule mis à jour' : 'Véhicule ajouté');
       onClose();
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -149,6 +190,35 @@ function VehicleForm({ id, onClose }: { id: string; onClose: () => void }) {
           <label className="field">Visite technique jusqu’au<input type="date" value={f.inspectionExpiry ?? ''} onChange={(e) => set('inspectionExpiry', e.target.value || null)} /></label>
           <label className="field">Vignette jusqu’au<input type="date" value={f.vignetteExpiry ?? ''} onChange={(e) => set('vignetteExpiry', e.target.value || null)} /></label>
         </div>
+        <fieldset className="form-group stack">
+          <legend>Photos ({pics.length}/{MAX_PHOTOS})</legend>
+          <p className="hint" style={{ margin: 0 }}>
+            Montrées aux clients sur la page de réservation en ligne. La première sert de couverture. Avant, arrière, profil et intérieur suffisent.
+          </p>
+          {pics.length > 0 && (
+            <div className="photo-grid">
+              {pics.map((p, k) => (
+                <figure key={p.url} className={k === 0 ? 'cover' : undefined}>
+                  <img src={p.url} alt={`Photo ${k + 1}`} />
+                  <figcaption>
+                    {k === 0 ? (
+                      <span className="badge badge-success">Couverture</span>
+                    ) : (
+                      <button type="button" className="btn btn-sm" onClick={() => setPics([p, ...pics.filter((x) => x !== p)])}>Couverture</button>
+                    )}
+                    <button type="button" className="btn btn-sm btn-ghost" aria-label={`Retirer la photo ${k + 1}`} onClick={() => setPics(pics.filter((x) => x !== p))}>Retirer</button>
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          )}
+          {pics.length < MAX_PHOTOS && (
+            <label className="btn" style={{ alignSelf: 'flex-start' }}>
+              {preparing ? 'Préparation…' : 'Ajouter des photos'}
+              <input type="file" accept="image/*" multiple className="sr-only" onChange={(e) => { void addPhotos(e.target.files); e.target.value = ''; }} />
+            </label>
+          )}
+        </fieldset>
         <label className="check">
           <input type="checkbox" checked={f.outOfService} onChange={(e) => set('outOfService', e.target.checked)} />
           Hors service (ne peut plus être loué, ne compte pas dans le quota)
@@ -156,7 +226,7 @@ function VehicleForm({ id, onClose }: { id: string; onClose: () => void }) {
         <ErrorBox error={error} />
         <div className="modal-foot">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
-          <button className="btn btn-primary">{existing ? 'Enregistrer' : 'Ajouter'}</button>
+          <button className="btn btn-primary" disabled={busy || preparing}>{busy ? 'Enregistrement…' : existing ? 'Enregistrer' : 'Ajouter'}</button>
         </div>
       </form>
     </Modal>

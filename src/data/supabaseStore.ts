@@ -1,3 +1,4 @@
+import { storagePath } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName } from '../domain/types';
@@ -36,6 +37,8 @@ function friendly(e: { message?: string; code?: string } | null): Error {
   if (msg.includes('row-level security')) return new Error("Votre profil n'a pas le droit de faire cette action.");
   return new Error(msg);
 }
+
+const PHOTO_BUCKET = 'vehicle-photos';
 
 export class SupabaseStore implements Store {
   readonly mode = 'supabase' as const;
@@ -259,6 +262,21 @@ export class SupabaseStore implements Store {
     if (patch.declineReason !== undefined) row.decline_reason = patch.declineReason;
     const { error } = await this.sb.from('booking_requests').update(row).eq('id', id);
     if (error) throw friendly(error);
+  }
+
+  // ---------------------------------------------------------------- photos des véhicules
+  async uploadVehiclePhoto(image: Blob): Promise<string> {
+    if (!this.orgId) throw new Error('Session expirée, reconnectez-vous.');
+    const path = `${this.orgId}/${crypto.randomUUID()}.jpg`;
+    const { error } = await this.sb.storage.from(PHOTO_BUCKET).upload(path, image, { contentType: image.type || 'image/jpeg', cacheControl: '31536000', upsert: false });
+    if (error) throw new Error(`Envoi de la photo impossible : ${error.message}`);
+    return this.sb.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
+  }
+
+  async deleteVehiclePhoto(url: string): Promise<void> {
+    const path = storagePath(url, PHOTO_BUCKET);
+    if (!path) return;
+    await this.sb.storage.from(PHOTO_BUCKET).remove([path]);
   }
 
   async setDailyDigest(on: boolean): Promise<void> {

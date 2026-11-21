@@ -34,6 +34,8 @@ export interface Vehicle {
   insuranceExpiry: string | null; // AAAA-MM-JJ
   inspectionExpiry: string | null;
   vignetteExpiry: string | null;
+  /** Adresses des photos, la première sert de couverture (8 au plus). */
+  photos?: string[];
 }
 
 export interface Rate {

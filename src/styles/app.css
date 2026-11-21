@@ -274,3 +274,39 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
 .pub-foot .brand-word { font-size: 15px; color: var(--atlantique); }
 .form-group { border: 1px solid var(--sable-line); border-radius: var(--radius-md); padding: var(--space-4); margin: 0; }
 .form-group legend { font-weight: 700; color: var(--atlantique); padding: 0 6px; }
+
+/* ---------- photos des véhicules */
+.thumb { width: 56px; height: 40px; object-fit: cover; border-radius: 6px; flex: none; background: var(--sable); }
+.thumb-empty { display: inline-block; border: 1px dashed var(--sable-line); }
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-3); }
+.photo-grid figure { margin: 0; border: 1px solid var(--sable-line); border-radius: 8px; overflow: hidden; background: #fff; }
+.photo-grid figure.cover { border: 2px solid var(--success); }
+.photo-grid img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+.photo-grid figcaption { display: flex; justify-content: space-between; align-items: center; gap: 4px; padding: 6px; }
+.pub-cat { padding: 0; overflow: hidden; gap: 0; cursor: default; }
+.pub-cat.full { opacity: 0.6; }
+.pub-cat-photo { aspect-ratio: 16 / 10; background: var(--sable); overflow: hidden; }
+.pub-cat-photo-btn { all: unset; cursor: zoom-in; display: block; width: 100%; height: 100%; position: relative; }
+.pub-cat-photo-btn:focus-visible { outline: 3px solid var(--ocre); outline-offset: -3px; }
+.pub-cat-photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s; }
+.pub-cat-photo-btn:hover img { transform: scale(1.03); }
+.pub-cat-count { position: absolute; right: 8px; bottom: 8px; background: rgba(11, 60, 93, 0.85); color: #fff; font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
+.pub-cat-body { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; gap: 6px; padding: var(--space-4); flex: 1; }
+.pub-cat-body:disabled { cursor: not-allowed; }
+.pub-cat-body:focus-visible { outline: 3px solid var(--ocre); outline-offset: -3px; }
+.pub-cat-body .badge { align-self: flex-start; margin-top: auto; }
+.photo-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.photo-strip button { all: unset; cursor: zoom-in; flex: none; }
+.photo-strip img { width: 120px; height: 80px; object-fit: cover; border-radius: 8px; display: block; }
+.lightbox { position: fixed; inset: 0; z-index: 80; background: rgba(10, 20, 30, 0.88); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.lightbox-inner { width: min(1000px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 12px; color: #fff; }
+.lightbox-top { display: flex; align-items: center; gap: 12px; }
+.lightbox-top strong { flex: 1; font-size: 18px; }
+.lightbox-stage { position: relative; display: flex; align-items: center; justify-content: center; min-height: 0; }
+.lightbox-stage img { max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: 8px; }
+.lightbox-nav { position: absolute; left: 4px; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.9); color: var(--ink); font-size: 30px; line-height: 1; cursor: pointer; }
+.lightbox-nav.right { left: auto; right: 4px; }
+.lightbox-thumbs { display: flex; gap: 8px; overflow-x: auto; justify-content: center; }
+.lightbox-thumbs button { all: unset; cursor: pointer; border-radius: 6px; opacity: 0.6; flex: none; }
+.lightbox-thumbs button[aria-current='true'] { opacity: 1; outline: 2px solid var(--ocre); }
+.lightbox-thumbs img { width: 72px; height: 48px; object-fit: cover; border-radius: 6px; display: block; }

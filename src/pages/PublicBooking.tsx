@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { CarPlaceholder, Lightbox } from '../components/photos';
 import { Logo, Wordmark } from '../components/ui';
 import type { PublicBookingInfo, PublicCategory } from '../domain/booking';
 import { validateBookingRequest } from '../domain/booking';
@@ -26,6 +27,7 @@ export function PublicBooking({ slug }: { slug: string }) {
   const [category, setCategory] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', phone: '', email: '', message: '', companyName: '', companyTaxId: '' });
   const [forCompany, setForCompany] = useState(false);
+  const [gallery, setGallery] = useState<{ category: string; photos: string[]; start: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -146,14 +148,25 @@ export function PublicBooking({ slug }: { slug: string }) {
                   const free = avail ? avail[c.category] ?? 0 : null;
                   const q = validDates ? quote(asRate(c), dates.start, dates.end, withDriver) : null;
                   const full = free === 0;
+                  const photos = c.photos ?? [];
                   return (
+                    <div key={c.category} className={`pub-cat${category === c.category ? ' selected' : ''}${full ? ' full' : ''}`}>
+                      <div className="pub-cat-photo">
+                        {photos.length ? (
+                          <button type="button" className="pub-cat-photo-btn" onClick={() => setGallery({ category: c.category, photos, start: 0 })} aria-label={`Voir les ${photos.length} photo(s) : ${c.category}`}>
+                            <img src={photos[0]} alt={`${c.category} : ${c.models.join(', ')}`} loading="lazy" />
+                            {photos.length > 1 && <span className="pub-cat-count">{photos.length} photos</span>}
+                          </button>
+                        ) : (
+                          <CarPlaceholder label={c.category} />
+                        )}
+                      </div>
                     <button
-                      key={c.category}
                       type="button"
                       role="radio"
                       aria-checked={category === c.category}
                       disabled={full}
-                      className={`pub-cat${category === c.category ? ' selected' : ''}`}
+                      className="pub-cat-body"
                       onClick={() => setCategory(c.category)}
                     >
                       <span className="pub-cat-name">{c.category}</span>
@@ -161,9 +174,10 @@ export function PublicBooking({ slug }: { slug: string }) {
                       <span className="pub-cat-price">{money(c.daily + (withDriver ? c.driverDaily : 0))} <span className="small muted">/ jour</span></span>
                       {q && !full && <span className="small">Total estimé : <strong>{money(q.total)}</strong> pour {q.days} jour{q.days > 1 ? 's' : ''}</span>}
                       <span className={`badge ${full ? 'badge-muted' : free === null ? '' : 'badge-success'}`}>
-                        {free === null ? '…' : full ? 'Complet sur ces dates' : 'Disponible'}
+                        {free === null ? '…' : full ? 'Complet sur ces dates' : category === c.category ? 'Choisi' : 'Disponible · choisir'}
                       </span>
                     </button>
+                    </div>
                   );
                 })}
               </div>
@@ -173,6 +187,15 @@ export function PublicBooking({ slug }: { slug: string }) {
           {chosen && (
             <section className="card" aria-labelledby="qui">
               <h2 id="qui">3. Vos coordonnées</h2>
+              {(chosen.photos?.length ?? 0) > 0 && (
+                <div className="photo-strip" aria-label={`Photos : ${chosen.category}`}>
+                  {chosen.photos!.map((p, k) => (
+                    <button key={p} type="button" onClick={() => setGallery({ category: chosen.category, photos: chosen.photos!, start: k })} aria-label={`Agrandir la photo ${k + 1}`}>
+                      <img src={p} alt="" loading="lazy" />
+                    </button>
+                  ))}
+                </div>
+              )}
               {estimate && (
                 <div className="notice" style={{ margin: 0 }}>
                   <strong>{chosen.category}{withDriver ? ' avec chauffeur' : ''}</strong> · {estimate.days} jour{estimate.days > 1 ? 's' : ''} ·
@@ -211,6 +234,10 @@ export function PublicBooking({ slug }: { slug: string }) {
             </section>
           )}
         </>
+      )}
+
+      {gallery && (
+        <Lightbox photos={gallery.photos} start={gallery.start} title={gallery.category} onClose={() => setGallery(null)} />
       )}
 
       <footer className="pub-foot">

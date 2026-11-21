@@ -37,6 +37,9 @@ export interface Store {
   updateOrganization(patch: OrgPatch): Promise<void>;
   changePassword(password: string): Promise<void>;
   setDailyDigest(on: boolean): Promise<void>;
+  // Photos des véhicules : envoi d'une image déjà réduite, renvoie son adresse publique
+  uploadVehiclePhoto(image: Blob): Promise<string>;
+  deleteVehiclePhoto(url: string): Promise<void>;
   // Réservation en ligne : pages publiques (sans connexion) et traitement des demandes
   publicBookingInfo(slug: string): Promise<PublicBookingInfo | null>;
   publicAvailability(slug: string, start: string, end: string): Promise<Record<string, number>>;

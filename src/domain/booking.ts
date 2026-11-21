@@ -36,6 +36,7 @@ export interface PublicCategory {
   caution: number;
   vehicles: number; // véhicules en service dans la catégorie
   models: string[]; // quelques modèles, « ou similaire »
+  photos?: string[]; // photos des véhicules de la catégorie, couverture d'abord
 }
 
 export interface PublicBookingInfo {

@@ -1,3 +1,4 @@
+import { categoryPhotos } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
 import { seed, seedExpenses } from './seed';
@@ -291,6 +292,7 @@ export class DemoStore implements Store {
           category: r.category, daily: r.daily, weekly: r.weekly, monthly: r.monthly, driverDaily: r.driverDaily,
           kmPerDay: r.kmPerDay, extraKm: r.extraKm, caution: r.caution, vehicles: inCat.length,
           models: [...new Set(inCat.map((v) => `${v.brand} ${v.model}`))].sort().slice(0, 3),
+          photos: categoryPhotos(vehicles, r.category),
         };
       });
     return {
@@ -327,6 +329,18 @@ export class DemoStore implements Store {
     this.state.bookingRequests = (this.state.bookingRequests ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r));
     this.save();
   }
+
+  // En démo, la photo (déjà réduite) est gardée telle quelle dans le navigateur.
+  async uploadVehiclePhoto(image: Blob): Promise<string> {
+    return new Promise((ok, ko) => {
+      const r = new FileReader();
+      r.onload = () => ok(String(r.result));
+      r.onerror = () => ko(new Error('Photo illisible.'));
+      r.readAsDataURL(image);
+    });
+  }
+
+  async deleteVehiclePhoto(): Promise<void> {}
 
   async setDailyDigest(on: boolean): Promise<void> {
     if (!this.state.session) return;
