@@ -21,6 +21,7 @@ export function Layout() {
     ['/maintenance', 'Maintenance'],
     ['/tarifs', 'Tarifs'],
     ...(can('direction') ? ([['/equipe', 'Équipe']] as [string, string][]) : []),
+    ['/parametres', 'Paramètres'],
   ];
 
   async function logout() {

@@ -5,6 +5,7 @@ import { Layout } from './components/Layout';
 import { Clients } from './pages/Clients';
 import { Dashboard } from './pages/Dashboard';
 import { Team } from './pages/Team';
+import { Settings } from './pages/Settings';
 import { Login } from './pages/Login';
 import { Maintenance } from './pages/Maintenance';
 import { Planning } from './pages/Planning';
@@ -30,6 +31,7 @@ function App() {
         <Route path="maintenance" element={<Maintenance />} />
         <Route path="tarifs" element={<Rates />} />
         <Route path="equipe" element={<Team />} />
+        <Route path="parametres" element={<Settings />} />
         <Route path="*" element={<Dashboard />} />
       </Route>
     </Routes>

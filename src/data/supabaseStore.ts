@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Invitation, Member, Organization, Role, TableName } from '../domain/types';
+import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName } from '../domain/types';
 import type { NewRow, Row, SessionInfo, Store } from './store';
 
 // Colonnes dont le nom diffère entre l'application (camelCase) et la base (snake_case).
@@ -187,5 +187,44 @@ export class SupabaseStore implements Store {
   async removeMember(userId: string): Promise<void> {
     const { error } = await this.sb.from('memberships').delete().eq('org_id', this.orgId).eq('user_id', userId);
     if (error) throw friendly(error);
+  }
+
+  // ---------------------------------------------------------------- paramètres
+  async updateOrganization(patch: { name?: string; country?: string }): Promise<void> {
+    const row: Record<string, string> = {};
+    if (patch.name !== undefined) row.name = patch.name.trim();
+    if (patch.country !== undefined) row.country = patch.country;
+    const { error } = await this.sb.from('organizations').update(row).eq('id', this.orgId);
+    if (error) {
+      if (error.code === '23514') throw new Error('Le nom doit faire entre 2 et 120 caractères.');
+      throw friendly(error);
+    }
+  }
+
+  async changePassword(password: string): Promise<void> {
+    if (password.length < 8) throw new Error('8 caractères minimum.');
+    const { error } = await this.sb.auth.updateUser({ password });
+    if (error) throw friendly(error);
+  }
+
+  async listSubscriptionRequests(): Promise<SubscriptionRequest[]> {
+    const { data, error } = await this.sb
+      .from('subscription_requests')
+      .select('*')
+      .eq('org_id', this.orgId)
+      .order('created_at', { ascending: false });
+    if (error) throw friendly(error);
+    return (data ?? []).map((r) => rowToApp<SubscriptionRequest>(r));
+  }
+
+  async requestSubscription(req: Omit<SubscriptionRequest, 'id' | 'status' | 'createdAt'>): Promise<SubscriptionRequest> {
+    if (!this.orgId) throw new Error('Session expirée, reconnectez-vous.');
+    const { data, error } = await this.sb
+      .from('subscription_requests')
+      .insert({ org_id: this.orgId, plan: req.plan, vehicles: req.vehicles, billing: req.billing, amount: req.amount, contact_phone: req.contactPhone })
+      .select('*')
+      .single();
+    if (error) throw friendly(error);
+    return rowToApp<SubscriptionRequest>(data);
   }
 }

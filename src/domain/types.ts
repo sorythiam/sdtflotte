@@ -134,3 +134,14 @@ export interface Invitation {
   createdAt: string;
   expiresAt: string;
 }
+
+export interface SubscriptionRequest {
+  id: string;
+  plan: Plan;
+  vehicles: number;
+  billing: 'annuel' | 'mensuel';
+  amount: number;
+  contactPhone: string | null;
+  status: 'nouvelle' | 'en_cours' | 'payee' | 'annulee';
+  createdAt: string;
+}

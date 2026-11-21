@@ -1,4 +1,4 @@
-import type { Invitation, Member, Organization, Role, TableName, Tables } from '../domain/types';
+import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
 import { seed } from './seed';
 import type { NewRow, Row, SessionInfo, Store } from './store';
 
@@ -11,6 +11,7 @@ interface DemoState {
   org: Organization;
   members?: Member[];
   invitations?: Invitation[];
+  subscriptionRequests?: SubscriptionRequest[];
 }
 
 const SELF = 'u-moi';
@@ -205,6 +206,29 @@ export class DemoStore implements Store {
     this.assertKeepsAdmin(userId, null);
     this.state.members = (this.state.members ?? []).filter((m) => m.userId !== userId);
     this.save();
+  }
+
+  // ---------------------------------------------------------------- paramètres
+  async updateOrganization(patch: { name?: string; country?: string }): Promise<void> {
+    const name = patch.name?.trim();
+    if (name !== undefined && (name.length < 2 || name.length > 120)) throw new Error('Le nom doit faire entre 2 et 120 caractères.');
+    this.state.org = { ...this.state.org, ...(name ? { name } : {}), ...(patch.country ? { country: patch.country } : {}) };
+    this.save();
+  }
+
+  async changePassword(password: string): Promise<void> {
+    if (password.length < 8) throw new Error('8 caractères minimum.');
+  }
+
+  async listSubscriptionRequests(): Promise<SubscriptionRequest[]> {
+    return structuredClone(this.state.subscriptionRequests ?? []);
+  }
+
+  async requestSubscription(req: Omit<SubscriptionRequest, 'id' | 'status' | 'createdAt'>): Promise<SubscriptionRequest> {
+    const full: SubscriptionRequest = { ...req, id: uid(), status: 'nouvelle', createdAt: new Date().toISOString() };
+    (this.state.subscriptionRequests ??= []).unshift(full);
+    this.save();
+    return full;
   }
 }
 
