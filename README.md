@@ -29,7 +29,7 @@ stockées dans le navigateur. À la connexion, le mot de passe choisit le profil
    VITE_SUPABASE_ANON_KEY=eyJ...
    ```
 4. Chaque inscription crée une organisation isolée (RLS) avec 30 jours d'essai, formule Pro,
-   quota de 10 véhicules et une grille de tarifs par défaut.
+   quota de 5 véhicules et une grille de tarifs par défaut.
 
 Garanties en base : isolation par organisation (RLS), aucune réservation active qui se chevauche
 sur un même véhicule (contrainte d'exclusion), quota de véhicules, formule et quota non modifiables

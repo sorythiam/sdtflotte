@@ -14,7 +14,7 @@ create table public.organizations (
   country text not null default 'SN',
   currency text not null default 'XOF',
   plan text not null default 'pro' check (plan in ('essentiel', 'pro', 'entreprise')),
-  vehicle_quota int not null default 10 check (vehicle_quota > 0),
+  vehicle_quota int not null default 5 check (vehicle_quota > 0),
   trial_ends_at timestamptz default (now() + interval '30 days'),
   created_at timestamptz not null default now()
 );
