@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { methodLabel } from './ReservationDetail';
+import { taxIdLabel } from '../domain/clients';
 import { contractSettings, FUEL_LEVELS, INSPECTION_ZONES, parseTerms } from '../domain/contract';
 import { dateLong, dateTime, money, num } from '../domain/format';
 import { balanceDue, billedDays, cautionHeld } from '../domain/rules';
@@ -22,6 +23,7 @@ export function Contract() {
     );
   }
   const s = contractSettings(org.name, org.contract);
+  const taxLabel = taxIdLabel(org.country);
   const v = data.vehicles.find((x) => x.id === r.vehicleId);
   const c = data.clients.find((x) => x.id === r.clientId);
   const rate = data.rates.find((x) => x.category === v?.category);
@@ -87,13 +89,28 @@ export function Contract() {
           </section>
           <section>
             <h3>Le locataire</h3>
-            <dl className="ct-dl">
-              <dt>{c?.kind === 'entreprise' ? 'Société' : 'Nom'}</dt><dd>{c?.name ?? blank}</dd>
-              <dt>Téléphone</dt><dd>{c?.phone || blank}</dd>
-              <dt>Email</dt><dd>{c?.email || blank}</dd>
-              <dt>Pièce d’identité</dt><dd>{c?.idNumber || blank}</dd>
-              {!r.withDriver && (<><dt>Permis valable jusqu’au</dt><dd>{c?.licenseExpiry ? dateLong(c.licenseExpiry) : blank}</dd></>)}
-            </dl>
+            {c?.kind === 'entreprise' ? (
+              <dl className="ct-dl">
+                <dt>Société</dt><dd>{c.name}</dd>
+                <dt>{taxLabel}</dt><dd>{c.taxId || blank}</dd>
+                <dt>RCCM</dt><dd>{c.tradeRegister || blank}</dd>
+                <dt>Adresse</dt><dd>{[c.address, c.city].filter(Boolean).join(', ') || blank}</dd>
+                <dt>Contact société</dt><dd>{[c.phone, c.email].filter(Boolean).join(' · ') || blank}</dd>
+                <dt>Représentée par</dt><dd>{c.contactName ? `${c.contactName}${c.contactRole ? `, ${c.contactRole}` : ''}` : blank}</dd>
+                <dt>Tél. du représentant</dt><dd>{[c.contactPhone, c.contactEmail].filter(Boolean).join(' · ') || blank}</dd>
+                <dt>Pièce d’identité</dt><dd>{c.idNumber || blank}</dd>
+                {!r.withDriver && (<><dt>Permis du conducteur jusqu’au</dt><dd>{c.licenseExpiry ? dateLong(c.licenseExpiry) : blank}</dd></>)}
+              </dl>
+            ) : (
+              <dl className="ct-dl">
+                <dt>Nom</dt><dd>{c?.name ?? blank}</dd>
+                <dt>Adresse</dt><dd>{[c?.address, c?.city].filter(Boolean).join(', ') || blank}</dd>
+                <dt>Téléphone</dt><dd>{c?.phone || blank}</dd>
+                <dt>Email</dt><dd>{c?.email || blank}</dd>
+                <dt>Pièce d’identité</dt><dd>{c?.idNumber || blank}</dd>
+                {!r.withDriver && (<><dt>Permis valable jusqu’au</dt><dd>{c?.licenseExpiry ? dateLong(c.licenseExpiry) : blank}</dd></>)}
+              </dl>
+            )}
           </section>
         </div>
 
@@ -171,7 +188,9 @@ export function Contract() {
             </div>
             <div>
               <strong>Le locataire</strong>
-              <span className="ct-small">Signature précédée de « lu et approuvé »</span>
+              <span className="ct-small">
+                {c?.kind === 'entreprise' ? `Pour ${c.name}${c.contactName ? `, ${c.contactName}` : ''} : signature, cachet et « lu et approuvé »` : 'Signature précédée de « lu et approuvé »'}
+              </span>
             </div>
           </div>
           {returned && (

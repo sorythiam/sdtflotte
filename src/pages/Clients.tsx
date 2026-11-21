@@ -2,11 +2,13 @@ import { useState, type FormEvent } from 'react';
 import { ImportDialog } from '../components/ImportDialog';
 import { Empty, ErrorBox, Modal, ScoreBadge } from '../components/ui';
 import { money } from '../domain/format';
-import type { Client, ClientKind, ClientScore } from '../domain/types';
+import { emptyClient, legalLine, normalizeClient, taxIdLabel, validateClient, type ClientInput } from '../domain/clients';
+import type { ClientKind, ClientScore } from '../domain/types';
 import { useData } from '../state/DataContext';
 
 export function Clients() {
-  const { data, can } = useData();
+  const { data, can, session } = useData();
+  const taxLabel = taxIdLabel(session!.org.country);
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -16,7 +18,7 @@ export function Clients() {
     return { count: rs.length, revenue: rs.reduce((s, r) => s + r.total + r.fees, 0) };
   };
   const list = data.clients
-    .filter((c) => `${c.name} ${c.phone} ${c.email ?? ''}`.toLowerCase().includes(q.toLowerCase()))
+    .filter((c) => `${c.name} ${c.phone} ${c.email ?? ''} ${c.contactName ?? ''} ${c.contactPhone ?? ''} ${c.taxId ?? ''}`.toLowerCase().includes(q.toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
@@ -34,7 +36,7 @@ export function Clients() {
         )}
       </header>
       <label className="field">
-        <input type="search" aria-label="Rechercher un client" placeholder="Rechercher un nom, un téléphone…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input type="search" aria-label="Rechercher un client" placeholder="Rechercher un nom, un téléphone, un contact, un NINEA…" value={q} onChange={(e) => setQ(e.target.value)} />
       </label>
       <section className="card">
         {list.length === 0 ? (
@@ -50,8 +52,24 @@ export function Clients() {
                   const s = stats(c.id);
                   return (
                     <tr key={c.id} className={editable ? 'clickable' : undefined} onClick={() => editable && setEditing(c.id)}>
-                      <td><strong>{c.name}</strong><br /><span className="muted">{c.kind === 'entreprise' ? 'Entreprise' : 'Particulier'}</span></td>
-                      <td>{c.phone}{c.email && <><br /><span className="muted">{c.email}</span></>}</td>
+                      <td>
+                        <strong>{c.name}</strong>
+                        <br />
+                        <span className="muted">
+                          {c.kind === 'entreprise' ? ['Entreprise', legalLine(c, taxLabel)].filter(Boolean).join(' · ') : 'Particulier'}
+                        </span>
+                      </td>
+                      <td>
+                        {c.kind === 'entreprise' && c.contactName ? (
+                          <>
+                            {c.contactName}{c.contactRole ? `, ${c.contactRole}` : ''}
+                            <br />
+                            <span className="muted">{c.contactPhone ?? c.phone}{c.contactEmail ? ` · ${c.contactEmail}` : ''}</span>
+                          </>
+                        ) : (
+                          <>{c.phone}{c.email && <><br /><span className="muted">{c.email}</span></>}</>
+                        )}
+                      </td>
                       <td className="right num">{s.count}</td>
                       <td className="right num">{money(s.revenue)}</td>
                       <td><ScoreBadge score={c.score} /></td>
@@ -70,19 +88,27 @@ export function Clients() {
 }
 
 function ClientForm({ id, onClose }: { id: string; onClose: () => void }) {
-  const { data, store, refresh, toast } = useData();
+  const { data, store, refresh, toast, session } = useData();
   const existing = data.clients.find((c) => c.id === id);
-  const [f, setF] = useState<Omit<Client, 'id'>>(
-    existing ?? { kind: 'particulier', name: '', phone: '', email: null, idNumber: null, licenseExpiry: null, score: 'fiable' },
-  );
+  const [f, setF] = useState<ClientInput>(() => ({ ...emptyClient(), ...(existing ?? {}) }));
   const [error, setError] = useState<string | null>(null);
-  const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF({ ...f, [k]: v });
+  const set = <K extends keyof ClientInput>(k: K, v: ClientInput[K]) => setF({ ...f, [k]: v });
+  const txt = (k: keyof ClientInput) => ({
+    value: (f[k] as string | null | undefined) ?? '',
+    onChange: (e: { target: { value: string } }) => set(k, (e.target.value || null) as never),
+  });
+  const company = f.kind === 'entreprise';
+  const taxLabel = taxIdLabel(session!.org.country);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    setError(null);
+    const err = validateClient(f);
+    if (err) return setError(err);
     try {
-      if (existing) await store.update('clients', id, f);
-      else await store.insert('clients', f);
+      const row = normalizeClient(f);
+      if (existing) await store.update('clients', id, row);
+      else await store.insert('clients', row);
       await refresh();
       toast(existing ? 'Client mis à jour' : 'Client ajouté');
       onClose();
@@ -93,26 +119,60 @@ function ClientForm({ id, onClose }: { id: string; onClose: () => void }) {
 
   return (
     <Modal title={existing ? existing.name : 'Nouveau client'} onClose={onClose}>
-      <form className="stack" onSubmit={submit}>
-        <div className="grid-2">
-          <label className="field">
-            Type
-            <select value={f.kind} onChange={(e) => set('kind', e.target.value as ClientKind)}>
-              <option value="particulier">Particulier</option><option value="entreprise">Entreprise</option>
-            </select>
-          </label>
-          <label className="field">Nom ou raison sociale<input required value={f.name} onChange={(e) => set('name', e.target.value)} /></label>
-          <label className="field">Téléphone<input type="tel" required value={f.phone} onChange={(e) => set('phone', e.target.value)} /></label>
-          <label className="field">Email<input type="email" value={f.email ?? ''} onChange={(e) => set('email', e.target.value || null)} /></label>
-          <label className="field">N° de pièce d’identité<input value={f.idNumber ?? ''} onChange={(e) => set('idNumber', e.target.value || null)} /></label>
-          <label className="field">Permis valide jusqu’au<input type="date" value={f.licenseExpiry ?? ''} onChange={(e) => set('licenseExpiry', e.target.value || null)} /></label>
-          <label className="field">
-            Scoring
-            <select value={f.score} onChange={(e) => set('score', e.target.value as ClientScore)}>
-              <option value="fiable">Fiable</option><option value="surveiller">À surveiller</option><option value="blacklist">Blacklisté (réservation impossible)</option>
-            </select>
-          </label>
+      <form className="stack" onSubmit={submit} noValidate>
+        <div className="tabs" role="radiogroup" aria-label="Type de client">
+          {(['particulier', 'entreprise'] as ClientKind[]).map((k) => (
+            <button key={k} type="button" role="radio" aria-checked={f.kind === k} aria-selected={f.kind === k} onClick={() => set('kind', k)}>
+              {k === 'particulier' ? 'Particulier' : 'Entreprise'}
+            </button>
+          ))}
         </div>
+
+        {company ? (
+          <>
+            <fieldset className="stack form-group">
+              <legend>Entreprise</legend>
+              <div className="grid-2">
+                <label className="field">Raison sociale<input required value={f.name} onChange={(e) => set('name', e.target.value)} autoComplete="organization" /></label>
+                <label className="field">{taxLabel}<input {...txt('taxId')} /></label>
+                <label className="field">RCCM<input {...txt('tradeRegister')} placeholder="SN-DKR-2020-B-12345" /></label>
+                <label className="field">Téléphone (standard)<input type="tel" required value={f.phone} onChange={(e) => set('phone', e.target.value)} /></label>
+                <label className="field">Email de l’entreprise (factures)<input type="email" {...txt('email')} /></label>
+                <label className="field">Adresse<input required {...txt('address')} autoComplete="street-address" /></label>
+                <label className="field">Ville<input {...txt('city')} autoComplete="address-level2" /></label>
+              </div>
+            </fieldset>
+            <fieldset className="stack form-group">
+              <legend>Personne de contact</legend>
+              <div className="grid-2">
+                <label className="field">Nom et prénom<input required {...txt('contactName')} /></label>
+                <label className="field">Fonction<input {...txt('contactRole')} placeholder="Responsable logistique" /></label>
+                <label className="field">Téléphone<input type="tel" required {...txt('contactPhone')} /></label>
+                <label className="field">Email<input type="email" {...txt('contactEmail')} /></label>
+                <label className="field">N° de pièce d’identité<input {...txt('idNumber')} /></label>
+                <label className="field">Permis du conducteur valide jusqu’au<input type="date" {...txt('licenseExpiry')} /></label>
+              </div>
+              <span className="hint">Pièce et permis : ceux de la personne qui signe le contrat ou conduit, pour les locations sans chauffeur.</span>
+            </fieldset>
+          </>
+        ) : (
+          <div className="grid-2">
+            <label className="field">Nom et prénom<input required value={f.name} onChange={(e) => set('name', e.target.value)} autoComplete="name" /></label>
+            <label className="field">Téléphone<input type="tel" required value={f.phone} onChange={(e) => set('phone', e.target.value)} /></label>
+            <label className="field">Email<input type="email" {...txt('email')} /></label>
+            <label className="field">N° de pièce d’identité<input {...txt('idNumber')} /></label>
+            <label className="field">Permis valide jusqu’au<input type="date" {...txt('licenseExpiry')} /></label>
+            <label className="field">Adresse<input {...txt('address')} autoComplete="street-address" /></label>
+            <label className="field">Ville<input {...txt('city')} autoComplete="address-level2" /></label>
+          </div>
+        )}
+
+        <label className="field">
+          Scoring
+          <select value={f.score} onChange={(e) => set('score', e.target.value as ClientScore)}>
+            <option value="fiable">Fiable</option><option value="surveiller">À surveiller</option><option value="blacklist">Blacklisté (réservation impossible)</option>
+          </select>
+        </label>
         <ErrorBox error={error} />
         <div className="modal-foot">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>

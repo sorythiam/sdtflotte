@@ -102,8 +102,12 @@ export function validateBookingRequest(r: BookingRequestInput, now: Date): strin
 export function matchClient(clients: Client[], phone: string, email: string | null): Client | undefined {
   const tail = phone.replace(/\D/g, '').slice(-9);
   return (
-    (tail.length >= 8 ? clients.find((c) => c.phone.replace(/\D/g, '').slice(-9) === tail) : undefined) ??
-    (email ? clients.find((c) => c.email && c.email.toLowerCase() === email.trim().toLowerCase()) : undefined)
+    (tail.length >= 8
+      ? clients.find((c) => [c.phone, c.contactPhone].some((p) => p && p.replace(/\D/g, '').slice(-9) === tail))
+      : undefined) ??
+    (email
+      ? clients.find((c) => [c.email, c.contactEmail].some((m) => m && m.toLowerCase() === email.trim().toLowerCase()))
+      : undefined)
   );
 }
 

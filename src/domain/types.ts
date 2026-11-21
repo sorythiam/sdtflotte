@@ -58,8 +58,18 @@ export interface Client {
   phone: string;
   email: string | null;
   idNumber: string | null;
-  licenseExpiry: string | null;
+  licenseExpiry: string | null; // permis du client, ou du conducteur pour une entreprise
   score: ClientScore;
+  // Adresse (tous les clients)
+  address?: string | null;
+  city?: string | null;
+  // Entreprise : identifiants légaux et personne de contact
+  taxId?: string | null; // NINEA, IFU, NIF… selon le pays
+  tradeRegister?: string | null; // RCCM
+  contactName?: string | null;
+  contactRole?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
 }
 
 export type ReservationStatus = 'reservee' | 'en_cours' | 'terminee' | 'annulee';

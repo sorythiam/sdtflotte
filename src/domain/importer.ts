@@ -55,6 +55,14 @@ export const CLIENT_FIELDS: FieldSpec[] = [
   { key: 'idNumber', title: 'N° pièce d’identité', aliases: ['npieceidentite', 'pieceidentite', 'cni', 'passeport', 'numerocni', 'idnumber', 'piece'], example: '1 234 1990 01234' },
   { key: 'licenseExpiry', title: 'Permis valable jusqu’au', aliases: ['permisvalablejusquau', 'permis', 'expirationpermis', 'finpermis'], example: '15/03/2029' },
   { key: 'score', title: 'Scoring (fiable, à surveiller, blacklisté)', aliases: ['scoring', 'score', 'statut', 'scoringfiableasurveillerblackliste'], example: 'Fiable' },
+  { key: 'address', title: 'Adresse', aliases: ['adresse', 'address', 'adressepostale', 'siege'], example: 'Sacré-Cœur 3, villa 12' },
+  { key: 'city', title: 'Ville', aliases: ['ville', 'city', 'localite'], example: 'Dakar' },
+  { key: 'taxId', title: 'NINEA (entreprise)', aliases: ['ninea', 'nineaentreprise', 'ifu', 'nif', 'ncc', 'identifiantfiscal', 'numerofiscal'], example: '' },
+  { key: 'tradeRegister', title: 'RCCM (entreprise)', aliases: ['rccm', 'rccmentreprise', 'registreducommerce', 'rc'], example: '' },
+  { key: 'contactName', title: 'Personne de contact (entreprise)', aliases: ['personnedecontact', 'personnedecontactentreprise', 'contact', 'nomcontact', 'interlocuteur'], example: '' },
+  { key: 'contactRole', title: 'Fonction du contact', aliases: ['fonctionducontact', 'fonction', 'poste'], example: '' },
+  { key: 'contactPhone', title: 'Téléphone du contact', aliases: ['telephoneducontact', 'telcontact', 'telephonecontact'], example: '' },
+  { key: 'contactEmail', title: 'Email du contact', aliases: ['emailducontact', 'emailcontact', 'mailcontact'], example: '' },
 ];
 
 /** Repère les colonnes du fichier ; la première ligne non vide est l'en-tête. */
@@ -254,6 +262,18 @@ export function parseClients(sheet: Cell[][], ctx: { existingPhones: string[] })
       idNumber: text(get(r, 'idNumber')) || null,
       licenseExpiry: license as string | null,
       score: score as ClientScore,
+      address: text(get(r, 'address')) || null,
+      city: text(get(r, 'city')) || null,
+      ...(kind === 'entreprise'
+        ? {
+            taxId: text(get(r, 'taxId')) || null,
+            tradeRegister: text(get(r, 'tradeRegister')) || null,
+            contactName: text(get(r, 'contactName')) || null,
+            contactRole: text(get(r, 'contactRole')) || null,
+            contactPhone: text(get(r, 'contactPhone')) || null,
+            contactEmail: text(get(r, 'contactEmail')).toLowerCase() || null,
+          }
+        : {}),
     });
   });
   return out;

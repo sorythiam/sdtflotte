@@ -74,8 +74,18 @@ describe('import de clients', () => {
   const r = parseClients(sheet, { existingPhones: ['+221 33 800 00 01'] });
   it('importe les clients valides', () => {
     expect(r.rows).toEqual([
-      { name: 'Aïssatou Diop', phone: '77 000 00 02', kind: 'particulier', email: 'aissatou@exemple.sn', idNumber: '123', licenseExpiry: '2029-03-15', score: 'fiable' },
+      { name: 'Aïssatou Diop', phone: '77 000 00 02', kind: 'particulier', email: 'aissatou@exemple.sn', idNumber: '123', licenseExpiry: '2029-03-15', score: 'fiable', address: null, city: null },
     ]);
+  });
+  it('lit les champs entreprise', () => {
+    const sheet = [
+      ['Nom ou raison sociale', 'Téléphone', 'Type', 'Adresse', 'Ville', 'NINEA', 'RCCM', 'Personne de contact', 'Téléphone du contact'],
+      ['Baobab Logistique', '33 800 00 01', 'Entreprise', 'Zone industrielle', 'Dakar', '005871234', 'SN-DKR-2016-B-1', 'Moussa Sarr', '77 640 12 12'],
+    ];
+    expect(parseClients(sheet, { existingPhones: [] }).rows[0]).toMatchObject({
+      kind: 'entreprise', address: 'Zone industrielle', city: 'Dakar', taxId: '005871234', tradeRegister: 'SN-DKR-2016-B-1',
+      contactName: 'Moussa Sarr', contactPhone: '77 640 12 12',
+    });
   });
   it('ignore les clients déjà connus par leur numéro, indicatif ou pas', () => {
     expect(r.skipped.map((s) => s.line)).toEqual([3, 4]);

@@ -272,3 +272,5 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
 .pub-cat-price { font-size: 20px; font-weight: 700; }
 .pub-foot { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); font-size: 13px; color: var(--ink-muted); border-top: 1px solid var(--sable-line); padding-top: var(--space-4); }
 .pub-foot .brand-word { font-size: 15px; color: var(--atlantique); }
+.form-group { border: 1px solid var(--sable-line); border-radius: var(--radius-md); padding: var(--space-4); margin: 0; }
+.form-group legend { font-weight: 700; color: var(--atlantique); padding: 0 6px; }

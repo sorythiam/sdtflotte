@@ -44,12 +44,12 @@ export function seed(now = new Date()): Db {
     id, name, phone, kind: 'particulier', email: null, idNumber: null, licenseExpiry: day(now, 900), score: 'fiable', ...extra,
   });
   const clients: Client[] = [
-    c('c-baobab', 'Baobab Logistique', '+221 33 800 00 01', { kind: 'entreprise', licenseExpiry: null }),
+    c('c-baobab', 'Baobab Logistique', '+221 33 800 00 01', { kind: 'entreprise', licenseExpiry: null, email: 'compta@baobab-logistique.sn', address: 'Zone industrielle, km 4,5 Bd du Centenaire', city: 'Dakar', taxId: '005871234 2G3', tradeRegister: 'SN-DKR-2016-B-11234', contactName: 'Moussa Sarr', contactRole: 'Responsable logistique', contactPhone: '+221 77 640 12 12', contactEmail: 'm.sarr@baobab-logistique.sn' }),
     c('c-diop', 'Aïssatou Diop', '+221 77 000 00 02'),
-    c('c-teranga', 'Mission Teranga Tours', '+221 33 800 00 03', { kind: 'entreprise', licenseExpiry: null }),
+    c('c-teranga', 'Mission Teranga Tours', '+221 33 800 00 03', { kind: 'entreprise', licenseExpiry: null, address: 'Avenue Cheikh Anta Diop', city: 'Dakar', taxId: '006120987 2V2', tradeRegister: 'SN-DKR-2019-B-04521', contactName: 'Fatou Diallo', contactRole: 'Directrice des opérations', contactPhone: '+221 78 110 45 45' }),
     c('c-ndiaye', 'Moussa Ndiaye', '+221 76 000 00 04'),
     c('c-fall', 'Ousmane Fall', '+221 78 000 00 05', { score: 'surveiller' }),
-    c('c-sante', 'ONG Santé Plus', '+221 33 800 00 06', { kind: 'entreprise', licenseExpiry: null }),
+    c('c-sante', 'ONG Santé Plus', '+221 33 800 00 06', { kind: 'entreprise', licenseExpiry: null, address: 'Sacré-Cœur 3, villa 9012', city: 'Dakar', contactName: 'Dr Aminata Kane', contactRole: 'Coordinatrice', contactPhone: '+221 76 300 88 21' }),
   ];
 
   const year = now.getFullYear();
