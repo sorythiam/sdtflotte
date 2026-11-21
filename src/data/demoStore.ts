@@ -107,6 +107,7 @@ export class DemoStore implements Store {
         st.bookingRequests ??= demoBookingRequests();
         st.db.expenses ??= seedExpenses();
         st.db.invoices ??= seedInvoices(st.db);
+        st.db.inspections ??= [];
         st.org.bookingSlug ??= 'sdt-demo';
         st.org.bookingEnabled ??= true;
         return st;
@@ -355,6 +356,14 @@ export class DemoStore implements Store {
   }
 
   async deleteVehiclePhoto(): Promise<void> {}
+
+  async uploadInspectionPhoto(image: Blob): Promise<string> {
+    return this.uploadVehiclePhoto(image);
+  }
+
+  async inspectionPhotoUrls(paths: string[]): Promise<Record<string, string>> {
+    return Object.fromEntries(paths.map((p) => [p, p]));
+  }
 
   async setDailyDigest(on: boolean): Promise<void> {
     if (!this.state.session) return;

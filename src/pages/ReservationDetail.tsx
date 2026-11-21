@@ -76,11 +76,15 @@ export function ReservationDetail() {
           {r.status === 'reservee' && canRent && (
             <>
               <button className="btn btn-danger" onClick={() => setDialog('cancel')}>Annuler</button>
-              <button className="btn btn-primary" onClick={() => setDialog('checkout')}>Remise des clés</button>
+              <button className="btn btn-ghost" onClick={() => setDialog('checkout')} title="Sans photos ni signature">Départ rapide</button>
+              <Link className="btn btn-primary" to={`/reservations/${r.id}/depart`}>État des lieux et remise des clés</Link>
             </>
           )}
           {r.status === 'en_cours' && canRent && (
-            <button className="btn btn-primary" onClick={() => setDialog('checkin')}>Retour du véhicule</button>
+            <>
+              <button className="btn btn-ghost" onClick={() => setDialog('checkin')} title="Sans photos ni signature">Retour rapide</button>
+              <Link className="btn btn-primary" to={`/reservations/${r.id}/retour`}>État des lieux de retour</Link>
+            </>
           )}
           <Link className="btn" to={`/reservations/${r.id}/contrat`}>Contrat PDF</Link>
         </div>
@@ -136,6 +140,14 @@ export function ReservationDetail() {
                 </tr>
               </tbody>
             </table>
+            {data.inspections.some((i) => i.reservationId === r.id) && (
+              <p className="small" style={{ margin: 0 }}>
+                États des lieux :{' '}
+                {data.inspections.filter((i) => i.reservationId === r.id).sort((a, b) => a.doneAt.localeCompare(b.doneAt)).map((i, k) => (
+                  <span key={i.id}>{k > 0 && ' · '}<Link to={`/reservations/${r.id}/${i.kind}`}>{i.kind === 'depart' ? 'départ' : 'retour'} ({i.items.filter((x) => x.status === 'dommage').length} dommage(s), {i.items.reduce((s, x) => s + x.photos.length, 0)} photos)</Link></span>
+                ))}
+              </p>
+            )}
             <p className="small muted" style={{ margin: 0 }}>
               Caution de {money(r.caution)}, remboursée après le retour, moins les frais éventuels.
               {r.notes && <><br />Notes : {r.notes}</>}
@@ -403,7 +415,7 @@ function CheckoutDialog({ onClose }: { onClose: () => void }) {
           Kilométrage au départ
           <input type="number" inputMode="numeric" required value={mileage} onChange={(e) => setMileage(e.target.value)} />
         </label>
-        <p className="small muted" style={{ margin: 0 }}>Les photos et la signature sur mobile arrivent dans la prochaine version.</p>
+        <p className="small muted" style={{ margin: 0 }}>Départ sans photos ni signature. Pour un état des lieux complet, utilisez « État des lieux et remise des clés ».</p>
         <ErrorBox error={error} />
         <div className="modal-foot">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>

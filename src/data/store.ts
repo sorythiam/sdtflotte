@@ -41,6 +41,9 @@ export interface Store {
   // Photos des véhicules : envoi d'une image déjà réduite, renvoie son adresse publique
   uploadVehiclePhoto(image: Blob): Promise<string>;
   deleteVehiclePhoto(url: string): Promise<void>;
+  // État des lieux : photos dans un espace privé, affichées par liens temporaires
+  uploadInspectionPhoto(image: Blob, reservationId: string): Promise<string>;
+  inspectionPhotoUrls(paths: string[]): Promise<Record<string, string>>;
   // Réservation en ligne : pages publiques (sans connexion) et traitement des demandes
   publicBookingInfo(slug: string): Promise<PublicBookingInfo | null>;
   publicAvailability(slug: string, start: string, end: string): Promise<Record<string, number>>;

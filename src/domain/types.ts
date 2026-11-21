@@ -157,6 +157,7 @@ export interface Tables {
   maintenances: Maintenance;
   expenses: Expense;
   invoices: import('./billing').Invoice;
+  inspections: import('./inspection').Inspection;
 }
 export type TableName = keyof Tables;
 

@@ -39,6 +39,7 @@ function friendly(e: { message?: string; code?: string } | null): Error {
 }
 
 const PHOTO_BUCKET = 'vehicle-photos';
+const INSPECTION_BUCKET = 'inspection-photos';
 
 export class SupabaseStore implements Store {
   readonly mode = 'supabase' as const;
@@ -273,6 +274,25 @@ export class SupabaseStore implements Store {
     const { error } = await this.sb.storage.from(PHOTO_BUCKET).upload(path, image, { contentType: image.type || 'image/jpeg', cacheControl: '31536000', upsert: false });
     if (error) throw new Error(`Envoi de la photo impossible : ${error.message}`);
     return this.sb.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
+  }
+
+  async uploadInspectionPhoto(image: Blob, reservationId: string): Promise<string> {
+    if (!this.orgId) throw new Error('Session expirée, reconnectez-vous.');
+    const path = `${this.orgId}/${reservationId}/${crypto.randomUUID()}.jpg`;
+    const { error } = await this.sb.storage.from(INSPECTION_BUCKET).upload(path, image, { contentType: 'image/jpeg', upsert: false });
+    if (error) throw new Error(`Envoi de la photo impossible : ${error.message}`);
+    return path;
+  }
+
+  async inspectionPhotoUrls(paths: string[]): Promise<Record<string, string>> {
+    const out: Record<string, string> = {};
+    const stored = paths.filter((p) => !p.startsWith('data:'));
+    for (const p of paths) if (p.startsWith('data:')) out[p] = p;
+    if (!stored.length) return out;
+    const { data, error } = await this.sb.storage.from(INSPECTION_BUCKET).createSignedUrls(stored, 3600);
+    if (error) throw friendly(error);
+    for (const d of data ?? []) if (d.path && d.signedUrl) out[d.path] = d.signedUrl;
+    return out;
   }
 
   async deleteVehiclePhoto(url: string): Promise<void> {

@@ -14,6 +14,7 @@ import { BookingRequests } from './pages/BookingRequests';
 import { Expenses } from './pages/Expenses';
 import { Invoices } from './pages/Invoices';
 import { InvoicePage } from './pages/Invoice';
+import { InspectionPage } from './pages/InspectionPage';
 import { Login } from './pages/Login';
 import { Maintenance } from './pages/Maintenance';
 import { Planning } from './pages/Planning';
@@ -39,6 +40,8 @@ function App() {
         <Route path="reservations" element={<Reservations />} />
         <Route path="reservations/:id" element={<ReservationDetail />} />
         <Route path="reservations/:id/contrat" element={<Contract />} />
+        <Route path="reservations/:id/depart" element={<InspectionPage kind="depart" />} />
+        <Route path="reservations/:id/retour" element={<InspectionPage kind="retour" />} />
         <Route path="vehicules" element={<Vehicles />} />
         <Route path="clients" element={<Clients />} />
         <Route path="maintenance" element={<Maintenance />} />

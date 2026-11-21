@@ -4,6 +4,7 @@ import type { SessionInfo, Store } from '../data/store';
 import { SupabaseStore } from '../data/supabaseStore';
 import type { BookingRequest } from '../domain/booking';
 import type { Invoice } from '../domain/billing';
+import type { Inspection } from '../domain/inspection';
 import type { Client, Expense, Maintenance, Payment, Rate, Reservation, Role, Vehicle } from '../domain/types';
 
 export interface Data {
@@ -15,10 +16,11 @@ export interface Data {
   maintenances: Maintenance[];
   expenses: Expense[];
   invoices: Invoice[];
+  inspections: Inspection[];
   bookingRequests: BookingRequest[];
 }
 
-const empty: Data = { vehicles: [], clients: [], rates: [], reservations: [], payments: [], maintenances: [], expenses: [], invoices: [], bookingRequests: [] };
+const empty: Data = { vehicles: [], clients: [], rates: [], reservations: [], payments: [], maintenances: [], expenses: [], invoices: [], inspections: [], bookingRequests: [] };
 
 interface Ctx {
   store: Store;
@@ -53,7 +55,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, bookingRequests] = await Promise.all([
+      const [vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, bookingRequests] = await Promise.all([
         store.list('vehicles'),
         store.list('clients'),
         store.list('rates'),
@@ -62,10 +64,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
         store.list('maintenances'),
         store.list('expenses'),
         store.list('invoices'),
+        store.list('inspections'),
         // Réservées à la direction et aux agents : les autres profils reçoivent une liste vide.
         store.listBookingRequests().catch(() => [] as BookingRequest[]),
       ]);
-      setData({ vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, bookingRequests });
+      setData({ vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, bookingRequests });
       setNow(new Date());
     } finally {
       setLoading(false);

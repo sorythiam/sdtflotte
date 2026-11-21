@@ -1,3 +1,4 @@
+import { FUEL_LABELS, ZONES } from '../domain/inspection';
 import { payeeLines, termsFor } from '../domain/billing';
 import { useBilling } from '../state/useBilling';
 import { Link, useParams } from 'react-router-dom';
@@ -28,6 +29,8 @@ export function Contract() {
   const s = contractSettings(org.name, org.contract);
   const taxLabel = taxIdLabel(org.country);
   const invoices = data.invoices.filter((i) => i.reservationId === r.id);
+  const dep = data.inspections.find((i) => i.reservationId === r.id && i.kind === 'depart');
+  const ret = data.inspections.find((i) => i.reservationId === r.id && i.kind === 'retour');
   const v = data.vehicles.find((x) => x.id === r.vehicleId);
   const c = data.clients.find((x) => x.id === r.clientId);
   const rate = data.rates.find((x) => x.category === v?.category);
@@ -171,17 +174,49 @@ export function Contract() {
               <tr><th>Élément</th><th>Départ : OK</th><th>Départ : observations</th><th>Retour : OK</th><th>Retour : observations</th></tr>
             </thead>
             <tbody>
-              {INSPECTION_ZONES.map((z) => (
-                <tr key={z}><td>{z}</td><td className="ct-box">☐</td><td /><td className="ct-box">☐</td><td /></tr>
-              ))}
-              <tr>
-                <td>Carburant</td>
-                <td colSpan={2}>{FUEL_LEVELS.map((l) => `☐ ${l}`).join('   ')}</td>
-                <td colSpan={2}>{FUEL_LEVELS.map((l) => `☐ ${l}`).join('   ')}</td>
-              </tr>
-              <tr><td>Papiers du véhicule remis</td><td className="ct-box">☐</td><td /><td className="ct-box">☐</td><td /></tr>
+              {dep || ret ? (
+                <>
+                  {ZONES.map((z) => {
+                    const a = dep?.items.find((x) => x.zone === z.id);
+                    const b = ret?.items.find((x) => x.zone === z.id);
+                    const cell = (x: typeof a) => (x ? (x.status === 'ok' ? '✓' : '✗') : '☐');
+                    return (
+                      <tr key={z.id}>
+                        <td>{z.label}</td>
+                        <td className="ct-box">{cell(a)}</td>
+                        <td>{a?.status === 'dommage' ? a.note : a?.photos.length ? `${a.photos.length} photo(s)` : ''}</td>
+                        <td className="ct-box">{cell(b)}</td>
+                        <td>{b?.status === 'dommage' ? b.note : b?.photos.length ? `${b.photos.length} photo(s)` : ''}</td>
+                      </tr>
+                    );
+                  })}
+                  <tr>
+                    <td>Carburant · compteur</td>
+                    <td colSpan={2}>{dep ? `${FUEL_LABELS[dep.fuelQuarters]} · ${num(dep.mileage)} km` : FUEL_LEVELS.map((l) => `☐ ${l}`).join('   ')}</td>
+                    <td colSpan={2}>{ret ? `${FUEL_LABELS[ret.fuelQuarters]} · ${num(ret.mileage)} km` : FUEL_LEVELS.map((l) => `☐ ${l}`).join('   ')}</td>
+                  </tr>
+                </>
+              ) : (
+                <>
+                  {INSPECTION_ZONES.map((z) => (
+                    <tr key={z}><td>{z}</td><td className="ct-box">☐</td><td /><td className="ct-box">☐</td><td /></tr>
+                  ))}
+                  <tr>
+                    <td>Carburant</td>
+                    <td colSpan={2}>{FUEL_LEVELS.map((l) => `☐ ${l}`).join('   ')}</td>
+                    <td colSpan={2}>{FUEL_LEVELS.map((l) => `☐ ${l}`).join('   ')}</td>
+                  </tr>
+                  <tr><td>Papiers du véhicule remis</td><td className="ct-box">☐</td><td /><td className="ct-box">☐</td><td /></tr>
+                </>
+              )}
             </tbody>
           </table>
+          {(dep || ret) && (
+            <p className="ct-small">
+              État des lieux photographié et signé dans Yoon Fleet{dep ? ` · départ le ${dateTime(dep.doneAt)}, signé par ${dep.signerName}` : ''}
+              {ret ? ` · retour le ${dateTime(ret.doneAt)}, signé par ${ret.signerName}` : ''}.
+            </p>
+          )}
           {r.notes && <p className="ct-small"><strong>Notes :</strong> {r.notes}</p>}
         </section>
 
@@ -194,18 +229,26 @@ export function Contract() {
             <div>
               <strong>Le loueur</strong>
               <span className="ct-small">Nom, signature et cachet</span>
+              {dep?.agentSignature && <img className="ct-sig-img" src={dep.agentSignature} alt="Signature du loueur au départ" />}
             </div>
             <div>
               <strong>Le locataire</strong>
               <span className="ct-small">
                 {c?.kind === 'entreprise' ? `Pour ${c.name}${c.contactName ? `, ${c.contactName}` : ''} : signature, cachet et « lu et approuvé »` : 'Signature précédée de « lu et approuvé »'}
               </span>
+              {dep?.signature && <img className="ct-sig-img" src={dep.signature} alt={`Signature de ${dep.signerName} au départ`} />}
             </div>
           </div>
           {returned && (
             <div className="ct-sign">
-              <div><strong>Retour constaté par le loueur</strong><span className="ct-small">Date et signature</span></div>
-              <div><strong>Le locataire</strong><span className="ct-small">Signature</span></div>
+              <div>
+                <strong>Retour constaté par le loueur</strong><span className="ct-small">{ret ? dateTime(ret.doneAt) : 'Date et signature'}</span>
+                {ret?.agentSignature && <img className="ct-sig-img" src={ret.agentSignature} alt="Signature du loueur au retour" />}
+              </div>
+              <div>
+                <strong>Le locataire</strong><span className="ct-small">{ret ? ret.signerName : 'Signature'}</span>
+                {ret?.signature && <img className="ct-sig-img" src={ret.signature} alt={`Signature de ${ret.signerName} au retour`} />}
+              </div>
             </div>
           )}
         </section>

@@ -310,3 +310,37 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
 .lightbox-thumbs button { all: unset; cursor: pointer; border-radius: 6px; opacity: 0.6; flex: none; }
 .lightbox-thumbs button[aria-current='true'] { opacity: 1; outline: 2px solid var(--ocre); }
 .lightbox-thumbs img { width: 72px; height: 48px; object-fit: cover; border-radius: 6px; display: block; }
+
+/* ---------- état des lieux */
+.inspection { max-width: 820px; display: flex; flex-direction: column; gap: var(--space-4); }
+.big-input { font-size: 22px; min-height: 52px; }
+.fuel-picker { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.fuel-picker button { display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 64px; border: 1.5px solid var(--sable-line); border-radius: 10px; background: #fff; font: inherit; font-weight: 600; cursor: pointer; color: var(--ink); }
+.fuel-picker button.on { border-color: var(--atlantique); background: #eef4f8; box-shadow: 0 0 0 3px rgba(11, 60, 93, 0.15); }
+.fuel-bar { width: 70%; height: 10px; border-radius: 5px; background: var(--sable); overflow: hidden; display: block; }
+.fuel-bar span { display: block; height: 100%; background: var(--ocre); }
+.zone-card { gap: var(--space-3); }
+.zone-card.damaged { border-color: var(--danger); }
+.seg { display: inline-flex; border: 1.5px solid var(--sable-line); border-radius: 10px; overflow: hidden; flex: none; }
+.seg button { border: 0; background: #fff; padding: 10px 14px; min-height: 44px; font: inherit; font-weight: 600; cursor: pointer; color: var(--ink-muted); }
+.seg button.on { background: var(--success); color: #fff; }
+.seg button.on.bad { background: var(--danger); }
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.thumbs img, .thumb-loading { width: 96px; height: 72px; object-fit: cover; border-radius: 8px; display: block; background: var(--sable); }
+.thumbs > button { all: unset; cursor: zoom-in; }
+.thumb-wrap { position: relative; }
+.thumb-wrap button { position: absolute; top: -8px; right: -8px; width: 28px; height: 28px; border-radius: 50%; border: 0; background: var(--danger); color: #fff; font-size: 18px; line-height: 1; cursor: pointer; }
+.photo-add { display: inline-flex; align-items: center; justify-content: center; min-width: 96px; height: 72px; padding: 0 12px; border: 2px dashed var(--atlantique); border-radius: 8px; color: var(--atlantique); font-weight: 700; cursor: pointer; text-align: center; font-size: 14px; }
+.photo-add.busy { opacity: 0.6; cursor: wait; }
+.before { background: var(--sable); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.before .thumbs img { width: 72px; height: 54px; }
+.signature-pad { width: 100%; max-width: 600px; aspect-ratio: 3 / 1; border: 1.5px solid var(--sable-line); border-radius: 10px; touch-action: none; background: #fff; cursor: crosshair; }
+.inspection-submit { position: sticky; bottom: 0; padding: 12px 0; background: linear-gradient(transparent, var(--sable) 30%); }
+.inspection-submit .btn { width: 100%; min-height: 52px; font-size: 17px; }
+.zone-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.zone-tile { border: 1px solid var(--sable-line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.zone-tile.damaged { border-color: var(--danger); background: #fff6f5; }
+.zone-tile .thumbs img { width: 64px; height: 48px; }
+.sig { margin: 0; border: 1px solid var(--sable-line); border-radius: 8px; padding: 8px; background: #fff; }
+.sig img { width: 100%; max-width: 360px; display: block; }
+.ct-sig-img { max-height: 54px; max-width: 100%; object-fit: contain; margin-top: auto; }
