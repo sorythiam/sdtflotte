@@ -1,6 +1,6 @@
 import { defaultDailyDigest } from '../domain/alerts';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
-import { seed } from './seed';
+import { seed, seedExpenses } from './seed';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
 import {
   availableByCategory, SLUG_RE, validateBookingRequest,
@@ -102,6 +102,7 @@ export class DemoStore implements Store {
         st.members ??= demoTeam();
         st.invitations ??= [];
         st.bookingRequests ??= demoBookingRequests();
+        st.db.expenses ??= seedExpenses();
         st.org.bookingSlug ??= 'sdt-demo';
         st.org.bookingEnabled ??= true;
         return st;

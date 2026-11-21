@@ -3,7 +3,7 @@ import { DemoStore } from '../data/demoStore';
 import type { SessionInfo, Store } from '../data/store';
 import { SupabaseStore } from '../data/supabaseStore';
 import type { BookingRequest } from '../domain/booking';
-import type { Client, Maintenance, Payment, Rate, Reservation, Role, Vehicle } from '../domain/types';
+import type { Client, Expense, Maintenance, Payment, Rate, Reservation, Role, Vehicle } from '../domain/types';
 
 export interface Data {
   vehicles: Vehicle[];
@@ -12,10 +12,11 @@ export interface Data {
   reservations: Reservation[];
   payments: Payment[];
   maintenances: Maintenance[];
+  expenses: Expense[];
   bookingRequests: BookingRequest[];
 }
 
-const empty: Data = { vehicles: [], clients: [], rates: [], reservations: [], payments: [], maintenances: [], bookingRequests: [] };
+const empty: Data = { vehicles: [], clients: [], rates: [], reservations: [], payments: [], maintenances: [], expenses: [], bookingRequests: [] };
 
 interface Ctx {
   store: Store;
@@ -50,17 +51,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [vehicles, clients, rates, reservations, payments, maintenances, bookingRequests] = await Promise.all([
+      const [vehicles, clients, rates, reservations, payments, maintenances, expenses, bookingRequests] = await Promise.all([
         store.list('vehicles'),
         store.list('clients'),
         store.list('rates'),
         store.list('reservations'),
         store.list('payments'),
         store.list('maintenances'),
+        store.list('expenses'),
         // Réservées à la direction et aux agents : les autres profils reçoivent une liste vide.
         store.listBookingRequests().catch(() => [] as BookingRequest[]),
       ]);
-      setData({ vehicles, clients, rates, reservations, payments, maintenances, bookingRequests });
+      setData({ vehicles, clients, rates, reservations, payments, maintenances, expenses, bookingRequests });
       setNow(new Date());
     } finally {
       setLoading(false);

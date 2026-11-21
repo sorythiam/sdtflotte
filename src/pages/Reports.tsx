@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Empty, ErrorBox } from '../components/ui';
 import { money, num } from '../domain/format';
+import { expenseLabel, expensesIn } from '../domain/expenses';
 import { computeReport, DEFAULT_ACCOUNTS, journalEntries, monthlyRevenue, type AccountPlan, type Period } from '../domain/reports';
 import { useData } from '../state/DataContext';
 
@@ -90,7 +91,8 @@ export function Reports() {
             [{ value: 'Chiffre d’affaires (FCFA HT)' }, N(r.revenue)],
             [{ value: 'Encaissements (hors cautions)' }, N(r.collected)],
             [{ value: 'Coûts d’entretien' }, N(r.maintenance)],
-            [{ value: 'Marge (CA − entretien)' }, N(r.margin)],
+            [{ value: 'Dépenses (carburant, pneus, réparations…)' }, N(r.expenses)],
+            [{ value: 'Marge (CA − entretien − dépenses)' }, N(r.margin)],
             [{ value: 'Frais au retour facturés' }, N(r.fees)],
             [{ value: 'Taux d’occupation' }, { value: pct(r.occupancy) }],
             [{ value: 'Locations sur la période' }, N(r.rentals)],
@@ -98,12 +100,29 @@ export function Reports() {
         },
         {
           sheet: 'Véhicules',
-          columns: [{ width: 22 }, { width: 14 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 16 }, { width: 14 }, { width: 14 }],
+          columns: [{ width: 22 }, { width: 14 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 16 }, { width: 14 }, { width: 14 }, { width: 14 }],
           data: [
-            [H('Véhicule'), H('Immatriculation'), H('Catégorie'), H('Jours loués'), H('Occupation'), H('CA'), H('Entretien'), H('Marge')],
+            [H('Véhicule'), H('Immatriculation'), H('Catégorie'), H('Jours loués'), H('Occupation'), H('CA'), H('Entretien'), H('Dépenses'), H('Marge')],
             ...r.vehicles.map((v) => [
-              { value: v.label }, { value: v.plate }, { value: v.category }, N(v.rentedDays), { value: pct(v.occupancy) }, N(v.revenue), N(v.maintenance), N(v.margin),
+              { value: v.label }, { value: v.plate }, { value: v.category }, N(v.rentedDays), { value: pct(v.occupancy) }, N(v.revenue), N(v.maintenance), N(v.expenses), N(v.margin),
             ]),
+          ],
+        },
+        {
+          sheet: 'Dépenses',
+          columns: [{ width: 12 }, { width: 24 }, { width: 18 }, { width: 36 }, { width: 12 }, { width: 14 }],
+          data: [
+            [H('Date'), H('Véhicule'), H('Type'), H('Libellé'), H('Km'), H('Montant')],
+            ...expensesIn(data.expenses, period.from, period.to)
+              .sort((a, b) => a.date.localeCompare(b.date))
+              .map((e) => {
+                const v = data.vehicles.find((x) => x.id === e.vehicleId);
+                return [
+                  { value: new Date(e.date + 'T00:00:00'), type: Date, format: 'dd/mm/yyyy' },
+                  { value: v ? `${v.brand} ${v.model} ${v.plate}` : '—' }, { value: expenseLabel[e.kind] }, { value: e.label ?? '' },
+                  e.mileage != null ? N(e.mileage) : { value: '' }, N(e.amount),
+                ];
+              }),
           ],
         },
         {
@@ -200,9 +219,9 @@ export function Reports() {
           <span className="small muted">hors cautions</span>
         </div>
         <div className="card kpi">
-          <span className="kpi-label">Marge après entretien</span>
+          <span className="kpi-label">Marge après coûts</span>
           <span className="kpi-value num" style={{ color: r.margin < 0 ? 'var(--danger)' : 'var(--success)' }}>{money(r.margin, '')}</span>
-          <span className="small muted">entretien : {money(r.maintenance)}</span>
+          <span className="small muted">entretien {money(r.maintenance)} · dépenses {money(r.expenses)}</span>
         </div>
         <div className="card kpi">
           <span className="kpi-label">Taux d’occupation</span>
@@ -218,7 +237,7 @@ export function Reports() {
               <thead>
                 <tr>
                   <th>Véhicule</th><th className="right">Jours loués</th><th className="right">Occupation</th>
-                  <th className="right">CA</th><th className="right">Entretien</th><th className="right">Marge</th>
+                  <th className="right">CA</th><th className="right">Entretien</th><th className="right">Dépenses</th><th className="right">Marge</th>
                 </tr>
               </thead>
               <tbody>
@@ -234,6 +253,7 @@ export function Reports() {
                     </td>
                     <td className="right num" style={{ whiteSpace: 'nowrap' }}>{money(v.revenue)}</td>
                     <td className="right num" style={{ whiteSpace: 'nowrap' }}>{v.maintenance ? money(v.maintenance) : '—'}</td>
+                    <td className="right num" style={{ whiteSpace: 'nowrap' }}>{v.expenses ? money(v.expenses) : '—'}</td>
                     <td className="right num" style={{ whiteSpace: 'nowrap', fontWeight: 600, color: v.margin < 0 ? 'var(--danger)' : undefined }}>{money(v.margin)}</td>
                   </tr>
                 ))}

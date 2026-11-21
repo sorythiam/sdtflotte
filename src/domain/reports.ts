@@ -5,7 +5,8 @@
 // constatés au retour sont rattachés au jour du retour. Les encaissements sont comptés
 // à leur date de paiement.
 
-import type { Client, Maintenance, Payment, PaymentMethod, Reservation, Vehicle } from './types';
+import { expensesIn } from './expenses';
+import type { Client, Expense, Maintenance, Payment, PaymentMethod, Reservation, Vehicle } from './types';
 
 const DAY = 86400000;
 
@@ -54,7 +55,8 @@ export interface VehicleLine {
   occupancy: number; // 0 à 1
   revenue: number;
   maintenance: number;
-  margin: number;
+  expenses: number; // carburant, pneus, réparations, amendes… (page Dépenses)
+  margin: number; // CA − entretien − dépenses
 }
 
 export interface ClientLine {
@@ -69,6 +71,7 @@ export interface Report {
   revenue: number;
   collected: number; // encaissements de location et frais (hors cautions)
   maintenance: number;
+  expenses: number;
   margin: number;
   occupancy: number;
   fees: number; // frais au retour : km, carburant, retards, dégâts
@@ -78,12 +81,13 @@ export interface Report {
 }
 
 export function computeReport(
-  input: { vehicles: Vehicle[]; clients: Client[]; reservations: Reservation[]; payments: Payment[]; maintenances: Maintenance[] },
+  input: { vehicles: Vehicle[]; clients: Client[]; reservations: Reservation[]; payments: Payment[]; maintenances: Maintenance[]; expenses?: Expense[] },
   p: Period,
 ): Report {
   const ps = Date.parse(p.from);
   const pe = Date.parse(p.to);
   const days = Math.max(0, (pe - ps) / DAY);
+  const periodExpenses = expensesIn(input.expenses ?? [], p.from, p.to);
   const inPeriod = input.reservations.filter((r) => counted(r) && overlapMs(Date.parse(r.start), Date.parse(r.end), ps, pe) > 0);
 
   const vehicles: VehicleLine[] = input.vehicles.map((v) => {
@@ -92,6 +96,7 @@ export function computeReport(
     const maintenance = input.maintenances
       .filter((m) => m.vehicleId === v.id && Date.parse(m.start) >= ps && Date.parse(m.start) < pe)
       .reduce((s, m) => s + m.cost, 0);
+    const expenses = periodExpenses.filter((e) => e.vehicleId === v.id).reduce((s, e) => s + e.amount, 0);
     return {
       vehicleId: v.id,
       label: `${v.brand} ${v.model}`,
@@ -101,7 +106,8 @@ export function computeReport(
       occupancy: days && !v.outOfService ? Math.min(1, rd / days) : 0,
       revenue,
       maintenance,
-      margin: revenue - maintenance,
+      expenses,
+      margin: revenue - maintenance - expenses,
     };
   });
 
@@ -128,13 +134,16 @@ export function computeReport(
   const totalRented = inService.reduce((s, v) => s + rentedDays(v.id, input.reservations, p), 0);
   const revenue = vehicles.reduce((s, v) => s + v.revenue, 0);
   const maintenance = vehicles.reduce((s, v) => s + v.maintenance, 0);
+  // Toutes les dépenses de la période, y compris celles d'un véhicule supprimé depuis.
+  const expenses = periodExpenses.reduce((s, e) => s + e.amount, 0);
 
   return {
     days,
     revenue,
     collected,
     maintenance,
-    margin: revenue - maintenance,
+    expenses,
+    margin: revenue - maintenance - expenses,
     occupancy: days && inService.length ? Math.min(1, totalRented / (days * inService.length)) : 0,
     fees: input.reservations.filter((r) => counted(r) && r.fees && Date.parse(r.end) >= ps && Date.parse(r.end) < pe).reduce((s, r) => s + r.fees, 0),
     rentals: inPeriod.length,

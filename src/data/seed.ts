@@ -1,4 +1,4 @@
-import type { Client, Maintenance, Payment, Rate, Reservation, Tables, Vehicle } from '../domain/types';
+import type { Client, Expense, Maintenance, Payment, Rate, Reservation, Tables, Vehicle } from '../domain/types';
 
 // Données d'exemple, recalées sur la date du jour pour que la démo soit toujours parlante.
 
@@ -92,5 +92,24 @@ export function seed(now = new Date()): Db {
     { id: 'm-2', vehicleId: 'v-tucson', label: 'Vidange', start: at(now, 1, 8), end: at(now, 1, 18), cost: 45000 },
   ];
 
-  return { rates, vehicles, clients, reservations, payments, maintenances };
+  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now) };
+}
+
+/** Quelques dépenses sur les trois derniers mois, pour des rapports parlants. */
+export function seedExpenses(now = new Date()): Expense[] {
+  const e = (id: string, vehicleId: string, d: number, kind: Expense['kind'], amount: number, label: string | null, mileage: number | null = null): Expense => ({
+    id, vehicleId, date: day(now, d), kind, amount, label, mileage, reservationId: null,
+  });
+  return [
+    e('e-1', 'v-hilux', -5, 'carburant', 52000, 'Plein gasoil, Total Ngor', 61050),
+    e('e-2', 'v-hiace', -2, 'carburant', 68000, 'Plein gasoil', 88020),
+    e('e-3', 'v-prado', -9, 'pneus', 340000, '4 pneus Bridgestone', 52400),
+    e('e-4', 'v-dzire', -12, 'lavage', 5000, null),
+    e('e-5', 'v-lc', -20, 'reparation', 95000, 'Alternateur', 97100),
+    e('e-6', 'v-tucson', -15, 'amende', 15000, 'Stationnement Plateau'),
+    e('e-7', 'v-hilux', -33, 'pieces', 48000, 'Plaquettes avant'),
+    e('e-8', 'v-picanto', -40, 'carburant', 25000, 'Plein super', 15100),
+    e('e-9', 'v-hiace', -45, 'peage', 7000, 'Autoroute Dakar-AIBD aller-retour'),
+    e('e-10', 'v-prado', -60, 'taxes', 60000, 'Vignette'),
+  ];
 }

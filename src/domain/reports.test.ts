@@ -52,6 +52,21 @@ describe('rapport de période', () => {
     expect(r.fees).toBe(7000);
     expect(r.rentals).toBe(3);
   });
+  it('déduit les dépenses de la période de la marge', () => {
+    const withExp = computeReport(
+      {
+        vehicles, clients, reservations, payments, maintenances,
+        expenses: [
+          { id: 'e1', vehicleId: 'v1', date: '2026-11-05', kind: 'carburant', amount: 30000, label: null, mileage: null, reservationId: null },
+          { id: 'e2', vehicleId: 'v2', date: '2026-10-28', kind: 'pneus', amount: 99000, label: null, mileage: null, reservationId: null },
+        ],
+      },
+      NOV,
+    );
+    expect(withExp.expenses).toBe(30000);
+    expect(withExp.margin).toBe(277000 - 45000 - 30000);
+    expect(withExp.vehicles.find((x) => x.vehicleId === 'v1')!.margin).toBe(150000 - 45000 - 30000);
+  });
   it('calcule l’occupation sans les véhicules hors service', () => {
     // v1 : 15 j, v2 : 10 + 2 = 12 j, sur 2 véhicules × 30 j
     expect(r.occupancy).toBeCloseTo(27 / 60);

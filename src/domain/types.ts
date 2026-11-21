@@ -115,6 +115,20 @@ export interface Maintenance {
   cost: number;
 }
 
+export type ExpenseKind = 'carburant' | 'pneus' | 'reparation' | 'pieces' | 'amende' | 'assurance' | 'taxes' | 'peage' | 'lavage' | 'autre';
+
+/** Dépense rattachée à un véhicule (hors entretiens planifiés, suivis dans Maintenance). */
+export interface Expense {
+  id: string;
+  vehicleId: string;
+  date: string; // AAAA-MM-JJ
+  kind: ExpenseKind;
+  amount: number;
+  label: string | null;
+  mileage: number | null;
+  reservationId: string | null; // contrat concerné, utile pour une amende ou un plein refacturé
+}
+
 export interface Tables {
   vehicles: Vehicle;
   clients: Client;
@@ -122,6 +136,7 @@ export interface Tables {
   reservations: Reservation;
   payments: Payment;
   maintenances: Maintenance;
+  expenses: Expense;
 }
 export type TableName = keyof Tables;
 

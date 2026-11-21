@@ -11,6 +11,7 @@ import { Alerts } from './pages/Alerts';
 import { Contract } from './pages/Contract';
 import { PublicBooking } from './pages/PublicBooking';
 import { BookingRequests } from './pages/BookingRequests';
+import { Expenses } from './pages/Expenses';
 import { Login } from './pages/Login';
 import { Maintenance } from './pages/Maintenance';
 import { Planning } from './pages/Planning';
@@ -45,6 +46,7 @@ function App() {
         <Route path="rapports" element={<Reports />} />
         <Route path="alertes" element={<Alerts />} />
         <Route path="demandes" element={<BookingRequests />} />
+        <Route path="depenses" element={<Expenses />} />
         <Route path="*" element={<Dashboard />} />
       </Route>
     </Routes>
