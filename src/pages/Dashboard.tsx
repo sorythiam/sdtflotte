@@ -1,8 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Empty, ReservationBadge } from '../components/ui';
 import { dateShort, dateTime, money, time } from '../domain/format';
-import { cautionHeld, expiryAlerts, isLate, lateDays, occupancy, vehicleStatusAt } from '../domain/rules';
+import { isLate, lateDays, occupancy, vehicleStatusAt } from '../domain/rules';
 import { useData } from '../state/DataContext';
+import { AlertList } from './Alerts';
 
 function sameDay(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -25,13 +26,11 @@ export function Dashboard() {
 
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
   const paidMonth = data.payments.filter(
-    (p) => p.status === 'paye' && p.paidAt && Date.parse(p.paidAt) >= monthStart && p.kind !== 'caution' && p.kind !== 'remboursement_caution',
+    (p) => p.status === 'paye' && p.paidAt && Date.parse(p.paidAt) >= monthStart && p.kind !== 'caution' && p.kind !== 'remboursement_caution' && p.kind !== 'remboursement',
   );
   const encaisse = paidMonth.reduce((s, p) => s + p.amount, 0);
   const viaLink = paidMonth.filter((p) => p.method !== 'especes').reduce((s, p) => s + p.amount, 0);
 
-  const docs = expiryAlerts(data.vehicles, now, 30);
-  const cautionsToRefund = data.reservations.filter((r) => r.status === 'terminee' && cautionHeld(r.id, data.payments) > 0);
 
   return (
     <>
@@ -125,54 +124,9 @@ export function Dashboard() {
           <Link to="/reservations">Voir toutes les réservations</Link>
         </section>
 
-        <section className="card col-1" aria-labelledby="todo">
+        <section className="card col-1" aria-labelledby="todo" id="alertes">
           <h2 id="todo">À traiter</h2>
-          <ul className="alerts">
-            {current
-              .filter((r) => isLate(r, now))
-              .map((r) => (
-                <li key={r.id}>
-                  <span className="dot danger" />
-                  <span>
-                    <Link to={`/reservations/${r.id}`}>
-                      {veh.get(r.vehicleId)?.model} {veh.get(r.vehicleId)?.plate} en retard
-                    </Link>
-                    <br />
-                    <span className="muted">
-                      {cli.get(r.clientId)?.name} · retour prévu le {dateShort(r.end)}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            {docs.map((d) => {
-              const v = veh.get(d.vehicleId);
-              return (
-                <li key={d.vehicleId + d.document}>
-                  <span className={`dot ${d.daysLeft < 0 ? 'danger' : 'warning'}`} />
-                  <span>
-                    <strong>
-                      {d.document.charAt(0).toUpperCase() + d.document.slice(1)} · {v?.model} {v?.plate}
-                    </strong>
-                    <br />
-                    <span className="muted">
-                      {d.daysLeft < 0 ? `Expirée depuis ${-d.daysLeft} j` : d.daysLeft === 0 ? 'Expire aujourd’hui' : `Expire dans ${d.daysLeft} j`}
-                    </span>
-                  </span>
-                </li>
-              );
-            })}
-            {cautionsToRefund.length > 0 && (
-              <li>
-                <span className="dot" />
-                <span>
-                  <strong>{cautionsToRefund.length} caution(s) à rembourser</strong>
-                  <br />
-                  <span className="muted">Locations terminées, caution encore détenue</span>
-                </span>
-              </li>
-            )}
-            {lateCount === 0 && docs.length === 0 && cautionsToRefund.length === 0 && <Empty>Rien à traiter. Bonne journée.</Empty>}
-          </ul>
+          <AlertList />
         </section>
       </div>
     </>

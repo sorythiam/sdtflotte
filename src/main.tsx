@@ -1,13 +1,12 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Clients } from './pages/Clients';
 import { Dashboard } from './pages/Dashboard';
 import { Team } from './pages/Team';
 import { Settings } from './pages/Settings';
 import { Reports } from './pages/Reports';
-import { Alerts } from './pages/Alerts';
 import { Contract } from './pages/Contract';
 import { PublicBooking } from './pages/PublicBooking';
 import { BookingRequests } from './pages/BookingRequests';
@@ -49,7 +48,7 @@ function App() {
         <Route path="equipe" element={<Team />} />
         <Route path="parametres" element={<Settings />} />
         <Route path="rapports" element={<Reports />} />
-        <Route path="alertes" element={<Alerts />} />
+        <Route path="alertes" element={<Navigate to="/" replace />} />
         <Route path="demandes" element={<BookingRequests />} />
         <Route path="depenses" element={<Expenses />} />
         <Route path="factures" element={<Invoices />} />
