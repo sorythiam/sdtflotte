@@ -3,7 +3,8 @@
 
 import { verificationOf } from './verification';
 import { balanceDue, cautionHeld, expiryAlerts, lateDays } from './rules';
-import type { Client, Maintenance, Payment, Reservation, Role, Vehicle } from './types';
+import { planDue } from './maintenancePlan';
+import type { Client, Maintenance, MaintenancePlan, Payment, Reservation, Role, Vehicle } from './types';
 
 export type AlertLevel = 'urgent' | 'attention' | 'info';
 export type AlertKind =
@@ -11,6 +12,7 @@ export type AlertKind =
   | 'depart_non_fait'
   | 'depart_jour'
   | 'retour_jour'
+  | 'retour_demain'
   | 'document'
   | 'permis'
   | 'liste_noire'
@@ -18,6 +20,7 @@ export type AlertKind =
   | 'impaye'
   | 'caution_a_rendre'
   | 'entretien_jour'
+  | 'entretien_a_prevoir'
   | 'demande_en_ligne';
 
 export interface Alert {
@@ -37,6 +40,7 @@ export interface AlertInput {
   payments: Payment[];
   maintenances: Maintenance[];
   invoices?: { reservationId: string; totalTtc: number }[];
+  plans?: MaintenancePlan[];
   bookingRequests?: { id: string; status: string; name: string; companyName?: string | null; category: string; start: string; end: string; createdAt: string }[];
 }
 
@@ -102,6 +106,13 @@ export function buildAlerts(input: AlertInput, now: Date, offsetMin = -now.getTi
           id: `retour:${r.id}`, kind: 'retour_jour', level: 'info', link, roles: OPS,
           title: `Retour aujourd’hui à ${hhmm(r.end, offsetMin)} : ${vLabel(r.vehicleId)}`,
           detail: `${cName(r.clientId)} · contrat ${r.number}`,
+        });
+      } else if (e < tomorrow + DAY) {
+        // La veille : le temps de rappeler le client ou de proposer une prolongation.
+        out.push({
+          id: `retour-demain:${r.id}`, kind: 'retour_demain', level: 'info', link, roles: OPS,
+          title: `Retour demain à ${hhmm(r.end, offsetMin)} : ${vLabel(r.vehicleId)}`,
+          detail: `${cName(r.clientId)} · contrat ${r.number} · rappelez le client ou proposez une prolongation`,
         });
       }
     }
@@ -193,6 +204,20 @@ export function buildAlerts(input: AlertInput, now: Date, offsetMin = -now.getTi
         detail: `${m.label} à ${hhmm(m.start, offsetMin)}`,
       });
     }
+  }
+
+  // Entretiens périodiques : échéance dépassée ou proche (1 000 km ou 15 jours).
+  for (const p of input.plans ?? []) {
+    if (!p.active) continue;
+    const v = vehicle(p.vehicleId);
+    if (!v || v.outOfService) continue;
+    const d = planDue(p, v, now);
+    if (d.state === 'ok') continue;
+    out.push({
+      id: `plan:${p.id}`, kind: 'entretien_a_prevoir', level: d.state === 'depasse' ? 'attention' : 'info', link: `/maintenance`, roles: ['direction', 'mecanicien'],
+      title: `${p.label} ${d.state === 'depasse' ? 'à faire' : 'à prévoir'} : ${vLabel(p.vehicleId)}`,
+      detail: `Échéance ${d.text}`,
+    });
   }
 
   for (const b of input.bookingRequests ?? []) {

@@ -3,7 +3,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Empty, ErrorBox, Modal, ReservationBadge } from '../components/ui';
 import { createReservation, driverConflict } from '../data/services';
-import { FORMULAS, fitsPassengers, priceFor, type Price } from '../domain/tariff';
+import { dealFor, FORMULAS, fitsPassengers, priceFor, type Price } from '../domain/tariff';
 import { dateShort, fromLocalInput, money, time, toLocalInput } from '../domain/format';
 import { balanceDue, findConflicts, lateDays } from '../domain/rules';
 import type { Formula, ReservationStatus } from '../domain/types';
@@ -167,9 +167,11 @@ function NewReservation({ onClose }: { onClose: () => void }) {
   const rate = data.rates.find((r) => r.category === vehicle?.category);
   let qt: Price | null = null;
   let priceError: string | null = null;
+  const client0 = data.clients.find((c) => c.id === clientId);
+  const deal = dealFor(client0, vehicle?.category, sIso || now);
   if (vehicle && validPeriod) {
     try {
-      qt = priceFor({ formula, rate, pkg, start: sIso, end: eIso, withDriver: driverOn, missionFees: Number(missionFees) || 0 });
+      qt = priceFor({ formula, rate, pkg, start: sIso, end: eIso, withDriver: driverOn, missionFees: Number(missionFees) || 0, deal });
     } catch (e) {
       priceError = (e as Error).message;
     }
@@ -330,6 +332,7 @@ function NewReservation({ onClose }: { onClose: () => void }) {
             {formula === 'forfait' ? `forfait ${qt.label}` : formula === 'demi_journee' ? 'pour une demi-journée' : `pour ${qt.days} jour(s) à ${money(qt.dailyRate)}/jour`}
             {qt.missionFees ? `, dont ${money(qt.missionFees)} de frais de mission` : ''} · caution {money(qt.caution)}
             {qt.kmIncluded !== null ? ` · ${qt.kmIncluded} km inclus` : ' · kilométrage non compté'}
+            {qt.dealNote && <><br /><span className="small" style={{ color: 'var(--success)', fontWeight: 600 }}>{qt.dealNote}</span></>}
           </div>
         )}
         {priceError && <div className="error">{priceError}</div>}

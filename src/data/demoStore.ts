@@ -1,7 +1,7 @@
 import { categoryPhotos } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
-import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
-import { seed, seedExpenses, seedDrivers, seedIncidents, seedInvoices, seedPackages } from './seed';
+import type { AuditEntry, Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
+import { seed, seedExpenses, seedDrivers, seedIncidents, seedInvoices, seedPackages, seedPlans } from './seed';
 import { invoicePrefix, nextInvoiceNumber, type Invoice } from '../domain/billing';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
 import {
@@ -20,7 +20,16 @@ interface DemoState {
   invitations?: Invitation[];
   subscriptionRequests?: SubscriptionRequest[];
   bookingRequests?: BookingRequest[];
+  audit?: AuditEntry[];
 }
+
+/** Libellé lisible d'une ligne pour le journal. */
+function rowLabel(row: Record<string, unknown> | undefined): string | null {
+  if (!row) return null;
+  for (const k of ['number', 'plate', 'name', 'label', 'category', 'kind']) if (typeof row[k] === 'string' && row[k]) return String(row[k]);
+  return null;
+}
+const snake = (k: string) => k.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase());
 
 const SELF = 'u-moi';
 
@@ -112,6 +121,7 @@ export class DemoStore implements Store {
         st.db.drivers ??= seedDrivers();
         st.db.packages ??= seedPackages();
         st.db.reservation_changes ??= [];
+        st.db.maintenance_plans ??= seedPlans();
         st.org.bookingSlug ??= 'sdt-demo';
         st.org.bookingEnabled ??= true;
         return st;
@@ -171,6 +181,18 @@ export class DemoStore implements Store {
     this.save();
   }
 
+  private log(table: string, action: AuditEntry['action'], row: Record<string, unknown> | undefined, changes: string | null = null) {
+    const entry: AuditEntry = {
+      id: uid(), at: new Date().toISOString(), userEmail: this.state.session?.email ?? null, tableName: table,
+      rowId: (row?.id as string) ?? null, action, label: rowLabel(row), changes,
+    };
+    this.state.audit = [entry, ...(this.state.audit ?? [])].slice(0, 500);
+  }
+
+  async listAudit(limit = 200): Promise<AuditEntry[]> {
+    return structuredClone((this.state.audit ?? []).slice(0, limit));
+  }
+
   async list<T extends TableName>(table: T): Promise<Row<T>[]> {
     return structuredClone(this.state.db[table]) as Row<T>[];
   }
@@ -188,11 +210,13 @@ export class DemoStore implements Store {
       const number = nextInvoiceNumber(this.state.db.invoices.map((i) => i.number), invoicePrefix(inv.kind), Number(inv.issueDate.slice(0, 4)));
       const created = { ...inv, id: uid(), number } as Invoice;
       this.state.db.invoices.push(created);
+      this.log(table, 'creation', created as unknown as Record<string, unknown>);
       this.save();
       return structuredClone(created) as unknown as Row<T>;
     }
     const full = { ...row, id: uid() } as Row<T>;
     (this.state.db[table] as Row<T>[]).push(full);
+    this.log(table, 'creation', full as unknown as Record<string, unknown>);
     this.save();
     return structuredClone(full);
   }
@@ -202,7 +226,10 @@ export class DemoStore implements Store {
     const list = this.state.db[table] as Row<T>[];
     const i = list.findIndex((r) => r.id === id);
     if (i < 0) throw new Error('Élément introuvable');
+    const before = list[i] as unknown as Record<string, unknown>;
+    const changed = Object.keys(patch).filter((k) => JSON.stringify(before[k] ?? null) !== JSON.stringify((patch as Record<string, unknown>)[k] ?? null));
     list[i] = { ...list[i], ...patch };
+    if (changed.length) this.log(table, 'modification', list[i] as unknown as Record<string, unknown>, changed.map(snake).sort().join(', '));
     this.save();
     return structuredClone(list[i]);
   }
@@ -210,6 +237,7 @@ export class DemoStore implements Store {
   async remove(table: TableName, id: string): Promise<void> {
     if (table === 'invoices') throw new Error('Une facture émise ne se supprime pas : établissez un avoir.');
     const list = this.state.db[table] as { id: string }[];
+    this.log(table, 'suppression', list.find((r) => r.id === id) as unknown as Record<string, unknown>);
     this.state.db[table] = list.filter((r) => r.id !== id) as never;
     this.save();
   }

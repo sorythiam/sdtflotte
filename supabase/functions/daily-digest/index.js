@@ -1,6 +1,34 @@
 // supabase/functions/daily-digest/source.ts
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
+// src/domain/verification.ts
+var day = (iso) => Date.parse(iso.slice(0, 10) + "T00:00:00Z");
+function age(birth, now) {
+  const b = /* @__PURE__ */ new Date(birth + "T00:00:00Z");
+  let a = now.getUTCFullYear() - b.getUTCFullYear();
+  if (now.getUTCMonth() < b.getUTCMonth() || now.getUTCMonth() === b.getUTCMonth() && now.getUTCDate() < b.getUTCDate()) a--;
+  return a;
+}
+function verificationOf(c, now, minAge = 0) {
+  const issues = [];
+  const docs = c.documents ?? {};
+  const today = day(now.toISOString());
+  if (!c.idNumber) issues.push("Num\xE9ro de la pi\xE8ce d\u2019identit\xE9");
+  if (!docs.idFront) issues.push("Photo de la pi\xE8ce d\u2019identit\xE9");
+  if (!c.licenseNumber) issues.push("Num\xE9ro du permis");
+  if (!c.licenseExpiry) issues.push("Date de validit\xE9 du permis");
+  if (!docs.license) issues.push("Photo du permis");
+  const expired = [];
+  if (c.idExpiry && day(c.idExpiry) < today) expired.push("Pi\xE8ce d\u2019identit\xE9 expir\xE9e");
+  if (c.licenseExpiry && day(c.licenseExpiry) < today) expired.push("Permis expir\xE9");
+  const young = minAge > 0 && c.birthDate && age(c.birthDate, now) < minAge ? [`Conducteur de moins de ${minAge} ans`] : [];
+  const blocking = [...expired, ...young];
+  const ready = issues.length === 0 && blocking.length === 0;
+  if (c.verifiedAt) return { state: blocking.length ? "a_revoir" : "verifie", issues: blocking, ready };
+  return { state: blocking.length ? "a_revoir" : "incomplet", issues: [...blocking, ...issues.map((i) => `Manque : ${i.charAt(0).toLowerCase()}${i.slice(1)}`)], ready };
+}
+var LATE_MARGIN = 2 * 3600 * 1e3;
+
 // src/domain/rules.ts
 var DAY_MS = 24 * 60 * 60 * 1e3;
 function isLate(r, now) {
@@ -10,11 +38,12 @@ function lateDays(r, now) {
   if (!isLate(r, now)) return 0;
   return Math.ceil((now.getTime() - Date.parse(r.end)) / DAY_MS);
 }
-function balanceDue(r, payments) {
-  const paid = payments.filter(
-    (p) => p.reservationId === r.id && p.status === "paye" && (p.kind === "acompte" || p.kind === "solde" || p.kind === "frais")
-  ).reduce((s, p) => s + p.amount, 0);
-  return Math.max(0, r.total + (r.fees ?? 0) - paid);
+function balanceDue(r, payments, invoices = []) {
+  const mine = payments.filter((p) => p.reservationId === r.id && p.status === "paye");
+  const paid = mine.filter((p) => p.kind === "acompte" || p.kind === "solde" || p.kind === "frais").reduce((s, p) => s + p.amount, 0) - mine.filter((p) => p.kind === "remboursement").reduce((s, p) => s + p.amount, 0);
+  const inv = invoices.filter((i) => i.reservationId === r.id);
+  const owed = inv.length ? inv.reduce((s, i) => s + i.totalTtc, 0) : r.total + (r.fees ?? 0);
+  return Math.max(0, owed - paid);
 }
 function cautionHeld(reservationId, payments) {
   const mine = payments.filter((p) => p.reservationId === reservationId && p.status === "paye");
@@ -38,6 +67,34 @@ function expiryAlerts(vehicles, now, withinDays = 30) {
     }
   }
   return out.sort((a, b) => a.daysLeft - b.daysLeft);
+}
+
+// src/domain/maintenancePlan.ts
+var SOON_KM = 1e3;
+var SOON_DAYS = 15;
+function addMonths(iso, months) {
+  const d = /* @__PURE__ */ new Date(iso + "T00:00:00Z");
+  const day2 = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day2, last));
+  return d.toISOString().slice(0, 10);
+}
+function planDue(plan, vehicle, now) {
+  const nextKm = plan.everyKm ? (plan.lastKm ?? 0) + plan.everyKm : null;
+  const base = plan.lastDate ?? plan.createdAt.slice(0, 10);
+  const nextDate = plan.everyMonths ? addMonths(base, plan.everyMonths) : null;
+  const kmLeft = nextKm !== null ? nextKm - vehicle.mileage : null;
+  const today = Date.parse(now.toISOString().slice(0, 10) + "T00:00:00Z");
+  const daysLeft = nextDate ? Math.round((Date.parse(nextDate + "T00:00:00Z") - today) / 864e5) : null;
+  const over = kmLeft !== null && kmLeft < 0 || daysLeft !== null && daysLeft < 0;
+  const soon = !over && (kmLeft !== null && kmLeft <= SOON_KM || daysLeft !== null && daysLeft <= SOON_DAYS);
+  const fmt = (n) => n.toLocaleString("fr-FR");
+  const parts = [];
+  if (kmLeft !== null) parts.push(kmLeft < 0 ? `d\xE9pass\xE9 de ${fmt(-kmLeft)} km` : `dans ${fmt(kmLeft)} km`);
+  if (daysLeft !== null) parts.push(daysLeft < 0 ? `en retard de ${-daysLeft} jour(s)` : daysLeft === 0 ? "aujourd\u2019hui" : `dans ${daysLeft} jour(s)`);
+  return { plan, nextKm, nextDate, kmLeft, daysLeft, state: over ? "depasse" : soon ? "bientot" : "ok", text: parts.join(" ou ") };
 }
 
 // src/domain/alerts.ts
@@ -124,6 +181,16 @@ function buildAlerts(input, now, offsetMin = -now.getTimezoneOffset()) {
           title: `Retour aujourd\u2019hui \xE0 ${hhmm(r.end, offsetMin)} : ${vLabel(r.vehicleId)}`,
           detail: `${cName(r.clientId)} \xB7 contrat ${r.number}`
         });
+      } else if (e < tomorrow + DAY) {
+        out.push({
+          id: `retour-demain:${r.id}`,
+          kind: "retour_demain",
+          level: "info",
+          link,
+          roles: OPS,
+          title: `Retour demain \xE0 ${hhmm(r.end, offsetMin)} : ${vLabel(r.vehicleId)}`,
+          detail: `${cName(r.clientId)} \xB7 contrat ${r.number} \xB7 rappelez le client ou proposez une prolongation`
+        });
       }
     }
     if (r.status === "reservee") {
@@ -157,11 +224,25 @@ function buildAlerts(input, now, offsetMin = -now.getTimezoneOffset()) {
           id: `permis:${r.id}`,
           kind: "permis",
           level: "urgent",
-          link: `/clients`,
+          link: `/clients/${c.id}`,
           roles: OPS,
           title: `Permis ${expired ? "expir\xE9" : "expirant pendant la location"} : ${c.name}`,
           detail: `Permis valable jusqu\u2019au ${dmy(c.licenseExpiry)} \xB7 contrat ${r.number} jusqu\u2019au ${dmy(r.end)}`
         });
+      }
+      if (c && c.score !== "blacklist" && r.status === "reservee" && !r.withDriver && s < t + 2 * DAY) {
+        const v = verificationOf(c, now);
+        if (v.state !== "verifie") {
+          out.push({
+            id: `dossier:${r.id}`,
+            kind: "dossier_client",
+            level: s < t + DAY ? "urgent" : "attention",
+            link: `/clients/${c.id}`,
+            roles: OPS,
+            title: `Dossier client ${v.state === "a_revoir" ? "\xE0 revoir" : "non v\xE9rifi\xE9"} : ${c.name}`,
+            detail: `D\xE9part ${r.number} le ${dmy(r.start)} \xB7 ${v.issues[0] ?? "pi\xE8ces \xE0 contr\xF4ler"}`
+          });
+        }
       }
       if (c?.score === "blacklist" && r.status === "reservee") {
         out.push({
@@ -176,7 +257,7 @@ function buildAlerts(input, now, offsetMin = -now.getTimezoneOffset()) {
       }
     }
     if (r.status === "terminee") {
-      const due = balanceDue(r, input.payments);
+      const due = balanceDue(r, input.payments, input.invoices);
       if (due > 0) {
         out.push({
           id: `impaye:${r.id}`,
@@ -228,6 +309,22 @@ function buildAlerts(input, now, offsetMin = -now.getTimezoneOffset()) {
       });
     }
   }
+  for (const p of input.plans ?? []) {
+    if (!p.active) continue;
+    const v = vehicle(p.vehicleId);
+    if (!v || v.outOfService) continue;
+    const d = planDue(p, v, now);
+    if (d.state === "ok") continue;
+    out.push({
+      id: `plan:${p.id}`,
+      kind: "entretien_a_prevoir",
+      level: d.state === "depasse" ? "attention" : "info",
+      link: `/maintenance`,
+      roles: ["direction", "mecanicien"],
+      title: `${p.label} ${d.state === "depasse" ? "\xE0 faire" : "\xE0 pr\xE9voir"} : ${vLabel(p.vehicleId)}`,
+      detail: `\xC9ch\xE9ance ${d.text}`
+    });
+  }
   for (const b of input.bookingRequests ?? []) {
     if (b.status !== "nouvelle") continue;
     const soon = Date.parse(b.start) - t < 2 * DAY;
@@ -237,7 +334,7 @@ function buildAlerts(input, now, offsetMin = -now.getTimezoneOffset()) {
       level: soon ? "urgent" : "attention",
       link: "/demandes",
       roles: OPS,
-      title: `Demande en ligne \xE0 traiter : ${b.name}`,
+      title: `Demande en ligne \xE0 traiter : ${b.companyName ? `${b.companyName} (${b.name})` : b.name}`,
       detail: `${b.category} du ${dmy(b.start)} au ${dmy(b.end)}${soon ? " \xB7 d\xE9part dans moins de 48 h" : ""}`
     });
   }
@@ -321,15 +418,17 @@ Deno.serve(async (req) => {
     const recipients = (members ?? []).filter((m) => m.email && (m.daily_digest ?? defaultDailyDigest(m.role)));
     if (recipients.length === 0) continue;
     const since = new Date(now.getTime() - 180 * 864e5).toISOString();
-    const [vehicles, clients, reservations, payments, maintenances, requests] = await Promise.all([
+    const [vehicles, clients, reservations, payments, maintenances, requests, plans, invoices] = await Promise.all([
       sb.from("vehicles").select("*").eq("org_id", org.id),
       sb.from("clients").select("*").eq("org_id", org.id),
       sb.from("reservations").select("*").eq("org_id", org.id).or(`status.in.(reservee,en_cours),and(status.eq.terminee,end.gte.${since})`),
       sb.from("payments").select("*").eq("org_id", org.id),
       sb.from("maintenances").select("*").eq("org_id", org.id).gte("start", new Date(now.getTime() - 2 * 864e5).toISOString()),
-      sb.from("booking_requests").select("id, status, name, category, start, end, created_at").eq("org_id", org.id).eq("status", "nouvelle")
+      sb.from("booking_requests").select("id, status, name, category, start, end, created_at").eq("org_id", org.id).eq("status", "nouvelle"),
+      sb.from("maintenance_plans").select("*").eq("org_id", org.id).eq("active", true),
+      sb.from("invoices").select("reservation_id, total_ttc").eq("org_id", org.id)
     ]);
-    const failed = [vehicles, clients, reservations, payments, maintenances, requests].find((r) => r.error);
+    const failed = [vehicles, clients, reservations, payments, maintenances, requests, plans, invoices].find((r) => r.error);
     if (failed) {
       report.push({ org: org.name, error: failed.error.message });
       continue;
@@ -342,13 +441,15 @@ Deno.serve(async (req) => {
         reservations: toApp(reservations.data),
         payments: toApp(payments.data),
         maintenances: toApp(maintenances.data),
-        bookingRequests: toApp(requests.data)
+        bookingRequests: toApp(requests.data),
+        plans: toApp(plans.data),
+        invoices: toApp(invoices.data)
       },
       now,
       offset
     );
-    const day = new Date(localDay(now, offset).start + offset * 6e4).toISOString().slice(0, 10);
-    const dateLabel = day.split("-").reverse().join("/");
+    const day2 = new Date(localDay(now, offset).start + offset * 6e4).toISOString().slice(0, 10);
+    const dateLabel = day2.split("-").reverse().join("/");
     for (const m of recipients) {
       const mail = digestEmail(org.name, alertsFor(all, m.role), appUrl, dateLabel);
       if (!mail) {
@@ -359,7 +460,7 @@ Deno.serve(async (req) => {
         report.push({ org: org.name, to: m.email, subject: mail.subject, simulated: true });
         continue;
       }
-      const { data: claimed } = await sb.from("digest_log").upsert({ org_id: org.id, user_id: m.user_id, sent_on: day, alerts: alertsFor(all, m.role).length }, { onConflict: "org_id,user_id,sent_on", ignoreDuplicates: true }).select("user_id");
+      const { data: claimed } = await sb.from("digest_log").upsert({ org_id: org.id, user_id: m.user_id, sent_on: day2, alerts: alertsFor(all, m.role).length }, { onConflict: "org_id,user_id,sent_on", ignoreDuplicates: true }).select("user_id");
       if (!claimed?.length) {
         report.push({ org: org.name, to: m.email, skipped: "d\xE9j\xE0 envoy\xE9 aujourd\u2019hui" });
         continue;
@@ -371,11 +472,11 @@ Deno.serve(async (req) => {
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) {
-        await sb.from("digest_log").delete().match({ org_id: org.id, user_id: m.user_id, sent_on: day });
+        await sb.from("digest_log").delete().match({ org_id: org.id, user_id: m.user_id, sent_on: day2 });
         report.push({ org: org.name, to: m.email, error: out.message ?? `HTTP ${res.status}` });
         continue;
       }
-      await sb.from("digest_log").update({ provider_id: out.id ?? null }).match({ org_id: org.id, user_id: m.user_id, sent_on: day });
+      await sb.from("digest_log").update({ provider_id: out.id ?? null }).match({ org_id: org.id, user_id: m.user_id, sent_on: day2 });
       report.push({ org: org.name, to: m.email, subject: mail.subject, sent: true });
     }
   }

@@ -68,6 +68,7 @@ export const SECTIONS: Section[] = [
     tabs: [
       { to: '/parametres', label: 'Entreprise et compte' },
       { to: '/equipe', label: 'Équipe', roles: ['direction'] },
+      { to: '/journal', label: 'Journal des actions', roles: ['direction'] },
     ],
   },
 ];

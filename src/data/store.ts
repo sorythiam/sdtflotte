@@ -1,7 +1,7 @@
 import type { BillingSettings } from '../domain/billing';
 import type { BookingRequest, BookingRequestInput, BookingStatus, PublicBookingInfo } from '../domain/booking';
 import type { ContractSettings } from '../domain/contract';
-import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
+import type { AuditEntry, Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
 
 export type Row<T extends TableName> = Tables[T];
 export type NewRow<T extends TableName> = Omit<Tables[T], 'id'>;
@@ -46,6 +46,8 @@ export interface Store {
   inspectionPhotoUrls(paths: string[]): Promise<Record<string, string>>;
   // Pièces des clients (identité, permis, photo) : espace privé, liens temporaires
   uploadClientDocument(image: Blob, clientId: string): Promise<string>;
+  // Journal des actions (direction)
+  listAudit(limit?: number): Promise<AuditEntry[]>;
   clientDocumentUrls(paths: string[]): Promise<Record<string, string>>;
   deleteClientDocument(path: string): Promise<void>;
   // Réservation en ligne : pages publiques (sans connexion) et traitement des demandes

@@ -134,6 +134,11 @@ export interface Client {
   verifiedAt?: string | null;
   verifiedBy?: string | null;
   scoreReason?: string | null; // motif d'un client à surveiller ou blacklisté
+  // Contrat cadre (entreprises surtout) : remise en %, ou prix par jour négociés par catégorie
+  dealDiscount?: number;
+  dealRates?: Record<string, number>;
+  dealTerms?: string | null;
+  dealUntil?: string | null;
 }
 
 export type IdType = 'cni' | 'passeport' | 'carte_cedeao' | 'carte_sejour' | 'autre';
@@ -217,6 +222,34 @@ export interface Maintenance {
   start: string;
   end: string;
   cost: number;
+  provider?: string | null; // garage ou prestataire
+  parts?: string | null; // pièces changées
+  mileage?: number | null; // kilométrage à l'intervention
+  planId?: string | null; // plan d'entretien concerné
+}
+
+/** Plan d'entretien périodique : tous les X km et/ou tous les X mois. */
+export interface MaintenancePlan {
+  id: string;
+  vehicleId: string;
+  label: string;
+  everyKm: number | null;
+  everyMonths: number | null;
+  lastKm: number | null;
+  lastDate: string | null; // AAAA-MM-JJ
+  active: boolean;
+  createdAt: string;
+}
+
+export interface AuditEntry {
+  id: string | number;
+  at: string;
+  userEmail: string | null;
+  tableName: string;
+  rowId: string | null;
+  action: 'creation' | 'modification' | 'suppression';
+  label: string | null;
+  changes: string | null;
 }
 
 export type ExpenseKind = 'carburant' | 'pneus' | 'reparation' | 'pieces' | 'amende' | 'assurance' | 'taxes' | 'peage' | 'lavage' | 'autre';
@@ -247,6 +280,7 @@ export interface Tables {
   drivers: Driver;
   packages: Package;
   reservation_changes: ReservationChange;
+  maintenance_plans: MaintenancePlan;
 }
 export type TableName = keyof Tables;
 

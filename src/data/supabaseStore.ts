@@ -1,7 +1,7 @@
 import { storagePath } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName } from '../domain/types';
+import type { AuditEntry, Invitation, Member, Organization, Role, SubscriptionRequest, TableName } from '../domain/types';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
 import type { BookingRequest, BookingRequestInput, BookingStatus, PublicBookingInfo } from '../domain/booking';
 
@@ -287,6 +287,17 @@ export class SupabaseStore implements Store {
 
   async inspectionPhotoUrls(paths: string[]): Promise<Record<string, string>> {
     return this.signed(INSPECTION_BUCKET, paths);
+  }
+
+  async listAudit(limit = 200): Promise<AuditEntry[]> {
+    const { data, error } = await this.sb
+      .from('audit_log')
+      .select('id, at, user_email, table_name, row_id, action, label, changes')
+      .eq('org_id', this.orgId)
+      .order('at', { ascending: false })
+      .limit(limit);
+    if (error) throw friendly(error);
+    return (data ?? []).map((r) => rowToApp<AuditEntry>(r));
   }
 
   async uploadClientDocument(image: Blob, clientId: string): Promise<string> {

@@ -1,5 +1,5 @@
 import { billingSettings, buildInvoice, nextInvoiceNumber, type Invoice } from '../domain/billing';
-import type { Client, Driver, Expense, Incident, Package, Maintenance, Payment, Rate, Reservation, Tables, Vehicle } from '../domain/types';
+import type { Client, Driver, MaintenancePlan, Expense, Incident, Package, Maintenance, Payment, Rate, Reservation, Tables, Vehicle } from '../domain/types';
 
 // Données d'exemple, recalées sur la date du jour pour que la démo soit toujours parlante.
 
@@ -56,7 +56,7 @@ export function seed(now = new Date()): Db {
     c('c-teranga', 'Mission Teranga Tours', '+221 33 800 00 03', { kind: 'entreprise', licenseExpiry: null, address: 'Avenue Cheikh Anta Diop', city: 'Dakar', taxId: '006120987 2V2', tradeRegister: 'SN-DKR-2019-B-04521', contactName: 'Fatou Diallo', contactRole: 'Directrice des opérations', contactPhone: '+221 78 110 45 45' }),
     c('c-ndiaye', 'Moussa Ndiaye', '+221 76 000 00 04'),
     c('c-fall', 'Ousmane Fall', '+221 78 000 00 05', { score: 'surveiller', scoreReason: 'Deux retours en retard et une rayure non signalée', idType: 'cni', idNumber: '1 761 1988 04411', licenseNumber: 'SN-TH-2010-02231', licenseExpiry: day(now, -12) }),
-    c('c-sante', 'ONG Santé Plus', '+221 33 800 00 06', { kind: 'entreprise', licenseExpiry: null, address: 'Sacré-Cœur 3, villa 9012', city: 'Dakar', contactName: 'Dr Aminata Kane', contactRole: 'Coordinatrice', contactPhone: '+221 76 300 88 21' }),
+    c('c-sante', 'ONG Santé Plus', '+221 33 800 00 06', { dealDiscount: 10, dealRates: { Minibus: 85000 }, dealTerms: 'Contrat cadre 2026 : minibus à 85 000 FCFA/jour, 10 % sur les autres catégories, facturation mensuelle à 30 jours.', dealUntil: day(now, 220), kind: 'entreprise', licenseExpiry: null, address: 'Sacré-Cœur 3, villa 9012', city: 'Dakar', contactName: 'Dr Aminata Kane', contactRole: 'Coordinatrice', contactPhone: '+221 76 300 88 21' }),
   ];
 
   const year = now.getFullYear();
@@ -101,7 +101,7 @@ export function seed(now = new Date()): Db {
     { id: 'm-2', vehicleId: 'v-tucson', label: 'Vidange', start: at(now, 1, 8), end: at(now, 1, 18), cost: 45000 },
   ];
 
-  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now), drivers: seedDrivers(now), packages: seedPackages(now), reservation_changes: [] };
+  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now), drivers: seedDrivers(now), packages: seedPackages(now), reservation_changes: [], maintenance_plans: seedPlans(now) };
 }
 
 /** Factures des réservations d'exemple, numérotées dans l'ordre de création. */
@@ -167,5 +167,17 @@ export function seedPackages(now = new Date()): Package[] {
     k('k-3', 'Transfert AIBD ↔ Saly', 'Minibus', 75000, 4),
     k('k-4', 'Excursion journée Lac Rose', '4x4', 90000, 9),
     k('k-5', 'Excursion journée Lac Rose', 'Bus', 250000, 9),
+  ];
+}
+
+export function seedPlans(now = new Date()): MaintenancePlan[] {
+  const p = (id: string, vehicleId: string, label: string, everyKm: number | null, everyMonths: number | null, lastKm: number | null, lastDays: number): MaintenancePlan => ({
+    id, vehicleId, label, everyKm, everyMonths, lastKm, lastDate: day(now, lastDays), active: true, createdAt: at(now, -400, 9),
+  });
+  return [
+    p('pl-1', 'v-hiace', 'Vidange moteur et filtre', 10000, 6, 78600, -150), // dépassé
+    p('pl-2', 'v-hilux', 'Vidange moteur et filtre', 10000, 6, 51700, -100), // bientôt (500 km)
+    p('pl-3', 'v-coaster', 'Révision complète', 30000, 12, 110000, -200),
+    p('pl-4', 'v-tucson', 'Climatisation', null, 12, null, -355), // dans 10 jours
   ];
 }

@@ -4,6 +4,7 @@ import { Lightbox, shrinkPhoto } from '../components/photos';
 import { Empty, ErrorBox, Modal, ReservationBadge, ScoreBadge } from '../components/ui';
 import { VerificationBadge } from '../components/VerificationBadge';
 import { contractSettings } from '../domain/contract';
+import { payState } from '../domain/billing';
 import { dateLong, dateShort, money } from '../domain/format';
 import type { Client, DocSlot, IdType, Incident, IncidentKind } from '../domain/types';
 import { DOC_SLOTS, historyOf, ID_TYPES, INCIDENT_KINDS, incidentLabel, verificationOf } from '../domain/verification';
@@ -17,6 +18,7 @@ export function ClientDetail() {
   const [editing, setEditing] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
   const [incidentOpen, setIncidentOpen] = useState(false);
+  const [dealOpen, setDealOpen] = useState(false);
   const c = data.clients.find((x) => x.id === id);
   const docPaths = useMemo(() => Object.values(c?.documents ?? {}).filter(Boolean) as string[], [c?.documents]);
   const seeDocs = can('direction', 'agent');
@@ -39,6 +41,20 @@ export function ClientDetail() {
   const company = c.kind === 'entreprise';
   const docs = c.documents ?? {};
   const shown = DOC_SLOTS.filter((d) => docs[d.slot]);
+  const hasDeal = !!c.dealDiscount || Object.keys(c.dealRates ?? {}).length > 0;
+  const dealExpired = !!c.dealUntil && c.dealUntil < now.toISOString().slice(0, 10);
+  const clientInvoices = data.invoices.filter((i) => i.clientId === c.id).sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.number.localeCompare(a.number));
+  const fin = reservations.reduce(
+    (acc, r) => {
+      const st = payState(r, data.invoices, data.payments, now);
+      acc.billed += st.owed;
+      acc.paid += st.paid;
+      acc.due += st.remaining;
+      if (st.status === 'en_retard') acc.late += st.remaining;
+      return acc;
+    },
+    { billed: 0, paid: 0, due: 0, late: 0 },
+  );
 
   async function patch(p: Partial<Client>, msg: string) {
     try {
@@ -167,6 +183,53 @@ export function ClientDetail() {
         </div>
 
         <div className="col-1 stack" style={{ gap: 'var(--space-6)' }}>
+          {(company || c.dealDiscount || Object.keys(c.dealRates ?? {}).length > 0) && (
+            <section className="card" aria-labelledby="cadre">
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <h2 id="cadre">Contrat cadre</h2>
+                {can('direction') && <button className="btn btn-sm" onClick={() => setDealOpen(true)}>{hasDeal ? 'Modifier' : 'Créer'}</button>}
+              </div>
+              {!hasDeal ? (
+                <Empty>Aucune condition négociée : ce client paie la grille standard.</Empty>
+              ) : (
+                <>
+                  {dealExpired && <div className="notice notice-danger">Contrat cadre expiré le {dateLong(c.dealUntil!)} : la grille standard s’applique.</div>}
+                  <dl className="facts">
+                    {!!c.dealDiscount && <div><dt>Remise</dt><dd>{c.dealDiscount} % sur la location</dd></div>}
+                    {Object.entries(c.dealRates ?? {}).map(([cat, price]) => <div key={cat}><dt>{cat}</dt><dd>{money(price)} / jour</dd></div>)}
+                    {c.dealUntil && <div><dt>Valable jusqu’au</dt><dd>{dateLong(c.dealUntil)}</dd></div>}
+                  </dl>
+                  {c.dealTerms && <p className="small" style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{c.dealTerms}</p>}
+                  <span className="hint">Appliqué automatiquement aux nouvelles réservations. Chauffeur et frais de mission au tarif normal.</span>
+                </>
+              )}
+            </section>
+          )}
+
+          {can('direction', 'agent', 'comptable') && (
+            <section className="card" aria-labelledby="fin">
+              <h2 id="fin">Factures et paiements</h2>
+              <dl className="facts">
+                <div><dt>Facturé TTC</dt><dd>{money(fin.billed)}</dd></div>
+                <div><dt>Encaissé</dt><dd>{money(fin.paid)}</dd></div>
+                <div><dt>Reste dû</dt><dd style={{ color: fin.due > 0 ? 'var(--ocre-text)' : 'var(--success)' }}>{fin.due > 0 ? money(fin.due) : 'Rien'}</dd></div>
+                {fin.late > 0 && <div><dt>Dont en retard</dt><dd style={{ color: 'var(--danger)' }}>{money(fin.late)}</dd></div>}
+              </dl>
+              {clientInvoices.length > 0 && (
+                <ul className="alert-list">
+                  {clientInvoices.slice(0, 8).map((i) => (
+                    <li key={i.id}>
+                      <Link to={`/factures/${i.id}`} className="alert-item" style={{ borderLeftColor: i.kind === 'avoir' ? 'var(--ink-muted)' : 'var(--atlantique)' }}>
+                        <strong>{i.kind === 'avoir' ? 'Avoir' : 'Facture'} {i.number} · {money(i.totalTtc)}</strong>
+                        <span className="small muted">{dateShort(i.issueDate)}{i.kind !== 'avoir' ? ` · échéance ${dateShort(i.dueDate)}` : ''}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
           <section className="card" aria-labelledby="comp">
             <h2 id="comp">Comportement</h2>
             <dl className="facts">
@@ -218,6 +281,7 @@ export function ClientDetail() {
       {editing && <ClientForm id={c.id} onClose={() => setEditing(false)} />}
       {docsOpen && <DocumentsForm client={c} onClose={() => setDocsOpen(false)} />}
       {incidentOpen && <IncidentForm client={c} onClose={() => setIncidentOpen(false)} />}
+      {dealOpen && <DealForm client={c} onClose={() => setDealOpen(false)} />}
       {viewer !== null && (
         <Lightbox photos={shown.map((d) => urls[docs[d.slot]!]).filter(Boolean)} start={viewer} title={`Pièces de ${c.name}`} onClose={() => setViewer(null)} />
       )}
@@ -394,6 +458,69 @@ function IncidentForm({ client, onClose }: { client: Client; onClose: () => void
         <div className="modal-foot">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
           <button className="btn btn-primary" disabled={busy}>Enregistrer</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+/** Contrat cadre : remise globale et/ou prix par jour négociés par catégorie, conditions, validité. */
+function DealForm({ client, onClose }: { client: Client; onClose: () => void }) {
+  const { data, store, refresh, toast } = useData();
+  const [discount, setDiscount] = useState(String(client.dealDiscount ?? 0));
+  const [rates, setRates] = useState<Record<string, string>>(
+    Object.fromEntries(data.rates.map((r) => [r.category, client.dealRates?.[r.category] ? String(client.dealRates[r.category]) : ''])),
+  );
+  const [terms, setTerms] = useState(client.dealTerms ?? '');
+  const [until, setUntil] = useState(client.dealUntil ?? '');
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const d = Math.round(Number(discount) || 0);
+    if (d < 0 || d > 60) return setError('Remise entre 0 et 60 %.');
+    const dealRates: Record<string, number> = {};
+    for (const [cat, v] of Object.entries(rates)) {
+      if (!v) continue;
+      const n = Math.round(Number(v));
+      if (!(n > 0)) return setError(`Prix invalide pour ${cat}.`);
+      dealRates[cat] = n;
+    }
+    try {
+      await store.update('clients', client.id, { dealDiscount: d, dealRates, dealTerms: terms.trim() || null, dealUntil: until || null });
+      await refresh();
+      toast('Contrat cadre enregistré');
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  return (
+    <Modal title={`Contrat cadre · ${client.name}`} onClose={onClose}>
+      <form className="stack" onSubmit={submit}>
+        <div className="grid-2">
+          <label className="field">Remise sur la location (%)<input type="number" min={0} max={60} value={discount} onChange={(e) => setDiscount(e.target.value)} /></label>
+          <label className="field">Valable jusqu’au<input type="date" value={until} onChange={(e) => setUntil(e.target.value)} /></label>
+        </div>
+        <fieldset className="form-group stack">
+          <legend>Prix par jour négociés (facultatif)</legend>
+          <span className="hint">Remplace la grille et la remise pour la catégorie. Laissez vide pour appliquer la remise.</span>
+          <div className="grid-2">
+            {data.rates.map((r) => (
+              <label key={r.id} className="field">
+                {r.category} <span className="muted small">(grille : {money(r.daily)})</span>
+                <input type="number" min={0} value={rates[r.category] ?? ''} onChange={(e) => setRates({ ...rates, [r.category]: e.target.value })} />
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <label className="field">Conditions<textarea rows={3} maxLength={2000} value={terms} onChange={(e) => setTerms(e.target.value)} placeholder="Ex. : facturation mensuelle à 30 jours, véhicule de remplacement sous 24 h…" /></label>
+        <ErrorBox error={error} />
+        <div className="modal-foot">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn btn-primary">Enregistrer</button>
         </div>
       </form>
     </Modal>

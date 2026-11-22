@@ -8,7 +8,7 @@ import { contractSettings, FUEL_LEVELS, INSPECTION_ZONES, parseTerms } from '../
 import { dateLong, dateTime, money, num } from '../domain/format';
 import { balanceDue, billedDays, cautionHeld } from '../domain/rules';
 import { useData } from '../state/DataContext';
-import { formulaLabel, kmIncludedFor } from '../domain/tariff';
+import { dealFor, dealLabel, formulaLabel, kmIncludedFor } from '../domain/tariff';
 
 const kindText = { acompte: 'Acompte', solde: 'Solde', caution: 'Caution', frais: 'Frais', remboursement_caution: 'Remboursement de caution', remboursement: 'Remboursement du trop-perçu' };
 const blank = '……………………';
@@ -42,6 +42,7 @@ export function Contract() {
   const driver = data.drivers.find((d) => d.id === r.driverId);
   const mission = r.missionFees ?? 0;
   const kmIncl = kmIncludedFor(r, rate);
+  const deal = dealFor(c, v?.category, r.start);
   const changes = data.reservation_changes.filter((x) => x.reservationId === r.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   // Part chauffeur bornée au total, au cas où le tarif aurait changé depuis la réservation.
   const driverTotal = !r.withDriver || !rate || r.formula === 'forfait'
@@ -161,6 +162,7 @@ export function Contract() {
           <p className="ct-small">
             {kmIncl === null ? 'Kilométrage non compté (forfait).' : <>Kilométrage inclus : {rate ? `${num(kmIncl)} km` : blank}, puis {rate ? money(rate.extraKm) : blank} par km supplémentaire.</>} Au-delà d’une heure de retard, chaque journée entamée est facturée au tarif journalier.
           </p>
+          {deal && <p className="ct-small"><strong>Contrat cadre :</strong> {dealLabel(deal)}{c?.dealUntil ? `, valable jusqu’au ${dateLong(c.dealUntil)}` : ''}.</p>}
           <p className="ct-small">
             <strong>Modalités de paiement :</strong> {termsFor(billing.settings, c).label}.
             {invoices.length > 0 && <> Facture{invoices.length > 1 ? 's' : ''} {invoices.map((i) => i.number).join(', ')}.</>}

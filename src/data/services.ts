@@ -1,6 +1,6 @@
 import { findConflicts, isActive, nextContractNumber, overlaps } from '../domain/rules';
 import { buildAdjustment, buildCreditNote, buildFeesInvoice, buildInvoice, type BillingSettings, type Invoice, type NewInvoice } from '../domain/billing';
-import { fitsPassengers, passengerSeats, priceFor } from '../domain/tariff';
+import { dealFor, fitsPassengers, passengerSeats, priceFor } from '../domain/tariff';
 import type { Client, Driver, Formula, Maintenance, Package, Rate, Reservation, Vehicle } from '../domain/types';
 import type { Store } from './store';
 
@@ -28,6 +28,7 @@ export interface DataSnapshot {
   vehicles: (Pick<Vehicle, 'id' | 'category'> & Partial<Vehicle>)[];
   drivers?: Driver[];
   packages?: Package[];
+  clients?: Client[];
 }
 
 /** Le chauffeur est-il déjà pris sur cette période ? */
@@ -133,7 +134,8 @@ export async function createReservation(
   if (formula !== 'forfait' && !rate) throw new Error(`Aucun tarif pour la catégorie ${vehicle?.category ?? '?'}. Ajoutez-le dans Tarifs.`);
   // Bus, minibus et forfaits : toujours avec chauffeur.
   const withDriver = input.withDriver || !!vehicle?.driverRequired || formula === 'forfait';
-  const q = priceFor({ formula, rate, pkg, start: input.start, end: input.end, withDriver, missionFees: input.missionFees });
+  const deal = dealFor(snap.clients?.find((c) => c.id === input.clientId), vehicle?.category, input.start);
+  const q = priceFor({ formula, rate, pkg, start: input.start, end: input.end, withDriver, missionFees: input.missionFees, deal });
   checkCrew(snap, vehicle, { ...input, withDriver });
   const number = nextContractNumber(snap.reservations.map((r) => r.number), new Date(input.start).getFullYear());
   const created = await store.insert('reservations', {

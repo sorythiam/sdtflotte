@@ -53,6 +53,13 @@ describe('alertes', () => {
     expect(a[0].level).toBe('urgent');
   });
 
+  it('prévient la veille d’un retour', () => {
+    const a = run([r('6', { status: 'en_cours', start: '2026-11-18T09:00:00Z', end: '2026-11-22T10:00:00Z' })], { payments: [] });
+    expect(a.find((x) => x.kind === 'retour_demain')?.title).toContain('Retour demain à 10h00');
+    const b = run([r('7', { status: 'en_cours', start: '2026-11-18T09:00:00Z', end: '2026-11-24T10:00:00Z' })], { payments: [] });
+    expect(b.some((x) => x.kind === 'retour_demain')).toBe(false);
+  });
+
   it('vérifie le permis sauf location avec chauffeur', () => {
     const clients = [c('c1', { licenseExpiry: '2026-11-22' })];
     const res = r('1', { status: 'reservee', start: '2026-11-21T14:00:00Z', end: '2026-11-24T14:00:00Z' });

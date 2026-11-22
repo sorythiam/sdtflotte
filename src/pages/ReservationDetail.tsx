@@ -9,7 +9,7 @@ import { departureCheck } from '../domain/verification';
 import { contractSettings } from '../domain/contract';
 import { useBilling } from '../state/useBilling';
 import { amendReservation, creditReservation, driverConflict, invoiceFees, invoiceReservation } from '../data/services';
-import { kmIncludedFor, priceFor } from '../domain/tariff';
+import { dealFor, kmIncludedFor, priceFor } from '../domain/tariff';
 import { payeeLines, payState, payStatusLabel, termsFor } from '../domain/billing';
 import { COUNTRY_CALLING_CODE, whatsappLink } from '../domain/booking';
 
@@ -614,7 +614,8 @@ function AmendDialog({ onClose }: { onClose: () => void }) {
       hint = 'Forfait : le prix ne change pas avec la durée. Ajustez le montant si besoin.';
     } else {
       try {
-        computed = priceFor({ formula: r.formula ?? 'jour', rate, start: sIso, end: eIso, withDriver: r.withDriver, missionFees: r.missionFees }).total;
+        const deal = dealFor(data.clients.find((c) => c.id === r.clientId), v?.category, sIso);
+        computed = priceFor({ formula: r.formula ?? 'jour', rate, start: sIso, end: eIso, withDriver: r.withDriver, missionFees: r.missionFees, deal }).total;
       } catch (e) {
         hint = (e as Error).message;
       }

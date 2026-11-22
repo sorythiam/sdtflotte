@@ -5,6 +5,7 @@ import { Layout } from './components/Layout';
 import { Clients } from './pages/Clients';
 import { VehicleDetail } from './pages/VehicleDetail';
 import { Drivers } from './pages/Drivers';
+import { AuditLog } from './pages/AuditLog';
 import { ClientDetail } from './pages/ClientDetail';
 import { Dashboard } from './pages/Dashboard';
 import { Team } from './pages/Team';
@@ -52,6 +53,7 @@ function App() {
         <Route path="maintenance" element={<Maintenance />} />
         <Route path="tarifs" element={<Rates />} />
         <Route path="equipe" element={<Team />} />
+        <Route path="journal" element={<AuditLog />} />
         <Route path="parametres" element={<Settings />} />
         <Route path="rapports" element={<Reports />} />
         <Route path="alertes" element={<Navigate to="/" replace />} />

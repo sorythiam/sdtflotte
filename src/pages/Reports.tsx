@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react';
 import { Empty, ErrorBox } from '../components/ui';
 import { money, num } from '../domain/format';
 import { expenseLabel, expensesIn } from '../domain/expenses';
-import { computeReport, DEFAULT_ACCOUNTS, journalEntries, monthlyRevenue, type AccountPlan, type Period } from '../domain/reports';
+import { byCategory, computeLosses, computeReport, DEFAULT_ACCOUNTS, journalEntries, monthlyRevenue, type AccountPlan, type Period } from '../domain/reports';
 import { useData } from '../state/DataContext';
+import { payState } from '../domain/billing';
 
 type Preset = 'mois' | 'mois-1' | '3mois' | 'annee' | 'perso';
 
@@ -62,6 +63,11 @@ export function Reports() {
   }, [preset, now, custom]);
   const r = useMemo(() => computeReport(data, period), [data, period]);
   const months = useMemo(() => monthlyRevenue(data.reservations, now, 6), [data.reservations, now]);
+  const cats = useMemo(() => byCategory(r, data.vehicles), [r, data.vehicles]);
+  const losses = useMemo(
+    () => computeLosses({ ...data, remaining: (x) => payState(x, data.invoices, data.payments, now).remaining }, period),
+    [data, period, now],
+  );
   const maxMonth = Math.max(1, ...months.map((m) => m.revenue));
   const journal = useMemo(() => journalEntries(data.payments, data.reservations, data.clients, period, plan, data.invoices), [data, period, plan]);
   const label = `${new Date(period.from).toLocaleDateString('fr-FR')} – ${new Date(Date.parse(period.to) - 1).toLocaleDateString('fr-FR')}`;
@@ -229,6 +235,49 @@ export function Reports() {
           <span className="kpi-label">Taux d’occupation</span>
           <span className="kpi-value">{pct(r.occupancy)}</span>
           <span className="small muted">jours loués / jours disponibles</span>
+        </div>
+      </section>
+
+      <section className="cols">
+        <div className="card col-2" aria-labelledby="parcat">
+          <h2 id="parcat">Occupation par catégorie</h2>
+          <div className="table-wrap">
+            <table className="data">
+              <thead><tr><th>Catégorie</th><th className="right">Véhicules</th><th className="right">Jours loués</th><th>Occupation</th><th className="right">CA par véhicule</th></tr></thead>
+              <tbody>
+                {cats.map((c) => (
+                  <tr key={c.category}>
+                    <td><strong>{c.category}</strong></td>
+                    <td className="right num">{c.vehicles}</td>
+                    <td className="right num">{num(Math.round(c.rentedDays))}</td>
+                    <td>
+                      <div className="row" style={{ gap: 8, flexWrap: 'nowrap' }}>
+                        <span style={{ width: 90, height: 6, borderRadius: 3, background: 'var(--sable-line)', display: 'inline-block' }}>
+                          <span style={{ display: 'block', height: 6, borderRadius: 3, width: pct(c.occupancy).replace(' ', ''), background: 'var(--atlantique)' }} />
+                        </span>
+                        <span className="num" style={{ whiteSpace: 'nowrap' }}>{pct(c.occupancy)}</span>
+                      </div>
+                    </td>
+                    <td className="right num">{money(c.revenuePerVehicle)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <span className="hint">Une catégorie peu occupée : baisser le prix, la proposer en forfait, ou vendre un véhicule. Très occupée : augmenter le prix ou la flotte.</span>
+        </div>
+        <div className="card col-1" aria-labelledby="pertes">
+          <h2 id="pertes">Pertes de la période</h2>
+          <dl className="facts">
+            <div><dt>Immobilisation pour entretien</dt><dd>{money(losses.downtimeValue)}<br /><span className="small muted">{num(losses.downtimeDays)} jour(s) au tarif jour</span></dd></div>
+            <div><dt>Retards non facturés</dt><dd>{money(losses.lateUnbilled)}<br /><span className="small muted">{losses.lateDays} jour(s) de retard constatés</span></dd></div>
+            <div><dt>Impayés sur contrats terminés</dt><dd>{money(losses.unpaid)}</dd></div>
+            <div><dt>Réservations annulées</dt><dd>{money(losses.cancelled)}</dd></div>
+            <div><dt><strong>Total chiffré</strong></dt><dd><strong style={{ color: losses.total ? 'var(--danger)' : undefined }}>{money(losses.total)}</strong></dd></div>
+          </dl>
+          {losses.damagesUnbilled > 0 && (
+            <div className="notice notice-danger">{losses.damagesUnbilled} retour(s) avec un dégât nouveau à l’état des lieux et aucun frais facturé.</div>
+          )}
         </div>
       </section>
 

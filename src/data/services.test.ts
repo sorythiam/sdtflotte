@@ -159,3 +159,17 @@ describe('loueurs touristiques (mode démo)', () => {
     ).rejects.toThrow(/déjà réservé/);
   });
 });
+
+describe('contrat cadre (mode démo)', () => {
+  it('applique le prix négocié ou la remise, pas après la date de fin', async () => {
+    const store = new DemoStore(memory());
+    const snap = { ...(await snapshot(store)), clients: await store.list('clients'), drivers: await store.list('drivers'), packages: await store.list('packages') };
+    const at = (d: number, h: number) => { const x = new Date(Date.now() + d * 86400000); x.setHours(h, 0, 0, 0); return x.toISOString(); };
+    const mini = await createReservation(store, snap, { vehicleId: 'v-hiace', clientId: 'c-sante', start: at(70, 8), end: at(72, 8), withDriver: true, notes: null });
+    expect(mini.total).toBe(2 * (85000 + 20000)); // prix négocié minibus + chauffeur au tarif normal
+    const berline = await createReservation(store, snap, { vehicleId: 'v-dzire', clientId: 'c-sante', start: at(74, 8), end: at(76, 8), withDriver: false, notes: null });
+    expect(berline.total).toBe(2 * 31500); // 35 000 − 10 %
+    const later = await createReservation(store, snap, { vehicleId: 'v-dzire', clientId: 'c-sante', start: at(300, 8), end: at(302, 8), withDriver: false, notes: null });
+    expect(later.total).toBe(2 * 35000); // contrat expiré
+  });
+});

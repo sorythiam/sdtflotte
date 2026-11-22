@@ -274,3 +274,107 @@ export function journalEntries(
   }
   return out;
 }
+
+// ---------------------------------------------------------------- occupation par catégorie
+
+export interface CategoryLine {
+  category: string;
+  vehicles: number;
+  rentedDays: number;
+  occupancy: number; // 0 à 1
+  revenue: number;
+  revenuePerVehicle: number;
+}
+
+/** Occupation et chiffre d'affaires par catégorie, à partir des lignes par véhicule. */
+export function byCategory(report: Pick<Report, 'vehicles' | 'days'>, vehicles: Vehicle[]): CategoryLine[] {
+  const inService = new Set(vehicles.filter((v) => !v.outOfService).map((v) => v.id));
+  const map = new Map<string, CategoryLine>();
+  for (const l of report.vehicles) {
+    const c = map.get(l.category) ?? { category: l.category, vehicles: 0, rentedDays: 0, occupancy: 0, revenue: 0, revenuePerVehicle: 0 };
+    if (inService.has(l.vehicleId)) c.vehicles += 1;
+    c.rentedDays += l.rentedDays;
+    c.revenue += l.revenue;
+    map.set(l.category, c);
+  }
+  return [...map.values()]
+    .map((c) => ({
+      ...c,
+      occupancy: report.days && c.vehicles ? Math.min(1, c.rentedDays / (report.days * c.vehicles)) : 0,
+      revenuePerVehicle: c.vehicles ? Math.round(c.revenue / c.vehicles) : 0,
+    }))
+    .sort((a, b) => b.occupancy - a.occupancy);
+}
+
+// ---------------------------------------------------------------- pertes
+
+export interface Losses {
+  downtimeDays: number; // jours d'immobilisation pour entretien
+  downtimeValue: number; // manque à gagner estimé au tarif jour de la catégorie
+  lateDays: number; // jours de retard constatés à l'état des lieux de retour
+  lateUnbilled: number; // retards sans frais facturés, au tarif du contrat
+  damagesUnbilled: number; // retours avec dégât nouveau et sans frais facturés
+  unpaid: number; // reste dû sur les contrats terminés dans la période
+  cancelled: number; // montant des réservations annulées qui devaient démarrer dans la période
+  total: number; // pertes chiffrées (hors dégâts, non chiffrés)
+}
+
+interface InspectionLike {
+  reservationId: string;
+  kind: 'depart' | 'retour';
+  doneAt: string;
+  items: { zone: string; status: 'ok' | 'dommage' }[];
+}
+
+export function computeLosses(
+  input: {
+    vehicles: Vehicle[]; reservations: Reservation[]; maintenances: Maintenance[]; rates: { category: string; daily: number }[];
+    inspections?: InspectionLike[]; remaining?: (r: Reservation) => number;
+  },
+  p: Period,
+): Losses {
+  const ps = Date.parse(p.from);
+  const pe = Date.parse(p.to);
+  const rateOf = (vehicleId: string) => {
+    const v = input.vehicles.find((x) => x.id === vehicleId);
+    return input.rates.find((r) => r.category === v?.category)?.daily ?? 0;
+  };
+  let downtimeDays = 0;
+  let downtimeValue = 0;
+  for (const m of input.maintenances) {
+    const d = overlapMs(Date.parse(m.start), Date.parse(m.end), ps, pe) / DAY;
+    if (d <= 0) continue;
+    const days = Math.max(d, 0.5);
+    downtimeDays += days;
+    downtimeValue += Math.round(days * rateOf(m.vehicleId));
+  }
+  const insp = input.inspections ?? [];
+  let lateDays = 0;
+  let lateUnbilled = 0;
+  let damagesUnbilled = 0;
+  let unpaid = 0;
+  for (const r of input.reservations) {
+    if (r.status !== 'terminee') continue;
+    const ret = insp.find((i) => i.reservationId === r.id && i.kind === 'retour');
+    const endInPeriod = Date.parse(r.end) >= ps && Date.parse(r.end) < pe;
+    if (ret && Date.parse(ret.doneAt) >= ps && Date.parse(ret.doneAt) < pe) {
+      const lateMs = Date.parse(ret.doneAt) - Date.parse(r.end) - 3600000;
+      if (lateMs > 0) {
+        const d = Math.ceil(lateMs / DAY);
+        lateDays += d;
+        if (!r.fees) lateUnbilled += d * r.dailyRate;
+      }
+      const dep = insp.find((i) => i.reservationId === r.id && i.kind === 'depart');
+      const newDamage = ret.items.some((it) => it.status === 'dommage' && dep?.items.find((x) => x.zone === it.zone)?.status !== 'dommage');
+      if (newDamage && !r.fees) damagesUnbilled += 1;
+    }
+    if (endInPeriod && input.remaining) unpaid += input.remaining(r);
+  }
+  const cancelled = input.reservations
+    .filter((r) => r.status === 'annulee' && Date.parse(r.start) >= ps && Date.parse(r.start) < pe)
+    .reduce((s, r) => s + r.total, 0);
+  return {
+    downtimeDays: Math.round(downtimeDays * 10) / 10, downtimeValue, lateDays, lateUnbilled, damagesUnbilled, unpaid, cancelled,
+    total: downtimeValue + lateUnbilled + unpaid + cancelled,
+  };
+}
