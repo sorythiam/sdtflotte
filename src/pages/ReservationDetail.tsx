@@ -567,22 +567,77 @@ function CheckinDialog({ onClose }: { onClose: () => void }) {
 }
 
 function CancelDialog({ onClose }: { onClose: () => void }) {
-  const { r, store, refresh, toast, data } = useCurrent();
+  const { r, store, refresh, toast, data, now } = useCurrent();
+  const billing = useBilling();
   const hasInvoice = data.invoices.some((i) => i.reservationId === r.id && i.kind !== 'avoir');
+  const ps = payState(r, data.invoices, data.payments, now);
+  const paid = Math.max(0, ps.paid);
+  const owed = Math.max(0, ps.owed);
+  type Choice = 'rembourser' | 'garder' | 'frais';
+  const [choice, setChoice] = useState<Choice>(paid > 0 ? 'garder' : 'rembourser');
+  const [fee, setFee] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cap = owed || r.total;
+  const keep = choice === 'rembourser' ? 0 : choice === 'garder' ? Math.min(paid, cap) : Math.max(0, Math.min(cap, Math.round(Number(fee) || 0)));
+  const diff = keep - paid; // > 0 : le client doit encore ; < 0 : à lui rembourser
+
   async function confirm() {
-    await store.update('reservations', r.id, { status: 'annulee' });
-    // Une facture émise ne se supprime pas : un avoir l'annule.
-    await creditReservation(store, data.invoices, r.id);
-    await refresh();
-    toast('Réservation annulée, le véhicule est libéré');
-    onClose();
+    setError(null);
+    if (choice === 'frais' && !(keep > 0)) return setError('Indiquez le montant des frais d’annulation.');
+    setBusy(true);
+    try {
+      await store.update('reservations', r.id, { status: 'annulee' });
+      // Une facture émise ne se supprime pas : un avoir l'annule, frais d'annulation déduits.
+      await creditReservation(store, data.invoices, r.id, new Date(), keep, {
+        r, client: data.clients.find((c) => c.id === r.clientId), settings: billing.settings,
+      });
+      await refresh();
+      toast(diff > 0 ? `Réservation annulée : le client doit encore ${money(diff)}` : diff < 0 ? `Réservation annulée : ${money(-diff)} à rembourser` : 'Réservation annulée, le véhicule est libéré');
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <Modal title={`Annuler ${r.number} ?`} onClose={onClose}>
-      <p style={{ margin: 0 }}>Le véhicule redevient disponible sur cette période. Les paiements déjà reçus restent à rembourser à part.{hasInvoice ? ' Un avoir est établi pour annuler la facture.' : ''}</p>
+      <div className="stack">
+        <p style={{ margin: 0 }}>
+          Le véhicule redevient disponible sur cette période.
+          {paid > 0 ? ` Le client a déjà versé ${money(paid)}.` : ' Le client n’a rien versé.'}
+          {hasInvoice ? ' La facture est annulée par un avoir, frais d’annulation déduits.' : ''}
+        </p>
+        <fieldset className="form-group stack">
+          <legend>Frais d’annulation</legend>
+          {paid > 0 && (
+            <label className="check">
+              <input type="radio" name="cx" checked={choice === 'garder'} onChange={() => setChoice('garder')} />
+              Garder ce qui a été versé ({money(Math.min(paid, cap))}) comme frais d’annulation
+            </label>
+          )}
+          <label className="check">
+            <input type="radio" name="cx" checked={choice === 'rembourser'} onChange={() => setChoice('rembourser')} />
+            {paid > 0 ? `Sans frais : rembourser les ${money(paid)} au client` : 'Sans frais'}
+          </label>
+          <label className="check">
+            <input type="radio" name="cx" checked={choice === 'frais'} onChange={() => setChoice('frais')} />
+            Autre montant de frais d’annulation (TTC)
+          </label>
+          {choice === 'frais' && (
+            <input type="number" min={1} max={cap} inputMode="numeric" value={fee} onChange={(e) => setFee(e.target.value)} placeholder={`Jusqu’à ${money(cap)}`} aria-label="Frais d’annulation" />
+          )}
+        </fieldset>
+        <div className={`notice${diff < 0 ? ' notice-danger' : ''}`}>
+          {keep > 0 ? <>Frais d’annulation conservés : <strong>{money(keep)}</strong>. </> : null}
+          {diff > 0 ? <>Le client vous devra encore <strong>{money(diff)}</strong>.</> : diff < 0 ? <>Vous devrez rembourser <strong>{money(-diff)}</strong> au client.</> : 'Rien à régler de part et d’autre.'}
+        </div>
+        <ErrorBox error={error} />
+      </div>
       <div className="modal-foot">
         <button type="button" className="btn btn-ghost" onClick={onClose}>Garder la réservation</button>
-        <button type="button" className="btn btn-danger" onClick={confirm}>Annuler la réservation</button>
+        <button type="button" className="btn btn-danger" disabled={busy} onClick={confirm}>Annuler la réservation</button>
       </div>
     </Modal>
   );

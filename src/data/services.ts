@@ -1,5 +1,5 @@
 import { findConflicts, isActive, nextContractNumber, overlaps } from '../domain/rules';
-import { buildAdjustment, buildCreditNote, buildFeesInvoice, buildInvoice, type BillingSettings, type Invoice, type NewInvoice } from '../domain/billing';
+import { buildAdjustment, buildCancellationFeeInvoice, buildCreditNote, buildFeesInvoice, buildInvoice, type BillingSettings, type Invoice, type NewInvoice } from '../domain/billing';
 import { dealFor, fitsPassengers, passengerSeats, priceFor } from '../domain/tariff';
 import type { Client, Driver, Formula, Maintenance, Package, Rate, Reservation, Vehicle } from '../domain/types';
 import type { Store } from './store';
@@ -80,23 +80,44 @@ export async function invoiceFees(store: Store, b: BillingContext, r: Reservatio
   return issueInvoice(store, buildFeesInvoice(r, client, b.settings, now, detail));
 }
 
-/** Avoirs pour toutes les factures encore actives d'une réservation annulée (avoirs partiels déjà émis déduits). */
-export async function creditReservation(store: Store, invoices: Invoice[], reservationId: string, now = new Date()): Promise<Invoice[]> {
+/**
+ * Annulation : avoirs sur les factures encore actives (avoirs partiels déjà émis déduits).
+ * `keepTtc` = frais d'annulation conservés (TTC), par exemple l'acompte versé : ils restent dus,
+ * et l'avoir ne porte que sur le reste. Sans facture, des frais d'annulation font l'objet d'une facture.
+ */
+export async function creditReservation(
+  store: Store, invoices: Invoice[], reservationId: string, now = new Date(), keepTtc = 0,
+  billing?: { r: Reservation; client?: Client; settings: BillingSettings },
+): Promise<Invoice[]> {
   const mine = invoices.filter((i) => i.reservationId === reservationId);
+  const active = mine.filter((i) => i.kind !== 'avoir').sort((x, y) => (x.kind === 'facture' ? -1 : 1) - (y.kind === 'facture' ? -1 : 1));
   const out: Invoice[] = [];
-  for (const inv of mine.filter((i) => i.kind !== 'avoir')) {
-    const already = mine.filter((a) => a.kind === 'avoir' && a.relatedInvoiceId === inv.id);
-    if (already.length === 0) {
+  if (active.length === 0) {
+    if (keepTtc > 0 && billing?.client) out.push(await issueInvoice(store, buildCancellationFeeInvoice(billing.r, billing.client, billing.settings, now, keepTtc)));
+    return out;
+  }
+  const vatRate = active[0].vatRate;
+  const leftOf = (inv: Invoice) => inv.totalHt + mine.filter((x) => x.kind === 'avoir' && x.relatedInvoiceId === inv.id).reduce((sum, x) => sum + x.totalHt, 0);
+  const totalLeft = active.reduce((sum, inv) => sum + Math.max(0, leftOf(inv)), 0);
+  let keepHt = Math.min(totalLeft, Math.max(0, Math.round((keepTtc * 100) / (100 + vatRate))));
+  const fee = keepHt > 0 ? `, frais d’annulation de ${new Intl.NumberFormat('fr-FR').format(Math.round(keepTtc))} FCFA TTC conservés` : '';
+  for (const inv of active) {
+    const left = leftOf(inv);
+    if (left <= 0) continue;
+    const retain = Math.min(keepHt, left);
+    keepHt -= retain;
+    const creditHt = left - retain;
+    if (creditHt <= 0) continue;
+    if (retain === 0 && left === inv.totalHt) {
       out.push(await issueInvoice(store, buildCreditNote(inv, now)));
       continue;
     }
-    const leftHt = inv.totalHt + already.reduce((sum, a) => sum + a.totalHt, 0);
-    if (leftHt <= 0) continue;
     const full = buildCreditNote(inv, now);
-    const vat = Math.round((leftHt * inv.vatRate) / 100);
+    const vat = Math.round((creditHt * inv.vatRate) / 100);
     out.push(await issueInvoice(store, {
-      ...full, lines: [{ label: `Annulation de la réservation : solde de la facture ${inv.number}`, quantity: 1, unit: 'forfait', unitPrice: -leftHt, amount: -leftHt }],
-      totalHt: -leftHt, vat: -vat, totalTtc: -(leftHt + vat),
+      ...full,
+      lines: [{ label: `Annulation de la réservation${fee} : facture ${inv.number}`, quantity: 1, unit: 'forfait', unitPrice: -creditHt, amount: -creditHt }],
+      totalHt: -creditHt, vat: -vat, totalTtc: -(creditHt + vat),
     }));
   }
   return out;

@@ -224,6 +224,19 @@ export function buildAdjustment(r: Reservation, client: Client, s: BillingSettin
   };
 }
 
+/** Frais d'annulation facturés quand aucune facture n'avait été émise. `ttc` = montant toutes taxes comprises. */
+export function buildCancellationFeeInvoice(r: Reservation, client: Client, s: BillingSettings, now: Date, ttc: number): NewInvoice {
+  const vatRate = s.vatEnabled ? s.vatRate : 0;
+  const ht = Math.round((ttc * 100) / (100 + vatRate));
+  const lines: InvoiceLine[] = [{ label: `Frais d’annulation, contrat ${r.number}`, quantity: 1, unit: 'forfait', unitPrice: ht, amount: ht }];
+  const issue = isoDay(now);
+  return {
+    reservationId: r.id, clientId: client.id, kind: 'facture', issueDate: issue, dueDate: issue, lines,
+    totalHt: ht, vatRate, vat: ttc - ht, totalTtc: ttc, depositDue: 0, terms: 'Payable à réception',
+    billTo: billTo(client), relatedInvoiceId: null, createdAt: now.toISOString(),
+  };
+}
+
 /** Avoir qui annule une facture (montants opposés, mêmes lignes). */
 export function buildCreditNote(inv: Invoice, now: Date, reason = 'Annulation de la réservation'): NewInvoice {
   const issue = isoDay(now);

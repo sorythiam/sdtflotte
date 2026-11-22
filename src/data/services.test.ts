@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DemoStore } from './demoStore';
-import { createReservation } from './services';
+import { creditReservation, createReservation } from './services';
 
 function memory() {
   const m = new Map<string, string>();
@@ -171,5 +171,62 @@ describe('contrat cadre (mode démo)', () => {
     expect(berline.total).toBe(2 * 31500); // 35 000 − 10 %
     const later = await createReservation(store, snap, { vehicleId: 'v-dzire', clientId: 'c-sante', start: at(300, 8), end: at(302, 8), withDriver: false, notes: null });
     expect(later.total).toBe(2 * 35000); // contrat expiré
+  });
+});
+
+describe('annulation avec acompte (mode démo)', () => {
+  async function setup(vat: boolean) {
+    const { billingSettings, payState } = await import('../domain/billing');
+    const store = new DemoStore(memory());
+    const settings = billingSettings('SDT', { vatEnabled: vat });
+    const ctx = async () => ({ settings, clients: await store.list('clients'), vehicles: await store.list('vehicles'), rates: await store.list('rates'), invoices: await store.list('invoices') });
+    const at = (d: number) => { const x = new Date(Date.now() + d * 86400000); x.setHours(9, 0, 0, 0); return x.toISOString(); };
+    const r = await createReservation(store, await snapshot(store), { vehicleId: 'v-picanto', clientId: 'c-diop', start: at(80), end: at(84), withDriver: false, notes: null }, new Date(), await ctx());
+    const inv = (await store.list('invoices')).find((i) => i.reservationId === r.id)!;
+    const deposit = Math.round(inv.totalTtc * 0.3);
+    await store.insert('payments', { reservationId: r.id, kind: 'acompte', amount: deposit, method: 'wave', status: 'paye', paidAt: new Date().toISOString(), reference: 'W1', dueAt: null } as never);
+    const state = async () => payState({ ...r, status: 'annulee' }, await store.list('invoices'), await store.list('payments'), new Date());
+    return { store, r, inv, deposit, settings, state };
+  }
+
+  it('garde l’acompte : rien à rembourser, rien à payer', async () => {
+    const { store, r, inv, deposit, state } = await setup(true);
+    await creditReservation(store, await store.list('invoices'), r.id, new Date(), deposit);
+    const st = await state();
+    expect(Math.abs(st.owed - deposit)).toBeLessThanOrEqual(1);
+    expect(st.remaining).toBeLessThanOrEqual(1);
+    expect(st.status === 'payee' || st.status === 'acompte').toBe(true);
+    const av = (await store.list('invoices')).find((i) => i.kind === 'avoir')!;
+    expect(av.relatedInvoiceId).toBe(inv.id);
+    expect(av.lines[0].label).toContain('frais d’annulation');
+  });
+
+  it('frais d’annulation supérieurs à l’acompte : le client doit le reste', async () => {
+    const { store, r, inv, deposit, state } = await setup(true);
+    const fee = Math.round(inv.totalTtc * 0.5);
+    await creditReservation(store, await store.list('invoices'), r.id, new Date(), fee);
+    const st = await state();
+    expect(Math.abs(st.remaining - (fee - deposit))).toBeLessThanOrEqual(1);
+    expect(st.status).not.toBe('annulee');
+  });
+
+  it('sans frais : tout l’acompte est à rembourser', async () => {
+    const { store, r, deposit, state } = await setup(false);
+    await creditReservation(store, await store.list('invoices'), r.id, new Date(), 0);
+    const st = await state();
+    expect(st).toMatchObject({ owed: 0, status: 'trop_percu' });
+    expect(st.paid).toBe(deposit);
+  });
+
+  it('sans facture émise : les frais d’annulation sont facturés', async () => {
+    const { billingSettings, payState } = await import('../domain/billing');
+    const store = new DemoStore(memory());
+    const at = (d: number) => { const x = new Date(Date.now() + d * 86400000); x.setHours(9, 0, 0, 0); return x.toISOString(); };
+    const r = await createReservation(store, await snapshot(store), { vehicleId: 'v-picanto', clientId: 'c-diop', start: at(90), end: at(92), withDriver: false, notes: null });
+    expect((await store.list('invoices')).some((i) => i.reservationId === r.id)).toBe(false);
+    const client = (await store.list('clients')).find((c) => c.id === r.clientId);
+    await creditReservation(store, [], r.id, new Date(), 20000, { r, client, settings: billingSettings('SDT', {}) });
+    const st = payState({ ...r, status: 'annulee' }, await store.list('invoices'), await store.list('payments'), new Date());
+    expect(st).toMatchObject({ owed: 20000, remaining: 20000 });
   });
 });
