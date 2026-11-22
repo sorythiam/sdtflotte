@@ -15,6 +15,7 @@ export const icons = {
   clients: <I d={<><circle cx="9" cy="8" r="3.2" /><path d="M3 19.5c.8-3.3 3.2-5 6-5s5.2 1.7 6 5" /><path d="M15.5 5.3a3 3 0 0 1 0 5.6M17.5 14.8c1.7.6 3 2.2 3.5 4.7" /></>} />,
   finances: <I d={<><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18" /><path d="M15.5 14.5h2.5" /></>} />,
   settings: <I d={<><circle cx="12" cy="12" r="3" /><path d="M12 2.8v2.4M12 18.8v2.4M21.2 12h-2.4M5.2 12H2.8M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7M18.5 18.5l-1.7-1.7M7.2 7.2 5.5 5.5" /></>} />,
+  vtc: <I d={<><path d="M4 14.5 5.4 10a2 2 0 0 1 1.9-1.4h6.3" /><path d="M3.5 14.5h11V17a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-2.5Z" /><circle cx="6.5" cy="18" r="1.4" /><circle cx="11.5" cy="18" r="1.4" /><circle cx="18" cy="8" r="3.5" /><path d="M18 6.5v3M17 7.2h1.6" /></>} />,
   more: <I d={<><circle cx="5.5" cy="12" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="18.5" cy="12" r="1.4" /></>} />,
 };
 
@@ -26,7 +27,7 @@ export interface Tab {
 }
 
 export interface Section {
-  key: 'home' | 'planning' | 'reservations' | 'fleet' | 'clients' | 'finances' | 'settings';
+  key: 'home' | 'planning' | 'reservations' | 'fleet' | 'vtc' | 'clients' | 'finances' | 'settings';
   label: string;
   icon: ReactNode;
   tabs: Tab[]; // la première visible est la page d'arrivée
@@ -55,6 +56,7 @@ export const SECTIONS: Section[] = [
       { to: '/tarifs', label: 'Tarifs' },
     ],
   },
+  { key: 'vtc', label: 'Chauffeurs VTC', icon: icons.vtc, tabs: [{ to: '/vtc', label: 'Chauffeurs VTC', roles: ['direction', 'agent', 'comptable'] }] },
   { key: 'clients', label: 'Clients', icon: icons.clients, tabs: [{ to: '/clients', label: 'Clients' }] },
   {
     key: 'finances', label: 'Finances', icon: icons.finances,

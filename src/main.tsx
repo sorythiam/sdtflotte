@@ -5,6 +5,8 @@ import { Layout } from './components/Layout';
 import { Clients } from './pages/Clients';
 import { VehicleDetail } from './pages/VehicleDetail';
 import { Drivers } from './pages/Drivers';
+import { Vtc } from './pages/Vtc';
+import { VtcDetail } from './pages/VtcDetail';
 import { AuditLog } from './pages/AuditLog';
 import { ClientDetail } from './pages/ClientDetail';
 import { Dashboard } from './pages/Dashboard';
@@ -48,6 +50,8 @@ function App() {
         <Route path="vehicules" element={<Vehicles />} />
         <Route path="vehicules/:id" element={<VehicleDetail />} />
         <Route path="chauffeurs" element={<Drivers />} />
+        <Route path="vtc" element={<Vtc />} />
+        <Route path="vtc/:id" element={<VtcDetail />} />
         <Route path="clients" element={<Clients />} />
         <Route path="clients/:id" element={<ClientDetail />} />
         <Route path="maintenance" element={<Maintenance />} />

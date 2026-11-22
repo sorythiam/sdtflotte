@@ -75,12 +75,15 @@ export function availableByCategory(
   start: string,
   end: string,
   passengers?: number | null,
+  vtc?: { vehicleId: string; status: string; startDate: string; endDate: string | null }[],
 ): Record<string, number> {
   const out: Record<string, number> = {};
   for (const v of vehicles) {
     if (v.outOfService) continue;
     out[v.category] ??= 0;
     if (passengers && v.seats && v.seats < passengers) continue; // trop petit pour le groupe
+    // Confié à un chauffeur VTC : pas louable.
+    if (vtc?.some((c) => c.vehicleId === v.id && (c.status === 'actif' || c.status === 'suspendu') && c.startDate <= end.slice(0, 10) && (!c.endDate || c.endDate >= start.slice(0, 10)))) continue;
     const busy =
       reservations.some((r) => r.vehicleId === v.id && isActive(r) && overlaps(start, end, r.start, r.end)) ||
       maintenances.some((m) => m.vehicleId === v.id && overlaps(start, end, m.start, m.end));

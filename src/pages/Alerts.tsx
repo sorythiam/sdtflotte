@@ -14,7 +14,7 @@ const sections: [AlertLevel, string, string][] = [
 export function AlertList() {
   const { data, now, session } = useData();
   const [all, setAll] = useState(false);
-  const built = useMemo(() => buildAlerts({ ...data, plans: data.maintenance_plans }, now), [data, now]);
+  const built = useMemo(() => buildAlerts({ ...data, plans: data.maintenance_plans, vtc: { contracts: data.vtc_contracts, payments: data.vtc_payments, expenses: data.expenses, drivers: data.drivers } }, now), [data, now]);
   const mine = alertsFor(built, session!.role);
   const list = all ? built : mine;
   const hidden = built.length - mine.length;

@@ -6,6 +6,7 @@ import { dateLong, dateShort, money, num } from '../domain/format';
 import { expiryAlerts, vehicleStatusAt } from '../domain/rules';
 import type { VehicleDocSlot } from '../domain/types';
 import { useData } from '../state/DataContext';
+import { inVtc } from '../domain/vtc';
 import { useSignedUrls } from '../state/useSignedUrls';
 import { VehicleForm } from './Vehicles';
 
@@ -71,7 +72,7 @@ export function VehicleDetail() {
           <span className="small muted"><Link to="/vehicules">Véhicules</Link> › {v.plate}</span>
           <div className="row" style={{ flexWrap: 'wrap' }}>
             <h1>{v.brand} {v.model}</h1>
-            <VehicleBadge status={vehicleStatusAt(v, now, data.reservations, data.maintenances)} />
+            {inVtc(v.id, data.vtc_contracts, now.toISOString().slice(0, 10)) ? <Link className="badge" to={`/vtc/${inVtc(v.id, data.vtc_contracts, now.toISOString().slice(0, 10))!.id}`} onClick={(e) => e.stopPropagation()}>En VTC</Link> : <VehicleBadge status={vehicleStatusAt(v, now, data.reservations, data.maintenances)} />}
           </div>
           <p className="small muted">
             {v.plate} · {v.category}{v.year ? ` · ${v.year}` : ''} · {fuelText[v.fuel]} · {num(v.mileage)} km

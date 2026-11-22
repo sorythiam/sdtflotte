@@ -19,7 +19,8 @@ describe('menu', () => {
     expect(visibleTabs(fin, 'mecanicien')).toEqual([]);
     expect(visibleTabs(fin, 'admin')).toHaveLength(2);
   });
-  it('garde sept sections', () => {
-    expect(SECTIONS.map((s) => s.label)).toEqual(['Accueil', 'Planning', 'Réservations', 'Flotte', 'Clients', 'Finances', 'Paramètres']);
+  it('garde huit sections', () => {
+    expect(SECTIONS.map((s) => s.label)).toEqual(['Accueil', 'Planning', 'Réservations', 'Flotte', 'Chauffeurs VTC', 'Clients', 'Finances', 'Paramètres']);
+    expect(sectionOf('/vtc/abc').key).toBe('vtc');
   });
 });

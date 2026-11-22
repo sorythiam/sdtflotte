@@ -1,6 +1,8 @@
 import { findConflicts, isActive, nextContractNumber, overlaps } from '../domain/rules';
 import { buildAdjustment, buildCancellationFeeInvoice, buildCreditNote, buildFeesInvoice, buildInvoice, type BillingSettings, type Invoice, type NewInvoice } from '../domain/billing';
+import { vtcOverlap } from '../domain/vtc';
 import { dealFor, fitsPassengers, passengerSeats, priceFor } from '../domain/tariff';
+import type { VtcContract } from '../domain/types';
 import type { Client, Driver, Formula, Maintenance, Package, Rate, Reservation, Vehicle } from '../domain/types';
 import type { Store } from './store';
 
@@ -29,6 +31,7 @@ export interface DataSnapshot {
   drivers?: Driver[];
   packages?: Package[];
   clients?: Client[];
+  vtc_contracts?: VtcContract[];
 }
 
 /** Le chauffeur est-il déjà pris sur cette période ? */
@@ -151,6 +154,8 @@ export async function createReservation(
   const vehicle = snap.vehicles.find((v) => v.id === input.vehicleId);
   const rate = snap.rates.find((r) => r.category === vehicle?.category);
   const formula = input.formula ?? 'jour';
+  const vtc = vtcOverlap(input.vehicleId, input.start, input.end, snap.vtc_contracts);
+  if (vtc) throw new Error(`Ce véhicule est confié à un chauffeur VTC (contrat ${vtc.number}).`);
   const pkg = formula === 'forfait' ? snap.packages?.find((k) => k.id === input.packageId) : undefined;
   if (formula !== 'forfait' && !rate) throw new Error(`Aucun tarif pour la catégorie ${vehicle?.category ?? '?'}. Ajoutez-le dans Tarifs.`);
   // Bus, minibus et forfaits : toujours avec chauffeur.

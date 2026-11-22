@@ -3,6 +3,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Empty, ErrorBox, Modal, ReservationBadge } from '../components/ui';
 import { createReservation, driverConflict } from '../data/services';
+import { vtcOverlap } from '../domain/vtc';
 import { dealFor, FORMULAS, fitsPassengers, priceFor, type Price } from '../domain/tariff';
 import { dateShort, fromLocalInput, money, time, toLocalInput } from '../domain/format';
 import { balanceDue, findConflicts, lateDays } from '../domain/rules';
@@ -158,7 +159,7 @@ function NewReservation({ onClose }: { onClose: () => void }) {
         .filter((v) => !v.outOfService && (formula !== 'forfait' || !pkg || v.category === pkg.category))
         .map((v) => ({
           v,
-          busy: validPeriod ? findConflicts(v.id, sIso, eIso, data.reservations, data.maintenances).length > 0 : false,
+          busy: validPeriod ? findConflicts(v.id, sIso, eIso, data.reservations, data.maintenances).length > 0 || !!vtcOverlap(v.id, sIso, eIso, data.vtc_contracts) : false,
           small: !fitsPassengers(v, pax, withDriver || !!v.driverRequired || formula === 'forfait'),
         }))
         .sort((a, b) => Number(a.busy || a.small) - Number(b.busy || b.small) || (a.v.seats ?? 0) - (b.v.seats ?? 0) || a.v.category.localeCompare(b.v.category)),

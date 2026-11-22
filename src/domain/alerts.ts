@@ -4,7 +4,8 @@
 import { verificationOf } from './verification';
 import { balanceDue, cautionHeld, expiryAlerts, lateDays } from './rules';
 import { planDue } from './maintenancePlan';
-import type { Client, Maintenance, MaintenancePlan, Payment, Reservation, Role, Vehicle } from './types';
+import { vtcBalance } from './vtc';
+import type { Client, Expense, Maintenance, MaintenancePlan, VtcContract, VtcPayment, Payment, Reservation, Role, Vehicle } from './types';
 
 export type AlertLevel = 'urgent' | 'attention' | 'info';
 export type AlertKind =
@@ -21,6 +22,7 @@ export type AlertKind =
   | 'caution_a_rendre'
   | 'entretien_jour'
   | 'entretien_a_prevoir'
+  | 'vtc_retard'
   | 'demande_en_ligne';
 
 export interface Alert {
@@ -41,6 +43,7 @@ export interface AlertInput {
   maintenances: Maintenance[];
   invoices?: { reservationId: string; totalTtc: number }[];
   plans?: MaintenancePlan[];
+  vtc?: { contracts: VtcContract[]; payments: VtcPayment[]; expenses: Expense[]; drivers: { id: string; name: string }[] };
   bookingRequests?: { id: string; status: string; name: string; companyName?: string | null; category: string; start: string; end: string; createdAt: string }[];
 }
 
@@ -218,6 +221,21 @@ export function buildAlerts(input: AlertInput, now: Date, offsetMin = -now.getTi
       title: `${p.label} ${d.state === 'depasse' ? 'à faire' : 'à prévoir'} : ${vLabel(p.vehicleId)}`,
       detail: `Échéance ${d.text}`,
     });
+  }
+
+  // Chauffeurs VTC en retard de versement (2 jours ou plus).
+  if (input.vtc) {
+    for (const c of input.vtc.contracts) {
+      if (c.status !== 'actif') continue;
+      const b = vtcBalance(c, input.vtc.payments, input.vtc.expenses, now);
+      if (b.daysBehind < 2) continue;
+      const name = input.vtc.drivers.find((d) => d.id === c.driverId)?.name ?? 'Chauffeur';
+      out.push({
+        id: `vtc:${c.id}`, kind: 'vtc_retard', level: b.daysBehind >= 5 ? 'urgent' : 'attention', link: `/vtc/${c.id}`, roles: ['direction', 'agent', 'comptable'],
+        title: `Versements VTC en retard : ${name}`,
+        detail: `${fcfa(b.balance)} dus (${b.daysBehind} jours) · ${vLabel(c.vehicleId)}${b.lastPaidOn ? ` · dernier versement le ${dmy(b.lastPaidOn)}` : ''}`,
+      });
+    }
   }
 
   for (const b of input.bookingRequests ?? []) {

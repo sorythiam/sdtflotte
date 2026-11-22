@@ -15,7 +15,7 @@ export function Layout() {
   const nav = useNavigate();
   const { pathname } = useLocation();
   const [sheet, setSheet] = useState(false);
-  const alerts = useMemo(() => (session ? alertsFor(buildAlerts({ ...data, plans: data.maintenance_plans }, now), session.role) : []), [data, now, session]);
+  const alerts = useMemo(() => (session ? alertsFor(buildAlerts({ ...data, plans: data.maintenance_plans, vtc: { contracts: data.vtc_contracts, payments: data.vtc_payments, expenses: data.expenses, drivers: data.drivers } }, now), session.role) : []), [data, now, session]);
   useEffect(() => setSheet(false), [pathname]);
   useEffect(() => {
     if (!sheet) return;

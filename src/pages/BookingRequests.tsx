@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Empty, ErrorBox, Modal, ScoreBadge } from '../components/ui';
 import { createReservation } from '../data/services';
 import { fitsPassengers } from '../domain/tariff';
+import { vtcOverlap } from '../domain/vtc';
 import { availableByCategory, COUNTRY_CALLING_CODE, matchClient, whatsappLink, type BookingRequest } from '../domain/booking';
 import { taxIdLabel } from '../domain/clients';
 import { dateTime, money } from '../domain/format';
@@ -52,7 +53,7 @@ export function BookingRequests() {
         list.map((req) => {
           const rate = data.rates.find((r) => r.category === req.category);
           const q = rate ? quote(rate, req.start, req.end, req.withDriver) : null;
-          const free = availableByCategory(data.vehicles, data.reservations, data.maintenances, req.start, req.end, req.passengers)[req.category] ?? 0;
+          const free = availableByCategory(data.vehicles, data.reservations, data.maintenances, req.start, req.end, req.passengers, data.vtc_contracts)[req.category] ?? 0;
           const known = matchClient(data.clients, req.phone, req.email);
           const res = req.reservationId ? data.reservations.find((r) => r.id === req.reservationId) : undefined;
           const first = req.name.split(' ')[0];
@@ -125,7 +126,7 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
   const free = useMemo(
     () =>
       data.vehicles
-        .filter((v) => !v.outOfService && fitsPassengers(v, req.passengers, req.withDriver || !!v.driverRequired) && findConflicts(v.id, req.start, req.end, data.reservations, data.maintenances).length === 0)
+        .filter((v) => !v.outOfService && fitsPassengers(v, req.passengers, req.withDriver || !!v.driverRequired) && !vtcOverlap(v.id, req.start, req.end, data.vtc_contracts) && findConflicts(v.id, req.start, req.end, data.reservations, data.maintenances).length === 0)
         .sort((a, b) => Number(b.category === req.category) - Number(a.category === req.category) || a.plate.localeCompare(b.plate)),
     [data, req],
   );

@@ -8,6 +8,7 @@ import { num } from '../domain/format';
 import { expiryAlerts, vehicleStatusAt } from '../domain/rules';
 import type { Fuel, Vehicle } from '../domain/types';
 import { useData } from '../state/DataContext';
+import { inVtc } from '../domain/vtc';
 
 export function Vehicles() {
   const { data, now, can, session } = useData();
@@ -88,7 +89,7 @@ export function Vehicles() {
                           ))
                         )}
                       </td>
-                      <td><VehicleBadge status={vehicleStatusAt(v, now, data.reservations, data.maintenances)} /></td>
+                      <td>{inVtc(v.id, data.vtc_contracts, now.toISOString().slice(0, 10)) ? <Link className="badge" to={`/vtc/${inVtc(v.id, data.vtc_contracts, now.toISOString().slice(0, 10))!.id}`} onClick={(e) => e.stopPropagation()}>En VTC</Link> : <VehicleBadge status={vehicleStatusAt(v, now, data.reservations, data.maintenances)} />}</td>
                     </tr>
                   );
                 })}

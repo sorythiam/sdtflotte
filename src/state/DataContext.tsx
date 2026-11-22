@@ -5,7 +5,7 @@ import { SupabaseStore } from '../data/supabaseStore';
 import type { BookingRequest } from '../domain/booking';
 import type { Invoice } from '../domain/billing';
 import type { Inspection } from '../domain/inspection';
-import type { Client, Driver, Expense, Incident, Maintenance, MaintenancePlan, Package, ReservationChange, Payment, Rate, Reservation, Role, Vehicle } from '../domain/types';
+import type { Client, Driver, Expense, Incident, Maintenance, MaintenancePlan, Package, ReservationChange, VtcContract, VtcPayment, Payment, Rate, Reservation, Role, Vehicle } from '../domain/types';
 import { billingSettings } from '../domain/billing';
 import { idbGet, idbSet } from '../offline/idb';
 import { isNetworkError, onOutboxChange, pending } from '../offline/outbox';
@@ -45,10 +45,12 @@ export interface Data {
   packages: Package[];
   reservation_changes: ReservationChange[];
   maintenance_plans: MaintenancePlan[];
+  vtc_contracts: VtcContract[];
+  vtc_payments: VtcPayment[];
   bookingRequests: BookingRequest[];
 }
 
-const empty: Data = { vehicles: [], clients: [], rates: [], reservations: [], payments: [], maintenances: [], expenses: [], invoices: [], inspections: [], incidents: [], drivers: [], packages: [], reservation_changes: [], maintenance_plans: [], bookingRequests: [] };
+const empty: Data = { vehicles: [], clients: [], rates: [], reservations: [], payments: [], maintenances: [], expenses: [], invoices: [], inspections: [], incidents: [], drivers: [], packages: [], reservation_changes: [], maintenance_plans: [], vtc_contracts: [], vtc_payments: [], bookingRequests: [] };
 
 interface Ctx {
   store: Store;
@@ -97,7 +99,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, incidents, drivers, packages, reservation_changes, maintenance_plans, bookingRequests] = await Promise.all([
+      const [vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, incidents, drivers, packages, reservation_changes, maintenance_plans, vtc_contracts, vtc_payments, bookingRequests] = await Promise.all([
         store.list('vehicles'),
         store.list('clients'),
         store.list('rates'),
@@ -112,10 +114,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         store.list('packages').catch(() => [] as Package[]),
         store.list('reservation_changes').catch(() => [] as ReservationChange[]),
         store.list('maintenance_plans').catch(() => [] as MaintenancePlan[]),
+        store.list('vtc_contracts').catch(() => [] as VtcContract[]),
+        store.list('vtc_payments').catch(() => [] as VtcPayment[]),
         // Réservées à la direction et aux agents : les autres profils reçoivent une liste vide.
         store.listBookingRequests().catch(() => [] as BookingRequest[]),
       ]);
-      const fresh = { vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, incidents, drivers, packages, reservation_changes, maintenance_plans, bookingRequests };
+      const fresh = { vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, incidents, drivers, packages, reservation_changes, maintenance_plans, vtc_contracts, vtc_payments, bookingRequests };
       setData(fresh);
       setOffline(navigator.onLine === false);
       setNow(new Date());

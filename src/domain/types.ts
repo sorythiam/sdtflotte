@@ -264,6 +264,44 @@ export interface Expense {
   label: string | null;
   mileage: number | null;
   reservationId: string | null; // contrat concerné, utile pour une amende ou un plein refacturé
+  chargedTo?: 'proprietaire' | 'chauffeur'; // VTC : qui paie cette dépense
+  vtcContractId?: string | null;
+}
+
+export type VtcFormula = 'versement' | 'location_vente';
+export type VtcStatus = 'actif' | 'suspendu' | 'termine' | 'transfere';
+export type VtcCharge = 'vidange' | 'pneus' | 'reparation' | 'assurance' | 'carburant' | 'amende' | 'degats' | 'lavage';
+
+/** Contrat VTC : un véhicule confié à un chauffeur contre un versement chaque jour travaillé. */
+export interface VtcContract {
+  id: string;
+  number: string;
+  vehicleId: string;
+  driverId: string;
+  formula: VtcFormula;
+  platform: string | null; // Yango, Heetch, Uber…
+  dailyAmount: number;
+  restDays: number[]; // jours sans versement : 0 = dimanche … 6 = samedi
+  startDate: string; // AAAA-MM-JJ
+  endDate: string | null;
+  caution: number;
+  totalPrice: number | null; // location-vente : prix du véhicule à atteindre
+  charges: Partial<Record<VtcCharge, 'proprietaire' | 'chauffeur'>>;
+  status: VtcStatus;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface VtcPayment {
+  id: string;
+  contractId: string;
+  paidOn: string; // AAAA-MM-JJ
+  amount: number;
+  method: PaymentMethod;
+  reference: string | null;
+  note: string | null;
+  createdBy: string | null;
+  createdAt: string;
 }
 
 export interface Tables {
@@ -281,6 +319,8 @@ export interface Tables {
   packages: Package;
   reservation_changes: ReservationChange;
   maintenance_plans: MaintenancePlan;
+  vtc_contracts: VtcContract;
+  vtc_payments: VtcPayment;
 }
 export type TableName = keyof Tables;
 

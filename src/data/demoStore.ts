@@ -1,7 +1,7 @@
 import { categoryPhotos } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
 import type { AuditEntry, Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
-import { seed, seedExpenses, seedDrivers, seedIncidents, seedInvoices, seedPackages, seedPlans } from './seed';
+import { seed, seedExpenses, seedDrivers, seedIncidents, seedInvoices, seedPackages, seedPlans, seedVtc } from './seed';
 import { invoicePrefix, nextInvoiceNumber, type Invoice } from '../domain/billing';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
 import {
@@ -122,6 +122,11 @@ export class DemoStore implements Store {
         st.db.packages ??= seedPackages();
         st.db.reservation_changes ??= [];
         st.db.maintenance_plans ??= seedPlans();
+        if (!st.db.vtc_contracts) {
+          // Anciennes démos : pas de véhicules VTC d'exemple, on part de zéro.
+          const ok = st.db.vehicles.some((v) => v.id === 'v-celerio') && st.db.drivers.some((d) => d.id === 'd-4');
+          Object.assign(st.db, ok ? seedVtc() : { vtc_contracts: [], vtc_payments: [] });
+        }
         st.org.bookingSlug ??= 'sdt-demo';
         st.org.bookingEnabled ??= true;
         return st;
@@ -353,7 +358,7 @@ export class DemoStore implements Store {
 
   async publicAvailability(slug: string, start: string, end: string, passengers?: number | null): Promise<Record<string, number>> {
     if (!this.publicOrg(slug) || !(Date.parse(end) > Date.parse(start))) return {};
-    return availableByCategory(this.state.db.vehicles, this.state.db.reservations, this.state.db.maintenances, start, end, passengers);
+    return availableByCategory(this.state.db.vehicles, this.state.db.reservations, this.state.db.maintenances, start, end, passengers, this.state.db.vtc_contracts);
   }
 
   async submitBookingRequest(slug: string, req: BookingRequestInput): Promise<void> {

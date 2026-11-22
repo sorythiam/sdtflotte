@@ -1,5 +1,5 @@
 import { billingSettings, buildInvoice, nextInvoiceNumber, type Invoice } from '../domain/billing';
-import type { Client, Driver, MaintenancePlan, Expense, Incident, Package, Maintenance, Payment, Rate, Reservation, Tables, Vehicle } from '../domain/types';
+import type { Client, Driver, MaintenancePlan, VtcContract, VtcPayment, Expense, Incident, Package, Maintenance, Payment, Rate, Reservation, Tables, Vehicle } from '../domain/types';
 
 // Données d'exemple, recalées sur la date du jour pour que la démo soit toujours parlante.
 
@@ -40,6 +40,8 @@ export function seed(now = new Date()): Db {
     v('v-hiace', 'DK-9012-AE', 'Toyota', 'Hiace', 'Minibus', 88100, { seats: 15, luggage: 12, driverRequired: true }),
     v('v-lc', 'DK-6610-AA', 'Toyota', 'Land Cruiser', '4x4', 97400, { inspectionExpiry: day(now, -3), seats: 7, luggage: 5 }),
     v('v-picanto', 'DK-1188-BE', 'Kia', 'Picanto', 'Citadine', 15300, { fuel: 'essence', seats: 4, luggage: 1 }),
+    v('v-celerio', 'DK-7301-BF', 'Suzuki', 'Celerio', 'Citadine', 64200, { fuel: 'essence', seats: 4, luggage: 1, year: 2024 }),
+    v('v-yaris', 'DK-8820-BG', 'Toyota', 'Yaris', 'Berline', 41800, { fuel: 'essence', seats: 5, luggage: 2, year: 2023 }),
     v('v-coaster', 'DK-5050-AG', 'Toyota', 'Coaster', 'Bus', 132500, { seats: 30, luggage: 25, driverRequired: true, year: 2019 }),
   ];
 
@@ -101,7 +103,7 @@ export function seed(now = new Date()): Db {
     { id: 'm-2', vehicleId: 'v-tucson', label: 'Vidange', start: at(now, 1, 8), end: at(now, 1, 18), cost: 45000 },
   ];
 
-  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now), drivers: seedDrivers(now), packages: seedPackages(now), reservation_changes: [], maintenance_plans: seedPlans(now) };
+  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now), drivers: seedDrivers(now), packages: seedPackages(now), reservation_changes: [], maintenance_plans: seedPlans(now), ...seedVtc(now) };
 }
 
 /** Factures des réservations d'exemple, numérotées dans l'ordre de création. */
@@ -156,7 +158,7 @@ export function seedDrivers(now = new Date()): Driver[] {
   const d = (id: string, name: string, phone: string, licenseCategory: string, licenseExpiry: string): Driver => ({
     id, name, phone, licenseNumber: `SN-${id.toUpperCase()}-2012`, licenseCategory, licenseExpiry, active: true, notes: null, createdAt: now.toISOString(),
   });
-  return [d('d-1', 'Mamadou Sarr', '+221 77 410 22 10', 'B, D', day(now, 600)), d('d-2', 'Ibrahima Ba', '+221 76 520 33 41', 'B, C, D', day(now, 25)), d('d-3', 'Cheikh Ndour', '+221 78 230 44 05', 'B', day(now, 900))];
+  return [d('d-4', 'Modou Faye', '+221 77 655 12 90', 'B', day(now, 700)), d('d-5', 'Pape Diallo', '+221 78 120 45 67', 'B', day(now, 1100)), d('d-1', 'Mamadou Sarr', '+221 77 410 22 10', 'B, D', day(now, 600)), d('d-2', 'Ibrahima Ba', '+221 76 520 33 41', 'B, C, D', day(now, 25)), d('d-3', 'Cheikh Ndour', '+221 78 230 44 05', 'B', day(now, 900))];
 }
 
 export function seedPackages(now = new Date()): Package[] {
@@ -180,4 +182,39 @@ export function seedPlans(now = new Date()): MaintenancePlan[] {
     p('pl-3', 'v-coaster', 'Révision complète', 30000, 12, 110000, -200),
     p('pl-4', 'v-tucson', 'Climatisation', null, 12, null, -355), // dans 10 jours
   ];
+}
+
+/** Deux contrats VTC : un versement simple irrégulier, une location-vente régulière. */
+export function seedVtc(now = new Date()): { vtc_contracts: VtcContract[]; vtc_payments: VtcPayment[] } {
+  const contracts: VtcContract[] = [
+    {
+      id: 'vtc-1', number: 'VTC-2026-0001', vehicleId: 'v-celerio', driverId: 'd-4', formula: 'versement', platform: 'Yango',
+      dailyAmount: 15000, restDays: [0], startDate: day(now, -60), endDate: null, caution: 100000, totalPrice: null,
+      charges: { vidange: 'proprietaire', pneus: 'proprietaire', reparation: 'proprietaire', assurance: 'proprietaire', carburant: 'chauffeur', amende: 'chauffeur', degats: 'chauffeur', lavage: 'chauffeur' },
+      status: 'actif', notes: null, createdAt: at(now, -60, 9),
+    },
+    {
+      id: 'vtc-2', number: 'VTC-2026-0002', vehicleId: 'v-yaris', driverId: 'd-5', formula: 'location_vente', platform: 'Heetch',
+      dailyAmount: 18000, restDays: [0], startDate: day(now, -120), endDate: null, caution: 200000, totalPrice: 5400000,
+      charges: { vidange: 'chauffeur', pneus: 'chauffeur', reparation: 'proprietaire', assurance: 'proprietaire', carburant: 'chauffeur', amende: 'chauffeur', degats: 'chauffeur', lavage: 'chauffeur' },
+      status: 'actif', notes: 'Propriété transférée à la fin du paiement, carte grise au nom du chauffeur.', createdAt: at(now, -120, 9),
+    },
+  ];
+  const payments: VtcPayment[] = [];
+  let n = 0;
+  for (const c of contracts) {
+    const start = Date.parse(c.startDate + 'T00:00:00Z');
+    for (let t = start; t < Date.parse(day(now, 0) + 'T00:00:00Z'); t += 86400000) {
+      const d = new Date(t);
+      if (c.restDays.includes(d.getUTCDay())) continue;
+      const k = Math.round((t - start) / 86400000);
+      // Le premier chauffeur saute un jour de temps en temps, surtout ces deux dernières semaines.
+      if (c.id === 'vtc-1' && (k % 11 === 5 || k > 46 && k % 3 === 0)) continue;
+      payments.push({
+        id: `vp-${++n}`, contractId: c.id, paidOn: d.toISOString().slice(0, 10), amount: c.dailyAmount,
+        method: k % 4 === 0 ? 'especes' : 'wave', reference: k % 4 === 0 ? null : `WV${100000 + n}`, note: null, createdBy: 'awa.agent@sdt.sn', createdAt: d.toISOString(),
+      });
+    }
+  }
+  return { vtc_contracts: contracts, vtc_payments: payments };
 }
