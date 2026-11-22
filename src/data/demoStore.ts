@@ -1,7 +1,7 @@
 import { categoryPhotos } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
-import { seed, seedExpenses, seedIncidents, seedInvoices } from './seed';
+import { seed, seedExpenses, seedDrivers, seedIncidents, seedInvoices, seedPackages } from './seed';
 import { invoicePrefix, nextInvoiceNumber, type Invoice } from '../domain/billing';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
 import {
@@ -109,6 +109,9 @@ export class DemoStore implements Store {
         st.db.invoices ??= seedInvoices(st.db);
         st.db.inspections ??= [];
         st.db.incidents ??= seedIncidents();
+        st.db.drivers ??= seedDrivers();
+        st.db.packages ??= seedPackages();
+        st.db.reservation_changes ??= [];
         st.org.bookingSlug ??= 'sdt-demo';
         st.org.bookingEnabled ??= true;
         return st;
@@ -309,6 +312,9 @@ export class DemoStore implements Store {
           kmPerDay: r.kmPerDay, extraKm: r.extraKm, caution: r.caution, vehicles: inCat.length,
           models: [...new Set(inCat.map((v) => `${v.brand} ${v.model}`))].sort().slice(0, 3),
           photos: categoryPhotos(vehicles, r.category),
+          seats: inCat.reduce<number | null>((m, v) => (v.seats && (!m || v.seats > m) ? v.seats : m), null),
+          luggage: inCat.reduce<number | null>((m, v) => (v.luggage != null && (m === null || v.luggage > m) ? v.luggage : m), null),
+          driverRequired: inCat.length > 0 && inCat.every((v) => v.driverRequired),
         };
       });
     return {
@@ -317,9 +323,9 @@ export class DemoStore implements Store {
     };
   }
 
-  async publicAvailability(slug: string, start: string, end: string): Promise<Record<string, number>> {
+  async publicAvailability(slug: string, start: string, end: string, passengers?: number | null): Promise<Record<string, number>> {
     if (!this.publicOrg(slug) || !(Date.parse(end) > Date.parse(start))) return {};
-    return availableByCategory(this.state.db.vehicles, this.state.db.reservations, this.state.db.maintenances, start, end);
+    return availableByCategory(this.state.db.vehicles, this.state.db.reservations, this.state.db.maintenances, start, end, passengers);
   }
 
   async submitBookingRequest(slug: string, req: BookingRequestInput): Promise<void> {
@@ -327,9 +333,11 @@ export class DemoStore implements Store {
     const err = validateBookingRequest(req, new Date());
     if (err) throw new Error(err);
     if (!this.state.db.rates.some((r) => r.category === req.category)) throw new Error('Choisissez un type de véhicule.');
+    const inCat = this.state.db.vehicles.filter((v) => v.category === req.category && !v.outOfService);
+    const mustDrive = inCat.length > 0 && inCat.every((v) => v.driverRequired);
     this.state.bookingRequests = [
       {
-        ...req, id: uid(), name: req.name.trim(), phone: req.phone.trim(), email: req.email?.trim() || null,
+        ...req, withDriver: req.withDriver || mustDrive, passengers: req.passengers ?? null, id: uid(), name: req.name.trim(), phone: req.phone.trim(), email: req.email?.trim() || null,
         message: req.message?.trim() || null, companyName: req.companyName?.trim() || null, companyTaxId: req.companyTaxId?.trim() || null, status: 'nouvelle', reservationId: null, declineReason: null, createdAt: new Date().toISOString(),
       },
       ...(this.state.bookingRequests ?? []),

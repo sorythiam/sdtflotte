@@ -81,7 +81,7 @@ export function Invoices() {
                   const st = states.get(i.reservationId) ?? 'non_payee';
                   return (
                     <tr key={i.id}>
-                      <td><Link to={`/factures/${i.id}`}><strong>{i.number}</strong></Link>{i.kind === 'complement' && <><br /><span className="muted">frais au retour</span></>}</td>
+                      <td><Link to={`/factures/${i.id}`}><strong>{i.number}</strong></Link>{i.kind === 'complement' && <><br /><span className="muted">{i.lines[0]?.label.startsWith('Avenant') ? 'avenant' : 'frais au retour'}</span></>}</td>
                       <td>{i.billTo.name}</td>
                       <td>{new Date(i.issueDate + 'T12:00:00').toLocaleDateString('fr-FR')}</td>
                       <td>{i.kind === 'avoir' ? '—' : new Date(i.dueDate + 'T12:00:00').toLocaleDateString('fr-FR')}</td>

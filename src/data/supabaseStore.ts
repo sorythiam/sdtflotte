@@ -234,8 +234,8 @@ export class SupabaseStore implements Store {
     return (data as PublicBookingInfo | null) ?? null;
   }
 
-  async publicAvailability(slug: string, start: string, end: string): Promise<Record<string, number>> {
-    const { data, error } = await this.sb.rpc('public_availability', { p_slug: slug, p_start: start, p_end: end });
+  async publicAvailability(slug: string, start: string, end: string, passengers?: number | null): Promise<Record<string, number>> {
+    const { data, error } = await this.sb.rpc('public_availability', { p_slug: slug, p_start: start, p_end: end, p_passengers: passengers || null });
     if (error) throw friendly(error);
     return (data as Record<string, number>) ?? {};
   }
@@ -244,7 +244,7 @@ export class SupabaseStore implements Store {
     const { error } = await this.sb.rpc('submit_booking_request', {
       p_slug: slug, p_category: req.category, p_start: req.start, p_end: req.end, p_with_driver: req.withDriver,
       p_name: req.name, p_phone: req.phone, p_email: req.email, p_message: req.message,
-      p_company_name: req.companyName ?? null, p_company_tax_id: req.companyTaxId ?? null,
+      p_company_name: req.companyName ?? null, p_company_tax_id: req.companyTaxId ?? null, p_passengers: req.passengers ?? null,
     });
     if (error) throw friendly(error);
   }
@@ -252,7 +252,7 @@ export class SupabaseStore implements Store {
   async listBookingRequests(): Promise<BookingRequest[]> {
     const { data, error } = await this.sb
       .from('booking_requests')
-      .select('id, category, start, end, with_driver, name, phone, email, message, company_name, company_tax_id, status, reservation_id, decline_reason, created_at')
+      .select('id, category, start, end, with_driver, name, phone, email, message, company_name, company_tax_id, passengers, status, reservation_id, decline_reason, created_at')
       .eq('org_id', this.orgId)
       .order('created_at', { ascending: false })
       .limit(300);

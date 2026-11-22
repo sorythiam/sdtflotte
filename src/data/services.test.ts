@@ -84,3 +84,78 @@ describe('facturation (mode démo)', () => {
     expect(await creditReservation(store, await store.list('invoices'), r.id)).toHaveLength(0);
   });
 });
+
+describe('loueurs touristiques (mode démo)', () => {
+  async function full(store: DemoStore) {
+    return { ...(await snapshot(store)), drivers: await store.list('drivers'), packages: await store.list('packages') };
+  }
+  const day = (offset: number, hour = 9) => {
+    const d = new Date(Date.now() + offset * 86400000);
+    d.setHours(hour, 0, 0, 0);
+    return d.toISOString();
+  };
+
+  it('refuse un groupe trop grand et force le chauffeur sur un bus', async () => {
+    const store = new DemoStore(memory());
+    const snap = await full(store);
+    await expect(
+      createReservation(store, snap, { vehicleId: 'v-dzire', clientId: 'c-diop', start: day(40), end: day(41), withDriver: true, notes: null, passengers: 6 }),
+    ).rejects.toThrow(/4 places passagers pour 6/);
+    const r = await createReservation(store, snap, { vehicleId: 'v-coaster', clientId: 'c-sante', start: day(40), end: day(41), withDriver: false, notes: null, passengers: 25, driverId: 'd-3' });
+    expect(r.withDriver).toBe(true);
+    expect(r.passengers).toBe(25);
+    expect(r.total).toBe(180000 + 25000);
+  });
+
+  it('refuse un chauffeur déjà pris', async () => {
+    const store = new DemoStore(memory());
+    const snap = await full(store);
+    const busy = snap.reservations.find((r) => r.driverId === 'd-1')!;
+    await expect(
+      createReservation(store, snap, { vehicleId: 'v-coaster', clientId: 'c-diop', start: busy.start, end: busy.end, withDriver: true, notes: null, driverId: 'd-1' }),
+    ).rejects.toThrow(/Mamadou Sarr conduit déjà/);
+  });
+
+  it('forfait et demi-journée', async () => {
+    const store = new DemoStore(memory());
+    const snap = await full(store);
+    const f = await createReservation(store, snap, { vehicleId: 'v-dzire', clientId: 'c-diop', start: day(50, 10), end: day(50, 13), withDriver: false, notes: null, formula: 'forfait', packageId: 'k-1' });
+    expect(f).toMatchObject({ total: 30000, withDriver: true, formula: 'forfait', packageLabel: 'Transfert aéroport AIBD ↔ Dakar' });
+    const h = await createReservation(store, await full(store), { vehicleId: 'v-hiace', clientId: 'c-diop', start: day(52, 8), end: day(52, 13), withDriver: true, notes: null, formula: 'demi_journee', missionFees: 5000 });
+    expect(h.total).toBe(50000 + 10000 + 5000);
+    await expect(
+      createReservation(store, await full(store), { vehicleId: 'v-hiace', clientId: 'c-diop', start: day(54, 8), end: day(54, 18), withDriver: true, notes: null, formula: 'demi_journee' }),
+    ).rejects.toThrow(/6 heures au plus/);
+  });
+
+  it('prolonge un contrat : avenant, facture complémentaire, puis annulation nette à zéro', async () => {
+    const { billingSettings } = await import('../domain/billing');
+    const { amendReservation, creditReservation } = await import('./services');
+    const store = new DemoStore(memory());
+    const ctx = async () => ({ settings: billingSettings('SDT', { vatEnabled: true }), clients: await store.list('clients'), vehicles: await store.list('vehicles'), rates: await store.list('rates'), invoices: await store.list('invoices') });
+    const r = await createReservation(store, await full(store), { vehicleId: 'v-picanto', clientId: 'c-diop', start: day(60), end: day(62), withDriver: false, notes: null }, new Date(), await ctx());
+    const longer = await amendReservation(store, await full(store), await ctx(), r, { start: r.start, end: day(64), total: 4 * 25000, reason: 'Prolongation', by: 'agent@sdt.sn' });
+    expect(longer.total).toBe(100000);
+    expect(await store.list('reservation_changes')).toHaveLength(1);
+    let inv = (await store.list('invoices')).filter((i) => i.reservationId === r.id);
+    expect(inv.map((i) => i.kind)).toEqual(['facture', 'complement']);
+    const shorter = await amendReservation(store, await full(store), await ctx(), longer, { start: r.start, end: day(63), total: 75000, reason: 'Retour anticipé', by: null });
+    inv = (await store.list('invoices')).filter((i) => i.reservationId === r.id);
+    expect(inv.map((i) => i.kind)).toEqual(['facture', 'complement', 'avoir']);
+    expect(inv.reduce((s, i) => s + i.totalHt, 0)).toBe(shorter.total);
+    await creditReservation(store, inv, r.id);
+    const net = (await store.list('invoices')).filter((i) => i.reservationId === r.id).reduce((s, i) => s + i.totalTtc, 0);
+    expect(Math.abs(net)).toBeLessThanOrEqual(1);
+  });
+
+  it('refuse de prolonger sur une autre location', async () => {
+    const { amendReservation } = await import('./services');
+    const store = new DemoStore(memory());
+    const snap = await full(store);
+    const r = snap.reservations.find((x) => x.id === 'r-2')!; // Tucson en cours, le r-6 suit
+    const next = snap.reservations.find((x) => x.id === 'r-6')!;
+    await expect(
+      amendReservation(store, snap, { settings: (await import('../domain/billing')).billingSettings('SDT', {}), clients: [], vehicles: [], rates: [], invoices: [] }, r, { start: r.start, end: next.end, total: r.total, reason: null, by: null }),
+    ).rejects.toThrow(/déjà réservé/);
+  });
+});

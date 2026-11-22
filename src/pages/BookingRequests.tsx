@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Empty, ErrorBox, Modal, ScoreBadge } from '../components/ui';
 import { createReservation } from '../data/services';
+import { fitsPassengers } from '../domain/tariff';
 import { availableByCategory, COUNTRY_CALLING_CODE, matchClient, whatsappLink, type BookingRequest } from '../domain/booking';
 import { taxIdLabel } from '../domain/clients';
 import { dateTime, money } from '../domain/format';
@@ -51,7 +52,7 @@ export function BookingRequests() {
         list.map((req) => {
           const rate = data.rates.find((r) => r.category === req.category);
           const q = rate ? quote(rate, req.start, req.end, req.withDriver) : null;
-          const free = availableByCategory(data.vehicles, data.reservations, data.maintenances, req.start, req.end)[req.category] ?? 0;
+          const free = availableByCategory(data.vehicles, data.reservations, data.maintenances, req.start, req.end, req.passengers)[req.category] ?? 0;
           const known = matchClient(data.clients, req.phone, req.email);
           const res = req.reservationId ? data.reservations.find((r) => r.id === req.reservationId) : undefined;
           const first = req.name.split(' ')[0];
@@ -85,7 +86,7 @@ export function BookingRequests() {
                 )}
               </div>
               <div className="grid-3 small">
-                <div><span className="muted">Demande</span><br /><strong>{req.category}</strong>{req.withDriver ? ' avec chauffeur' : ''}</div>
+                <div><span className="muted">Demande</span><br /><strong>{req.category}</strong>{req.withDriver ? ' avec chauffeur' : ''}{req.passengers ? `, ${req.passengers} passager${req.passengers > 1 ? 's' : ''}` : ''}</div>
                 <div><span className="muted">Période</span><br />{dateTime(req.start)} → {dateTime(req.end)}</div>
                 <div><span className="muted">Prix au tarif actuel</span><br />{q ? <><strong>{money(q.total)}</strong> · {q.days} j · caution {money(q.caution)}</> : 'Pas de tarif pour cette catégorie'}</div>
               </div>
@@ -124,7 +125,7 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
   const free = useMemo(
     () =>
       data.vehicles
-        .filter((v) => !v.outOfService && findConflicts(v.id, req.start, req.end, data.reservations, data.maintenances).length === 0)
+        .filter((v) => !v.outOfService && fitsPassengers(v, req.passengers, req.withDriver || !!v.driverRequired) && findConflicts(v.id, req.start, req.end, data.reservations, data.maintenances).length === 0)
         .sort((a, b) => Number(b.category === req.category) - Number(a.category === req.category) || a.plate.localeCompare(b.plate)),
     [data, req],
   );
@@ -149,7 +150,7 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
             : { kind: 'particulier', name: req.name, phone: req.phone, email: req.email, idNumber: null, licenseExpiry: null, score: 'fiable' },
         ));
       const r = await createReservation(store, data, {
-        vehicleId, clientId: client.id, start: req.start, end: req.end, withDriver: req.withDriver,
+        vehicleId, clientId: client.id, start: req.start, end: req.end, withDriver: req.withDriver, passengers: req.passengers ?? null,
         notes: [notes.trim(), 'Demande reçue en ligne.'].filter(Boolean).join('\n'),
       }, new Date(), { ...billing, clients: known ? data.clients : [...data.clients, client] });
       await store.updateBookingRequest(req.id, { status: 'acceptee', reservationId: r.id });
@@ -182,7 +183,7 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
           <option value="">Choisir un véhicule libre…</option>
           {free.map((v) => (
             <option key={v.id} value={v.id}>
-              {v.brand} {v.model} · {v.plate} · {v.category}{v.category !== req.category ? ' (autre catégorie)' : ''}
+              {v.brand} {v.model} · {v.plate} · {v.category}{v.seats ? ` · ${v.seats} places` : ''}{v.category !== req.category ? ' (autre catégorie)' : ''}
             </option>
           ))}
         </select>

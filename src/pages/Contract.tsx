@@ -8,6 +8,7 @@ import { contractSettings, FUEL_LEVELS, INSPECTION_ZONES, parseTerms } from '../
 import { dateLong, dateTime, money, num } from '../domain/format';
 import { balanceDue, billedDays, cautionHeld } from '../domain/rules';
 import { useData } from '../state/DataContext';
+import { formulaLabel, kmIncludedFor } from '../domain/tariff';
 
 const kindText = { acompte: 'Acompte', solde: 'Solde', caution: 'Caution', frais: 'Frais', remboursement_caution: 'Remboursement de caution', remboursement: 'Remboursement du trop-perçu' };
 const blank = '……………………';
@@ -38,8 +39,14 @@ export function Contract() {
   const pays = data.payments.filter((p) => p.reservationId === r.id && p.status === 'paye').sort((a, b) => (a.paidAt ?? '').localeCompare(b.paidAt ?? ''));
   const due = balanceDue(r, data.payments, data.invoices);
   const held = cautionHeld(r.id, data.payments);
+  const driver = data.drivers.find((d) => d.id === r.driverId);
+  const mission = r.missionFees ?? 0;
+  const kmIncl = kmIncludedFor(r, rate);
+  const changes = data.reservation_changes.filter((x) => x.reservationId === r.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   // Part chauffeur bornée au total, au cas où le tarif aurait changé depuis la réservation.
-  const driverTotal = r.withDriver && rate ? Math.min(r.total, rate.driverDaily * days) : 0;
+  const driverTotal = !r.withDriver || !rate || r.formula === 'forfait'
+    ? 0
+    : Math.min(r.total - (r.missionFees ?? 0), r.formula === 'demi_journee' ? Math.round(rate.driverDaily / 2) : rate.driverDaily * days);
   const articles = parseTerms(s.terms);
   const issued = r.createdAt || r.start;
   const returned = r.status === 'terminee';
@@ -126,7 +133,12 @@ export function Contract() {
           <table className="ct-table">
             <tbody>
               <tr><th>Véhicule</th><td>{v ? `${v.brand} ${v.model}${v.year ? ` (${v.year})` : ''}` : blank}</td><th>Immatriculation</th><td>{v?.plate ?? blank}</td></tr>
-              <tr><th>Catégorie</th><td>{v?.category ?? blank}</td><th>Formule</th><td>{r.withDriver ? 'Avec chauffeur' : 'Sans chauffeur'}</td></tr>
+              <tr><th>Catégorie</th><td>{v?.category ?? blank}{v?.seats ? ` · ${v.seats} places` : ''}{v?.luggage != null ? ` · ${v.luggage} bagages` : ''}</td><th>Formule</th><td>{r.formula === 'forfait' ? `Forfait ${r.packageLabel ?? ''}` : formulaLabel(r.formula)} · {r.withDriver ? 'avec chauffeur' : 'sans chauffeur'}</td></tr>
+              {(r.withDriver || r.passengers) && (
+                <tr><th>Chauffeur</th><td>{driver ? `${driver.name} · ${driver.phone}${driver.licenseCategory ? ` · permis ${driver.licenseCategory}` : ''}` : r.withDriver ? blank : '—'}</td><th>Passagers</th><td>{r.passengers ?? blank}</td></tr>
+              )}
+              {r.itinerary && (<tr><th>Itinéraire</th><td colSpan={3}>{r.itinerary}</td></tr>)}
+              <tr><th>Carburant</th><td>{r.fuelIncluded ? 'Inclus dans le prix' : 'À la charge du client'}</td><th>Sortie du territoire</th><td>{r.crossBorder ? `Autorisée : ${r.crossBorder}` : 'Non autorisée'}</td></tr>
               <tr><th>Départ</th><td>{dateTime(r.start)}</td><th>Retour prévu</th><td>{dateTime(r.end)}</td></tr>
               <tr><th>Kilométrage départ</th><td>{r.mileageOut != null ? `${num(r.mileageOut)} km` : `${blank} km`}</td><th>Kilométrage retour</th><td>{r.mileageIn != null ? `${num(r.mileageIn)} km` : `${blank} km`}</td></tr>
               {!r.withDriver && (<tr><th>Conducteur additionnel</th><td colSpan={3}>{blank}{blank}  Permis n° {blank}</td></tr>)}
@@ -138,16 +150,16 @@ export function Contract() {
           <h3>Prix</h3>
           <table className="ct-table ct-money">
             <tbody>
-              <tr><td>Location du véhicule : {days} jour{days > 1 ? 's' : ''}</td><td>{money(r.total - driverTotal)}</td></tr>
-              {driverTotal > 0 && <tr><td>Chauffeur : {days} jour{days > 1 ? 's' : ''}</td><td>{money(driverTotal)}</td></tr>}
+              <tr><td>{r.formula === 'forfait' ? `Forfait ${r.packageLabel ?? ''}, chauffeur compris` : r.formula === 'demi_journee' ? 'Location du véhicule : demi-journée' : `Location du véhicule : ${days} jour${days > 1 ? 's' : ''}`}</td><td>{money(r.total - mission - driverTotal)}</td></tr>
+              {driverTotal > 0 && <tr><td>Chauffeur : {r.formula === 'demi_journee' ? 'demi-journée' : `${days} jour${days > 1 ? 's' : ''}`}</td><td>{money(driverTotal)}</td></tr>}
+              {mission > 0 && <tr><td>Frais de mission du chauffeur (hébergement, repas)</td><td>{money(mission)}</td></tr>}
               {r.fees > 0 && <tr><td>Frais constatés au retour</td><td>{money(r.fees)}</td></tr>}
               <tr className="ct-total"><td>Total</td><td>{money(r.total + r.fees)}</td></tr>
               <tr><td>Caution (restituée au retour, déduction faite des sommes dues)</td><td>{money(r.caution)}</td></tr>
             </tbody>
           </table>
           <p className="ct-small">
-            Kilométrage inclus : {rate ? `${num(rate.kmPerDay * days)} km (${num(rate.kmPerDay)} km par jour)` : blank}, puis {rate ? money(rate.extraKm) : blank} par km
-            supplémentaire. Au-delà d’une heure de retard, chaque journée entamée est facturée au tarif journalier.
+            {kmIncl === null ? 'Kilométrage non compté (forfait).' : <>Kilométrage inclus : {rate ? `${num(kmIncl)} km` : blank}, puis {rate ? money(rate.extraKm) : blank} par km supplémentaire.</>} Au-delà d’une heure de retard, chaque journée entamée est facturée au tarif journalier.
           </p>
           <p className="ct-small">
             <strong>Modalités de paiement :</strong> {termsFor(billing.settings, c).label}.
@@ -166,6 +178,26 @@ export function Contract() {
             </table>
           )}
         </section>
+
+        {changes.length > 0 && (
+          <section className="ct-avoid-break">
+            <h3>Avenants</h3>
+            <table className="ct-table">
+              <thead><tr><th>N°</th><th>Date</th><th>Période modifiée</th><th className="right">Montant</th></tr></thead>
+              <tbody>
+                {changes.map((x, k) => (
+                  <tr key={x.id}>
+                    <td>{k + 1}</td>
+                    <td>{dateLong(x.createdAt)}</td>
+                    <td>{dateTime(x.newStart)} → {dateTime(x.newEnd)} (au lieu de {dateTime(x.oldStart)} → {dateTime(x.oldEnd)}){x.reason ? ` · ${x.reason}` : ''}</td>
+                    <td className="right">{money(x.oldTotal)} → {money(x.newTotal)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="ct-small">Chaque avenant fait partie du contrat et s’accepte par la signature ou le paiement du client.</p>
+          </section>
+        )}
 
         <section className="ct-avoid-break">
           <h3>État des lieux</h3>

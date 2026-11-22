@@ -2,10 +2,11 @@ import { useBilling } from '../state/useBilling';
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Empty, ErrorBox, Modal, ReservationBadge } from '../components/ui';
-import { createReservation } from '../data/services';
+import { createReservation, driverConflict } from '../data/services';
+import { FORMULAS, fitsPassengers, priceFor, type Price } from '../domain/tariff';
 import { dateShort, fromLocalInput, money, time, toLocalInput } from '../domain/format';
-import { balanceDue, findConflicts, lateDays, quote } from '../domain/rules';
-import type { ReservationStatus } from '../domain/types';
+import { balanceDue, findConflicts, lateDays } from '../domain/rules';
+import type { Formula, ReservationStatus } from '../domain/types';
 import { useData } from '../state/DataContext';
 
 const filters: [ReservationStatus | 'actives' | 'toutes', string][] = [
@@ -124,39 +125,74 @@ function NewReservation({ onClose }: { onClose: () => void }) {
   const defStart = new Date(now);
   defStart.setHours(defStart.getHours() + 1, 0, 0, 0);
   const defEnd = new Date(defStart.getTime() + 3 * 86400000);
+  const [formula, setFormula] = useState<Formula>('jour');
   const [start, setStart] = useState(toLocalInput(defStart.toISOString()));
   const [end, setEnd] = useState(toLocalInput(defEnd.toISOString()));
+  const [passengers, setPassengers] = useState('');
   const [vehicleId, setVehicleId] = useState('');
+  const [packageId, setPackageId] = useState('');
   const [clientId, setClientId] = useState('');
   const [withDriver, setWithDriver] = useState(false);
+  const [driverId, setDriverId] = useState('');
+  const [missionFees, setMissionFees] = useState('');
+  const [fuelIncluded, setFuelIncluded] = useState(false);
+  const [itinerary, setItinerary] = useState('');
+  const [crossBorder, setCrossBorder] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const pkg = data.packages.find((k) => k.id === packageId);
+  // Forfait : la fin se déduit de la durée du forfait.
   const sIso = start ? fromLocalInput(start) : '';
-  const eIso = end ? fromLocalInput(end) : '';
-  const validPeriod = sIso && eIso && Date.parse(eIso) > Date.parse(sIso);
+  const eIso = formula === 'forfait' ? (sIso && pkg ? new Date(Date.parse(sIso) + pkg.hours * 3600000).toISOString() : '') : end ? fromLocalInput(end) : '';
+  const validPeriod = !!sIso && !!eIso && Date.parse(eIso) > Date.parse(sIso);
+  const pax = Number(passengers) || 0;
+  const vehicle = data.vehicles.find((v) => v.id === vehicleId);
+  const driverOn = withDriver || !!vehicle?.driverRequired || formula === 'forfait';
 
-  // Seuls les véhicules libres sur toute la période sont proposés.
+  // Véhicules libres sur la période et assez grands pour le groupe.
   const free = useMemo(
     () =>
       data.vehicles
-        .filter((v) => !v.outOfService)
-        .map((v) => ({ v, busy: validPeriod ? findConflicts(v.id, sIso, eIso, data.reservations, data.maintenances).length > 0 : false }))
-        .sort((a, b) => Number(a.busy) - Number(b.busy) || a.v.category.localeCompare(b.v.category)),
-    [data, sIso, eIso, validPeriod],
+        .filter((v) => !v.outOfService && (formula !== 'forfait' || !pkg || v.category === pkg.category))
+        .map((v) => ({
+          v,
+          busy: validPeriod ? findConflicts(v.id, sIso, eIso, data.reservations, data.maintenances).length > 0 : false,
+          small: !fitsPassengers(v, pax, withDriver || !!v.driverRequired || formula === 'forfait'),
+        }))
+        .sort((a, b) => Number(a.busy || a.small) - Number(b.busy || b.small) || (a.v.seats ?? 0) - (b.v.seats ?? 0) || a.v.category.localeCompare(b.v.category)),
+    [data, sIso, eIso, validPeriod, pax, withDriver, formula, pkg],
   );
-  const vehicle = data.vehicles.find((v) => v.id === vehicleId);
   const rate = data.rates.find((r) => r.category === vehicle?.category);
-  const qt = rate && validPeriod ? quote(rate, sIso, eIso, withDriver) : null;
+  let qt: Price | null = null;
+  let priceError: string | null = null;
+  if (vehicle && validPeriod) {
+    try {
+      qt = priceFor({ formula, rate, pkg, start: sIso, end: eIso, withDriver: driverOn, missionFees: Number(missionFees) || 0 });
+    } catch (e) {
+      priceError = (e as Error).message;
+    }
+  }
   const client = data.clients.find((c) => c.id === clientId);
+  const drivers = data.drivers.filter((d) => d.active);
+  const driverBusy = (id: string) => (validPeriod ? driverConflict(id, sIso, eIso, data.reservations) : undefined);
+  const packages = data.packages.filter((k) => k.active).sort((a, b) => a.label.localeCompare(b.label) || a.price - b.price);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
-      const r = await createReservation(store, data, { vehicleId, clientId, start: sIso, end: eIso, withDriver, notes: notes || null }, new Date(), billing);
+      const r = await createReservation(
+        store, data,
+        {
+          vehicleId, clientId, start: sIso, end: eIso, withDriver: driverOn, notes: notes || null, formula, packageId: packageId || null,
+          passengers: pax || null, driverId: driverOn ? driverId || null : null, missionFees: Number(missionFees) || 0, fuelIncluded,
+          itinerary, crossBorder,
+        },
+        new Date(), billing,
+      );
       await refresh();
       toast(`Réservation ${r.number} créée`);
       nav(`/reservations/${r.id}`);
@@ -172,26 +208,59 @@ function NewReservation({ onClose }: { onClose: () => void }) {
       <form className="stack" onSubmit={submit}>
         <div className="grid-2">
           <label className="field">
+            Formule
+            <select value={formula} onChange={(e) => { setFormula(e.target.value as Formula); setVehicleId(''); }}>
+              {FORMULAS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            Passagers
+            <input type="number" min={1} max={99} inputMode="numeric" value={passengers} onChange={(e) => setPassengers(e.target.value)} placeholder="Nombre de personnes" />
+          </label>
+        </div>
+        {formula === 'forfait' && (
+          <label className="field">
+            Forfait
+            <select required value={packageId} onChange={(e) => { setPackageId(e.target.value); setVehicleId(''); }}>
+              <option value="">Choisir un forfait</option>
+              {packages.map((k) => <option key={k.id} value={k.id}>{k.label} · {k.category} · {money(k.price)}</option>)}
+            </select>
+            {packages.length === 0 && <span className="hint">Aucun forfait : créez-les dans Flotte › Tarifs.</span>}
+          </label>
+        )}
+        <div className="grid-2">
+          <label className="field">
             Départ
             <input type="datetime-local" required value={start} onChange={(e) => setStart(e.target.value)} />
           </label>
-          <label className="field">
-            Retour prévu
-            <input type="datetime-local" required value={end} onChange={(e) => setEnd(e.target.value)} />
-          </label>
+          {formula === 'forfait' ? (
+            <div className="field">
+              Fin prévue
+              <span className="small" style={{ padding: '10px 0' }}>{eIso ? `${dateShort(eIso)} à ${time(eIso)} (${pkg?.hours} h)` : '—'}</span>
+            </div>
+          ) : (
+            <label className="field">
+              Retour prévu
+              <input type="datetime-local" required value={end} onChange={(e) => setEnd(e.target.value)} />
+            </label>
+          )}
         </div>
         <label className="field">
           Véhicule
           <select required value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
             <option value="">Choisir un véhicule disponible</option>
-            {free.map(({ v, busy: b }) => (
-              <option key={v.id} value={v.id} disabled={b}>
+            {free.map(({ v, busy: b, small }) => (
+              <option key={v.id} value={v.id} disabled={b || small}>
                 {v.category} · {v.brand} {v.model} · {v.plate}
-                {b ? ' — indisponible' : ''}
+                {v.seats ? ` · ${v.seats} places` : ''}
+                {b ? ' — indisponible' : small ? ' — trop petit' : ''}
               </option>
             ))}
           </select>
-          <span className="hint">{free.filter((f) => !f.busy).length} véhicule(s) libre(s) sur la période</span>
+          <span className="hint">
+            {free.filter((f) => !f.busy && !f.small).length} véhicule(s) libre(s){pax ? ` pour ${pax} passager(s)` : ''} sur la période
+            {vehicle?.luggage != null ? ` · ${vehicle.luggage} bagages` : ''}
+          </span>
         </label>
         <label className="field">
           Client
@@ -208,25 +277,62 @@ function NewReservation({ onClose }: { onClose: () => void }) {
               ))}
           </select>
           {client?.score === 'surveiller' && <span className="hint" style={{ color: 'var(--ocre-text)' }}>Client à surveiller : vérifiez la caution avant la remise des clés.</span>}
-          {client?.licenseExpiry && validPeriod && Date.parse(client.licenseExpiry) < Date.parse(eIso) && (
+          {!driverOn && client?.licenseExpiry && validPeriod && Date.parse(client.licenseExpiry) < Date.parse(eIso) && (
             <span className="hint" style={{ color: 'var(--danger)' }}>Le permis expire avant la fin de la location.</span>
           )}
         </label>
-        <label className="check">
-          <input type="checkbox" checked={withDriver} onChange={(e) => setWithDriver(e.target.checked)} />
-          Avec chauffeur
-        </label>
+        <fieldset className="stack form-group">
+          <legend>Chauffeur et voyage</legend>
+          <label className="check">
+            <input type="checkbox" checked={driverOn} disabled={!!vehicle?.driverRequired || formula === 'forfait'} onChange={(e) => setWithDriver(e.target.checked)} />
+            Avec chauffeur{vehicle?.driverRequired ? ' (obligatoire pour ce véhicule)' : formula === 'forfait' ? ' (inclus dans le forfait)' : ''}
+          </label>
+          {driverOn && (
+            <div className="grid-2">
+              <label className="field">
+                Chauffeur
+                <select value={driverId} onChange={(e) => setDriverId(e.target.value)}>
+                  <option value="">À désigner plus tard</option>
+                  {drivers.map((d) => {
+                    const b = driverBusy(d.id);
+                    return <option key={d.id} value={d.id} disabled={!!b}>{d.name}{d.licenseCategory ? ` · permis ${d.licenseCategory}` : ''}{b ? ` — pris (${b.number})` : ''}</option>;
+                  })}
+                </select>
+              </label>
+              <label className="field">
+                Frais de mission (FCFA)
+                <input type="number" min={0} inputMode="numeric" value={missionFees} onChange={(e) => setMissionFees(e.target.value)} placeholder="Hébergement, repas hors de la ville" />
+              </label>
+            </div>
+          )}
+          <label className="field">
+            Itinéraire (facultatif)
+            <input value={itinerary} maxLength={500} onChange={(e) => setItinerary(e.target.value)} placeholder="Ex. : Dakar, Lac Rose, Saly, Joal" />
+          </label>
+          <div className="grid-2">
+            <label className="field">
+              Sortie du territoire
+              <input value={crossBorder} maxLength={120} onChange={(e) => setCrossBorder(e.target.value)} placeholder="Non autorisée (sinon : Gambie, Mali…)" />
+            </label>
+            <label className="check" style={{ alignSelf: 'end' }}>
+              <input type="checkbox" checked={fuelIncluded} onChange={(e) => setFuelIncluded(e.target.checked)} />
+              Carburant inclus dans le prix
+            </label>
+          </div>
+        </fieldset>
         <label className="field">
           Notes (facultatif)
           <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
         {qt && (
           <div className="notice">
-            <strong>{money(qt.total)}</strong> pour {qt.days} jour(s) à {money(qt.dailyRate)}/jour · caution {money(qt.caution)} ·{' '}
-            {qt.kmIncluded} km inclus
+            <strong>{money(qt.total)}</strong>{' '}
+            {formula === 'forfait' ? `forfait ${qt.label}` : formula === 'demi_journee' ? 'pour une demi-journée' : `pour ${qt.days} jour(s) à ${money(qt.dailyRate)}/jour`}
+            {qt.missionFees ? `, dont ${money(qt.missionFees)} de frais de mission` : ''} · caution {money(qt.caution)}
+            {qt.kmIncluded !== null ? ` · ${qt.kmIncluded} km inclus` : ' · kilométrage non compté'}
           </div>
         )}
-        {vehicle && !rate && <div className="error">Aucun tarif pour la catégorie {vehicle.category}. Ajoutez-le dans Tarifs.</div>}
+        {priceError && <div className="error">{priceError}</div>}
         <ErrorBox error={error} />
         <div className="modal-foot">
           <button type="button" className="btn btn-ghost" onClick={onClose}>

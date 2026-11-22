@@ -462,3 +462,4 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
   .facts dd { text-align: left; }
   .doc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-4); }

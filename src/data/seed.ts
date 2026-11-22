@@ -1,5 +1,5 @@
 import { billingSettings, buildInvoice, nextInvoiceNumber, type Invoice } from '../domain/billing';
-import type { Client, Expense, Incident, Maintenance, Payment, Rate, Reservation, Tables, Vehicle } from '../domain/types';
+import type { Client, Driver, Expense, Incident, Package, Maintenance, Payment, Rate, Reservation, Tables, Vehicle } from '../domain/types';
 
 // Données d'exemple, recalées sur la date du jour pour que la démo soit toujours parlante.
 
@@ -24,7 +24,8 @@ export function seed(now = new Date()): Db {
     { id: 'rt-ber', category: 'Berline', daily: 35000, weekly: 31000, monthly: 25000, driverDaily: 12000, kmPerDay: 250, extraKm: 120, caution: 200000 },
     { id: 'rt-suv', category: 'SUV', daily: 45000, weekly: 40000, monthly: 32000, driverDaily: 15000, kmPerDay: 250, extraKm: 150, caution: 300000 },
     { id: 'rt-4x4', category: '4x4', daily: 60000, weekly: 54000, monthly: 45000, driverDaily: 15000, kmPerDay: 250, extraKm: 200, caution: 400000 },
-    { id: 'rt-mini', category: 'Minibus', daily: 75000, weekly: 68000, monthly: 55000, driverDaily: 20000, kmPerDay: 300, extraKm: 200, caution: 400000 },
+    { id: 'rt-mini', category: 'Minibus', daily: 75000, weekly: 68000, monthly: 55000, driverDaily: 20000, kmPerDay: 300, extraKm: 200, caution: 400000, halfDay: 50000 },
+    { id: 'rt-bus', category: 'Bus', daily: 180000, weekly: 165000, monthly: 140000, driverDaily: 25000, kmPerDay: 350, extraKm: 400, caution: 0, halfDay: 120000 },
   ];
 
   const v = (id: string, plate: string, brand: string, model: string, category: string, mileage: number, extra: Partial<Vehicle> = {}): Vehicle => ({
@@ -32,13 +33,14 @@ export function seed(now = new Date()): Db {
     insuranceExpiry: day(now, 200), inspectionExpiry: day(now, 150), vignetteExpiry: day(now, 300), ...extra,
   });
   const vehicles: Vehicle[] = [
-    v('v-hilux', 'DK-2210-AB', 'Toyota', 'Hilux', '4x4', 61200),
-    v('v-tucson', 'DK-4521-BC', 'Hyundai', 'Tucson', 'SUV', 44210),
-    v('v-prado', 'DK-7788-AF', 'Toyota', 'Prado', '4x4', 52800, { insuranceExpiry: day(now, 7) }),
-    v('v-dzire', 'DK-3305-BD', 'Suzuki', 'Dzire', 'Berline', 23900, { fuel: 'essence' }),
-    v('v-hiace', 'DK-9012-AE', 'Toyota', 'Hiace', 'Minibus', 88100),
-    v('v-lc', 'DK-6610-AA', 'Toyota', 'Land Cruiser', '4x4', 97400, { inspectionExpiry: day(now, -3) }),
-    v('v-picanto', 'DK-1188-BE', 'Kia', 'Picanto', 'Citadine', 15300, { fuel: 'essence' }),
+    v('v-hilux', 'DK-2210-AB', 'Toyota', 'Hilux', '4x4', 61200, { seats: 5, luggage: 4, vin: 'MR0FB3CD300712245' }),
+    v('v-tucson', 'DK-4521-BC', 'Hyundai', 'Tucson', 'SUV', 44210, { seats: 5, luggage: 3 }),
+    v('v-prado', 'DK-7788-AF', 'Toyota', 'Prado', '4x4', 52800, { insuranceExpiry: day(now, 7), seats: 7, luggage: 4 }),
+    v('v-dzire', 'DK-3305-BD', 'Suzuki', 'Dzire', 'Berline', 23900, { fuel: 'essence', seats: 5, luggage: 2 }),
+    v('v-hiace', 'DK-9012-AE', 'Toyota', 'Hiace', 'Minibus', 88100, { seats: 15, luggage: 12, driverRequired: true }),
+    v('v-lc', 'DK-6610-AA', 'Toyota', 'Land Cruiser', '4x4', 97400, { inspectionExpiry: day(now, -3), seats: 7, luggage: 5 }),
+    v('v-picanto', 'DK-1188-BE', 'Kia', 'Picanto', 'Citadine', 15300, { fuel: 'essence', seats: 4, luggage: 1 }),
+    v('v-coaster', 'DK-5050-AG', 'Toyota', 'Coaster', 'Bus', 132500, { seats: 30, luggage: 25, driverRequired: true, year: 2019 }),
   ];
 
   const c = (id: string, name: string, phone: string, extra: Partial<Client> = {}): Client => ({
@@ -74,12 +76,14 @@ export function seed(now = new Date()): Db {
     r('v-tucson', 'c-diop', [-3, 12], [0, 12], 'en_cours', 45000, 300000),
     r('v-prado', 'c-teranga', [-4, 8], [0, 17], 'en_cours', 60000, 400000),
     r('v-dzire', 'c-ndiaye', [-2, 10], [2, 10], 'en_cours', 35000, 200000),
-    r('v-hiace', 'c-baobab', [-1, 8], [3, 8], 'en_cours', 75000, 400000),
+    { ...r('v-hiace', 'c-baobab', [-1, 8], [3, 8], 'en_cours', 95000, 400000), withDriver: true, driverId: 'd-1', passengers: 12, itinerary: 'Dakar, Lac Rose, Saly', fuelIncluded: false },
     r('v-tucson', 'c-fall', [4, 9], [7, 18], 'reservee', 45000, 300000),
-    r('v-hiace', 'c-sante', [5, 8], [9, 18], 'reservee', 75000, 400000),
+    { ...r('v-hiace', 'c-sante', [5, 8], [9, 18], 'reservee', 95000, 400000), withDriver: true, driverId: 'd-2', passengers: 14, itinerary: 'Dakar, Kaolack, Tambacounda', missionFees: 60000 },
     r('v-lc', 'c-diop', [3, 9], [6, 18], 'reservee', 60000, 400000),
     r('v-picanto', 'c-ndiaye', [1, 9], [2, 18], 'reservee', 25000, 150000),
   ];
+
+  for (const x of reservations) x.total += x.missionFees ?? 0; // frais de mission inclus dans le total
 
   const p = (reservationId: string, kind: Payment['kind'], amount: number, method: Payment['method'], status: Payment['status'] = 'paye'): Payment => ({
     id: `p-${reservationId}-${kind}`, reservationId, kind, amount, method, status,
@@ -97,7 +101,7 @@ export function seed(now = new Date()): Db {
     { id: 'm-2', vehicleId: 'v-tucson', label: 'Vidange', start: at(now, 1, 8), end: at(now, 1, 18), cost: 45000 },
   ];
 
-  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now) };
+  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now), drivers: seedDrivers(now), packages: seedPackages(now), reservation_changes: [] };
 }
 
 /** Factures des réservations d'exemple, numérotées dans l'ordre de création. */
@@ -145,5 +149,23 @@ export function seedIncidents(now = new Date()): Incident[] {
   return [
     { id: 'inc-1', clientId: 'c-fall', reservationId: null, kind: 'retard', severity: 'mineur', occurredOn: d(-95), amount: 25000, note: 'Retour avec 5 heures de retard, sans prévenir.', createdBy: 'agent@sdt.sn', createdAt: at(now, -95, 18) },
     { id: 'inc-2', clientId: 'c-fall', reservationId: null, kind: 'dommage', severity: 'mineur', occurredOn: d(-60), amount: 40000, note: 'Rayure portière arrière droite, non signalée au retour.', createdBy: 'agent@sdt.sn', createdAt: at(now, -60, 17) },
+  ];
+}
+
+export function seedDrivers(now = new Date()): Driver[] {
+  const d = (id: string, name: string, phone: string, licenseCategory: string, licenseExpiry: string): Driver => ({
+    id, name, phone, licenseNumber: `SN-${id.toUpperCase()}-2012`, licenseCategory, licenseExpiry, active: true, notes: null, createdAt: now.toISOString(),
+  });
+  return [d('d-1', 'Mamadou Sarr', '+221 77 410 22 10', 'B, D', day(now, 600)), d('d-2', 'Ibrahima Ba', '+221 76 520 33 41', 'B, C, D', day(now, 25)), d('d-3', 'Cheikh Ndour', '+221 78 230 44 05', 'B', day(now, 900))];
+}
+
+export function seedPackages(now = new Date()): Package[] {
+  const k = (id: string, label: string, category: string, price: number, hours: number): Package => ({ id, label, category, price, hours, active: true, createdAt: now.toISOString() });
+  return [
+    k('k-1', 'Transfert aéroport AIBD ↔ Dakar', 'Berline', 30000, 3),
+    k('k-2', 'Transfert aéroport AIBD ↔ Dakar', 'Minibus', 60000, 3),
+    k('k-3', 'Transfert AIBD ↔ Saly', 'Minibus', 75000, 4),
+    k('k-4', 'Excursion journée Lac Rose', '4x4', 90000, 9),
+    k('k-5', 'Excursion journée Lac Rose', 'Bus', 250000, 9),
   ];
 }

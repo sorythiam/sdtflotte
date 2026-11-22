@@ -209,10 +209,12 @@ export interface ReturnFees {
 /** Frais complémentaires au retour : kilomètres en plus, carburant manquant, retard, dégâts. */
 export function returnFees(r: Reservation, rate: Rate | undefined, input: ReturnInput): ReturnFees {
   const kmDriven = Math.max(0, input.mileageIn - (r.mileageOut ?? input.mileageIn));
-  const included = billedDays(r.start, r.end) * (rate?.kmPerDay ?? 0);
-  const kmExtra = rate ? Math.max(0, kmDriven - included) : 0;
+  const included =
+    r.formula === 'forfait' ? null : r.formula === 'demi_journee' ? Math.round((rate?.kmPerDay ?? 0) / 2) : billedDays(r.start, r.end) * (rate?.kmPerDay ?? 0);
+  const kmExtra = rate && included !== null ? Math.max(0, kmDriven - included) : 0;
   const kmFee = kmExtra * (rate?.extraKm ?? 0);
-  const fuelFee = Math.max(0, Math.min(4, input.fuelQuartersMissing)) * input.fuelQuarterPrice;
+  // Carburant inclus dans le prix : rien à refacturer.
+  const fuelFee = r.fuelIncluded ? 0 : Math.max(0, Math.min(4, input.fuelQuartersMissing)) * input.fuelQuarterPrice;
   // Une heure de tolérance, puis chaque journée entamée de retard est due au tarif du contrat.
   const lateMs = Date.parse(input.returnedAt) - Date.parse(r.end) - 60 * 60 * 1000;
   const late = lateMs > 0 ? Math.ceil(lateMs / DAY_MS) : 0;

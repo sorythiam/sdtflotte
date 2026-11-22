@@ -17,13 +17,14 @@ export interface BookingRequest {
   message: string | null;
   companyName?: string | null; // réservation pour le compte d'une entreprise
   companyTaxId?: string | null; // NINEA ou équivalent, facultatif
+  passengers?: number | null;
   status: BookingStatus;
   reservationId: string | null;
   declineReason: string | null;
   createdAt: string;
 }
 
-export type BookingRequestInput = Pick<BookingRequest, 'category' | 'start' | 'end' | 'withDriver' | 'name' | 'phone' | 'email' | 'message' | 'companyName' | 'companyTaxId'>;
+export type BookingRequestInput = Pick<BookingRequest, 'category' | 'start' | 'end' | 'withDriver' | 'name' | 'phone' | 'email' | 'message' | 'companyName' | 'companyTaxId' | 'passengers'>;
 
 export interface PublicCategory {
   category: string;
@@ -37,6 +38,9 @@ export interface PublicCategory {
   vehicles: number; // véhicules en service dans la catégorie
   models: string[]; // quelques modèles, « ou similaire »
   photos?: string[]; // photos des véhicules de la catégorie, couverture d'abord
+  seats?: number | null; // plus grand nombre de places de la catégorie, chauffeur compris
+  luggage?: number | null;
+  driverRequired?: boolean; // toujours avec chauffeur (bus, minibus)
 }
 
 export interface PublicBookingInfo {
@@ -70,11 +74,13 @@ export function availableByCategory(
   maintenances: Maintenance[],
   start: string,
   end: string,
+  passengers?: number | null,
 ): Record<string, number> {
   const out: Record<string, number> = {};
   for (const v of vehicles) {
     if (v.outOfService) continue;
     out[v.category] ??= 0;
+    if (passengers && v.seats && v.seats < passengers) continue; // trop petit pour le groupe
     const busy =
       reservations.some((r) => r.vehicleId === v.id && isActive(r) && overlaps(start, end, r.start, r.end)) ||
       maintenances.some((m) => m.vehicleId === v.id && overlaps(start, end, m.start, m.end));
@@ -103,6 +109,7 @@ export function validateBookingRequest(r: BookingRequestInput, now: Date): strin
     if (c.length < 2 || c.length > 160) return 'Indiquez le nom de l’entreprise.';
   }
   if ((r.companyTaxId ?? '').length > 40) return 'Identifiant fiscal trop long.';
+  if (r.passengers != null && !(Number.isInteger(r.passengers) && r.passengers >= 1 && r.passengers <= 99)) return 'Nombre de passagers invalide.';
   return null;
 }
 

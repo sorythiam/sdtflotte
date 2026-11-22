@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { shrinkPhoto } from '../components/photos';
 import { MAX_PHOTOS } from '../domain/photos';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ImportDialog } from '../components/ImportDialog';
 import { Empty, ErrorBox, Modal, VehicleBadge } from '../components/ui';
 import { num } from '../domain/format';
@@ -20,6 +20,7 @@ export function Vehicles() {
     .filter((v) => `${v.plate} ${v.brand} ${v.model} ${v.category}`.toLowerCase().includes(q.toLowerCase()))
     .sort((a, b) => a.category.localeCompare(b.category) || a.plate.localeCompare(b.plate));
   const editable = can('direction', 'agent', 'mecanicien');
+  const go = useNavigate();
 
   return (
     <>
@@ -63,18 +64,18 @@ export function Vehicles() {
                 {list.map((v) => {
                   const a = alerts.filter((x) => x.vehicleId === v.id);
                   return (
-                    <tr key={v.id} className={editable ? 'clickable' : undefined} onClick={() => editable && setParams({ v: v.id })}>
+                    <tr key={v.id} className="clickable" onClick={() => go(`/vehicules/${v.id}`)}>
                       <td>
                         <div className="row" style={{ gap: 12, flexWrap: 'nowrap' }}>
                           {v.photos?.length ? <img className="thumb" src={v.photos[0]} alt="" /> : <span className="thumb thumb-empty" aria-hidden="true" />}
                           <span>
-                            <strong>{v.brand} {v.model}</strong>
+                            <Link to={`/vehicules/${v.id}`} onClick={(e) => e.stopPropagation()}><strong>{v.brand} {v.model}</strong></Link>
                             <br />
                             <span className="muted">{v.plate}{v.year ? ` · ${v.year}` : ''}{v.photos?.length ? ` · ${v.photos.length} photo${v.photos.length > 1 ? 's' : ''}` : ''}</span>
                           </span>
                         </div>
                       </td>
-                      <td>{v.category}</td>
+                      <td>{v.category}{v.seats ? <><br /><span className="muted small">{v.seats} places{v.driverRequired ? ' · avec chauffeur' : ''}</span></> : null}</td>
                       <td className="right num">{num(v.mileage)} km</td>
                       <td>
                         {a.length === 0 ? (
@@ -102,7 +103,7 @@ export function Vehicles() {
   );
 }
 
-function VehicleForm({ id, onClose }: { id: string; onClose: () => void }) {
+export function VehicleForm({ id, onClose }: { id: string; onClose: () => void }) {
   const { data, store, refresh, toast } = useData();
   const existing = data.vehicles.find((v) => v.id === id);
   const categories = data.rates.map((r) => r.category);
@@ -189,7 +190,19 @@ function VehicleForm({ id, onClose }: { id: string; onClose: () => void }) {
           <label className="field">Assurance valable jusqu’au<input type="date" value={f.insuranceExpiry ?? ''} onChange={(e) => set('insuranceExpiry', e.target.value || null)} /></label>
           <label className="field">Visite technique jusqu’au<input type="date" value={f.inspectionExpiry ?? ''} onChange={(e) => set('inspectionExpiry', e.target.value || null)} /></label>
           <label className="field">Vignette jusqu’au<input type="date" value={f.vignetteExpiry ?? ''} onChange={(e) => set('vignetteExpiry', e.target.value || null)} /></label>
+          <label className="field">Numéro de châssis<input value={f.vin ?? ''} maxLength={40} onChange={(e) => set('vin', e.target.value.toUpperCase() || null)} placeholder="17 caractères (VIN)" /></label>
         </div>
+        <fieldset className="form-group stack">
+          <legend>Capacité</legend>
+          <div className="grid-2">
+            <label className="field">Places assises (chauffeur compris)<input type="number" min={1} max={99} value={f.seats ?? ''} onChange={(e) => set('seats', e.target.value ? Number(e.target.value) : null)} /></label>
+            <label className="field">Bagages<input type="number" min={0} max={99} value={f.luggage ?? ''} onChange={(e) => set('luggage', e.target.value ? Number(e.target.value) : null)} /></label>
+          </div>
+          <label className="check">
+            <input type="checkbox" checked={!!f.driverRequired} onChange={(e) => set('driverRequired', e.target.checked)} />
+            Toujours loué avec chauffeur (bus, minibus, permis D)
+          </label>
+        </fieldset>
         <fieldset className="form-group stack">
           <legend>Photos ({pics.length}/{MAX_PHOTOS})</legend>
           <p className="hint" style={{ margin: 0 }}>

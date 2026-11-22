@@ -38,6 +38,52 @@ export interface Vehicle {
   vignetteExpiry: string | null;
   /** Adresses des photos, la première sert de couverture (8 au plus). */
   photos?: string[];
+  seats?: number | null; // places assises, chauffeur compris
+  luggage?: number | null; // bagages
+  driverRequired?: boolean; // bus, minibus : toujours loué avec chauffeur
+  vin?: string | null; // numéro de châssis
+  documents?: VehicleDocuments; // scans dans l'espace privé
+}
+
+export type VehicleDocSlot = 'carteGrise' | 'assurance' | 'visiteTechnique' | 'autre';
+export type VehicleDocuments = Partial<Record<VehicleDocSlot, string>>;
+
+export interface Driver {
+  id: string;
+  name: string;
+  phone: string;
+  licenseNumber: string | null;
+  licenseCategory: string | null;
+  licenseExpiry: string | null;
+  active: boolean;
+  notes: string | null;
+  createdAt: string;
+}
+
+/** Forfait à prix fixe (transfert, excursion), toujours avec chauffeur. */
+export interface Package {
+  id: string;
+  label: string;
+  category: string;
+  price: number;
+  hours: number;
+  active: boolean;
+  createdAt: string;
+}
+
+/** Avenant : changement de dates ou de prix d'un contrat. */
+export interface ReservationChange {
+  id: string;
+  reservationId: string;
+  oldStart: string;
+  oldEnd: string;
+  newStart: string;
+  newEnd: string;
+  oldTotal: number;
+  newTotal: number;
+  reason: string | null;
+  changedBy: string | null;
+  createdAt: string;
 }
 
 export interface Rate {
@@ -50,6 +96,7 @@ export interface Rate {
   kmPerDay: number; // kilomètres inclus par jour
   extraKm: number; // prix du km supplémentaire
   caution: number;
+  halfDay?: number; // prix de la demi-journée, 0 = non proposé
 }
 
 export type ClientKind = 'particulier' | 'entreprise';
@@ -126,7 +173,17 @@ export interface Reservation {
   mileageIn: number | null;
   notes: string | null;
   createdAt: string;
+  passengers?: number | null;
+  driverId?: string | null;
+  formula?: Formula;
+  packageLabel?: string | null;
+  missionFees?: number; // frais de mission du chauffeur (hébergement, repas hors de la ville), inclus dans total
+  fuelIncluded?: boolean;
+  itinerary?: string | null;
+  crossBorder?: string | null; // pays où le véhicule peut aller ; null = territoire national seulement
 }
+
+export type Formula = 'jour' | 'demi_journee' | 'forfait';
 
 export type PaymentKind = 'acompte' | 'solde' | 'caution' | 'frais' | 'remboursement_caution' | 'remboursement';
 export type PaymentMethod =
@@ -187,6 +244,9 @@ export interface Tables {
   invoices: import('./billing').Invoice;
   inspections: import('./inspection').Inspection;
   incidents: Incident;
+  drivers: Driver;
+  packages: Package;
+  reservation_changes: ReservationChange;
 }
 export type TableName = keyof Tables;
 

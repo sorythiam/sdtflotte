@@ -8,7 +8,8 @@ import { useData } from '../state/DataContext';
 import { departureCheck } from '../domain/verification';
 import { contractSettings } from '../domain/contract';
 import { useBilling } from '../state/useBilling';
-import { creditReservation, invoiceFees, invoiceReservation } from '../data/services';
+import { amendReservation, creditReservation, driverConflict, invoiceFees, invoiceReservation } from '../data/services';
+import { kmIncludedFor, priceFor } from '../domain/tariff';
 import { payeeLines, payState, payStatusLabel, termsFor } from '../domain/billing';
 import { COUNTRY_CALLING_CODE, whatsappLink } from '../domain/booking';
 
@@ -32,7 +33,7 @@ const kindLabel: Record<PaymentKind, string> = {
   remboursement: 'Remboursement du trop-perçu',
 };
 
-type Dialog = null | 'pay' | 'checkout' | 'checkin' | 'refund' | 'cancel' | 'overpaid';
+type Dialog = null | 'pay' | 'checkout' | 'checkin' | 'refund' | 'cancel' | 'overpaid' | 'amend';
 
 export function ReservationDetail() {
   const { id } = useParams();
@@ -62,6 +63,9 @@ export function ReservationDetail() {
   const canRent = can('direction', 'agent');
   const canPay = can('direction', 'agent', 'comptable');
   const rules = contractSettings(session!.org.name, session!.org.contract);
+  const driver = data.drivers.find((d) => d.id === r.driverId);
+  const changes = data.reservation_changes.filter((x) => x.reservationId === r.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const kmIncl = kmIncludedFor(r, rate);
   const gate = r.status === 'reservee' ? departureCheck(c, now, rules.requireVerifiedClient, rules.minDriverAge, r.withDriver) : { ok: true, message: null };
 
   return (
@@ -94,6 +98,9 @@ export function ReservationDetail() {
               <Link className="btn btn-primary" to={`/reservations/${r.id}/retour`}>État des lieux de retour</Link>
             </>
           )}
+          {(r.status === 'reservee' || r.status === 'en_cours') && canRent && (
+            <button className="btn" onClick={() => setDialog('amend')}>{r.status === 'en_cours' ? 'Prolonger' : 'Modifier'}</button>
+          )}
           <Link className="btn" to={`/reservations/${r.id}/contrat`}>Contrat PDF</Link>
         </div>
       </header>
@@ -125,7 +132,11 @@ export function ReservationDetail() {
               <span className="kpi-label" style={{ color: 'var(--ocre-text)' }}>Véhicule</span>
               <h3>{v ? `${v.brand} ${v.model} · ${v.plate}` : '—'}</h3>
               <span className="small muted">
-                {v?.category} · {r.withDriver ? 'avec chauffeur' : 'sans chauffeur'}
+                {v?.category}
+                {v?.seats ? ` · ${v.seats} places` : ''}
+                {r.passengers ? ` · ${r.passengers} passager(s)` : ''}
+                <br />
+                {r.withDriver ? (driver ? <>Chauffeur : <strong>{driver.name}</strong>, {driver.phone}</> : <span style={{ color: 'var(--ocre-text)' }}>Avec chauffeur, à désigner</span>) : 'Sans chauffeur'}
                 {r.mileageOut != null && (
                   <>
                     <br />
@@ -143,8 +154,17 @@ export function ReservationDetail() {
               <tbody>
                 <tr><td className="muted">Départ</td><td className="right">{dateTime(r.start)}</td></tr>
                 <tr><td className="muted">Retour prévu</td><td className="right">{dateTime(r.end)}</td></tr>
-                <tr><td className="muted">{days} jour(s) × {money(r.dailyRate)}</td><td className="right num">{money(r.total)}</td></tr>
-                {rate && <tr><td className="muted">Kilométrage inclus</td><td className="right">{rate.kmPerDay} km/jour, puis {money(rate.extraKm)}/km</td></tr>}
+                <tr>
+                  <td className="muted">
+                    {r.formula === 'forfait' ? `Forfait ${r.packageLabel ?? ''}` : r.formula === 'demi_journee' ? 'Demi-journée' : `${days} jour(s) × ${money(r.dailyRate)}`}
+                  </td>
+                  <td className="right num">{money(r.total - (r.missionFees ?? 0))}</td>
+                </tr>
+                {(r.missionFees ?? 0) > 0 && <tr><td className="muted">Frais de mission du chauffeur</td><td className="right num">{money(r.missionFees!)}</td></tr>}
+                {rate && <tr><td className="muted">Kilométrage inclus</td><td className="right">{kmIncl === null ? 'Non compté (forfait)' : `${num(kmIncl)} km, puis ${money(rate.extraKm)}/km`}</td></tr>}
+                <tr><td className="muted">Carburant</td><td className="right">{r.fuelIncluded ? 'Inclus' : 'À la charge du client'}</td></tr>
+                {r.itinerary && <tr><td className="muted">Itinéraire</td><td className="right">{r.itinerary}</td></tr>}
+                <tr><td className="muted">Sortie du territoire</td><td className="right">{r.crossBorder ? `Autorisée : ${r.crossBorder}` : 'Non autorisée'}</td></tr>
                 {r.fees > 0 && <tr><td className="muted">Frais constatés au retour</td><td className="right num">{money(r.fees)}</td></tr>}
                 <tr>
                   <td><strong>Total</strong></td>
@@ -163,6 +183,17 @@ export function ReservationDetail() {
               </p>
             )}
             <p className="small muted" style={{ margin: 0 }}>
+              {changes.length > 0 && (
+                <>
+                  {changes.map((x, k) => (
+                    <span key={x.id}>
+                      Avenant {k + 1} du {dateTime(x.createdAt)} : {dateTime(x.oldStart)} → {dateTime(x.oldEnd)} devient {dateTime(x.newStart)} → {dateTime(x.newEnd)}, {money(x.oldTotal)} → {money(x.newTotal)}
+                      {x.reason ? ` (${x.reason})` : ''}{x.changedBy ? `, par ${x.changedBy}` : ''}.
+                      <br />
+                    </span>
+                  ))}
+                </>
+              )}
               Caution de {money(r.caution)}, remboursée après le retour, moins les frais éventuels.
               {r.notes && <><br />Notes : {r.notes}</>}
             </p>
@@ -214,7 +245,7 @@ export function ReservationDetail() {
             <span className="small muted">{terms.label}{ps.depositDue > 0 && ps.depositMissing > 0 ? ` · acompte attendu ${money(ps.depositMissing)}` : ''}</span>
             {invoices.map((i) => (
               <Link key={i.id} to={`/factures/${i.id}`} className="row small" style={{ justifyContent: 'space-between', textDecoration: 'none' }}>
-                <span>{i.kind === 'avoir' ? 'Avoir' : i.kind === 'complement' ? 'Facture de frais' : 'Facture'} {i.number}</span>
+                <span>{i.kind === 'avoir' ? 'Avoir' : i.kind === 'complement' ? (i.lines[0]?.label.startsWith('Avenant') ? 'Facture complémentaire' : 'Facture de frais') : 'Facture'} {i.number}</span>
                 <span className="num">{money(i.totalTtc)}</span>
               </Link>
             ))}
@@ -275,6 +306,7 @@ export function ReservationDetail() {
       {dialog === 'checkout' && <CheckoutDialog onClose={() => setDialog(null)} />}
       {dialog === 'checkin' && <CheckinDialog onClose={() => setDialog(null)} />}
       {dialog === 'cancel' && <CancelDialog onClose={() => setDialog(null)} />}
+      {dialog === 'amend' && <AmendDialog onClose={() => setDialog(null)} />}
     </>
   );
 }
@@ -552,6 +584,105 @@ function CancelDialog({ onClose }: { onClose: () => void }) {
         <button type="button" className="btn btn-ghost" onClick={onClose}>Garder la réservation</button>
         <button type="button" className="btn btn-danger" onClick={confirm}>Annuler la réservation</button>
       </div>
+    </Modal>
+  );
+}
+
+/** Prolonger ou modifier un contrat : nouvelles dates, prix recalculé, avenant et facture complémentaire. */
+function AmendDialog({ onClose }: { onClose: () => void }) {
+  const { id } = useParams();
+  const { data, store, refresh, toast, session } = useData();
+  const billing = useBilling();
+  const r = data.reservations.find((x) => x.id === id)!;
+  const v = data.vehicles.find((x) => x.id === r.vehicleId);
+  const rate = data.rates.find((x) => x.category === v?.category);
+  const started = r.status === 'en_cours';
+  const [start, setStart] = useState(toLocalInput(r.start));
+  const [end, setEnd] = useState(toLocalInput(r.end));
+  const [driverId, setDriverId] = useState(r.driverId ?? '');
+  const [reason, setReason] = useState(started ? 'Prolongation demandée par le client' : '');
+  const [override, setOverride] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const sIso = started ? r.start : start ? fromLocalInput(start) : r.start;
+  const eIso = end ? fromLocalInput(end) : r.end;
+  let computed: number | null = null;
+  let hint: string | null = null;
+  if (Date.parse(eIso) > Date.parse(sIso)) {
+    if (r.formula === 'forfait') {
+      computed = r.total;
+      hint = 'Forfait : le prix ne change pas avec la durée. Ajustez le montant si besoin.';
+    } else {
+      try {
+        computed = priceFor({ formula: r.formula ?? 'jour', rate, start: sIso, end: eIso, withDriver: r.withDriver, missionFees: r.missionFees }).total;
+      } catch (e) {
+        hint = (e as Error).message;
+      }
+    }
+  }
+  const total = override !== null ? Number(override) : (computed ?? r.total);
+  const delta = total - r.total;
+  const hasInvoice = data.invoices.some((i) => i.reservationId === r.id);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await amendReservation(store, data, billing, r, { start: sIso, end: eIso, total, reason: reason || null, by: session!.userEmail, driverId: r.withDriver ? driverId || null : null });
+      await refresh();
+      toast(delta > 0 && hasInvoice ? 'Contrat modifié, facture complémentaire émise' : delta < 0 && hasInvoice ? 'Contrat modifié, avoir émis' : 'Contrat modifié');
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={started ? `Prolonger le contrat ${r.number}` : `Modifier le contrat ${r.number}`} onClose={onClose}>
+      <form className="stack" onSubmit={submit}>
+        <div className="grid-2">
+          <label className="field">
+            Départ
+            <input type="datetime-local" required disabled={started} value={start} onChange={(e) => setStart(e.target.value)} />
+            {started && <span className="hint">Le véhicule est parti le {dateTime(r.start)}.</span>}
+          </label>
+          <label className="field">
+            Nouveau retour
+            <input type="datetime-local" required value={end} onChange={(e) => setEnd(e.target.value)} />
+          </label>
+        </div>
+        {r.withDriver && (
+          <label className="field">
+            Chauffeur
+            <select value={driverId} onChange={(e) => setDriverId(e.target.value)}>
+              <option value="">À désigner</option>
+              {data.drivers.filter((d) => d.active).map((d) => {
+                const b = driverConflict(d.id, sIso, eIso, data.reservations, r.id);
+                return <option key={d.id} value={d.id} disabled={!!b}>{d.name}{b ? ` — pris (${b.number})` : ''}</option>;
+              })}
+            </select>
+          </label>
+        )}
+        <label className="field">
+          Nouveau montant (FCFA, hors taxes)
+          <input type="number" min={0} value={override ?? String(computed ?? r.total)} onChange={(e) => setOverride(e.target.value)} />
+          <span className="hint">{hint ?? `Calculé au tarif ${v?.category ?? ''} : ${money(computed ?? r.total)}. Vous pouvez l’ajuster.`}</span>
+        </label>
+        <label className="field">Motif<input value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} placeholder="Ex. : prolongation de 2 jours" /></label>
+        <div className="notice">
+          {delta === 0 ? 'Le montant ne change pas.' : <>Montant {delta > 0 ? 'en hausse' : 'en baisse'} de <strong>{money(Math.abs(delta))}</strong> HT.</>}
+          {delta !== 0 && hasInvoice && (delta > 0 ? ' Une facture complémentaire sera émise.' : ' Un avoir partiel sera émis.')}
+          {' '}Un avenant est ajouté au contrat.
+        </div>
+        <ErrorBox error={error} />
+        <div className="modal-foot">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn btn-primary" disabled={busy}>Enregistrer l’avenant</button>
+        </div>
+      </form>
     </Modal>
   );
 }

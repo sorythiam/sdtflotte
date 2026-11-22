@@ -50,7 +50,7 @@ export interface Store {
   deleteClientDocument(path: string): Promise<void>;
   // Réservation en ligne : pages publiques (sans connexion) et traitement des demandes
   publicBookingInfo(slug: string): Promise<PublicBookingInfo | null>;
-  publicAvailability(slug: string, start: string, end: string): Promise<Record<string, number>>;
+  publicAvailability(slug: string, start: string, end: string, passengers?: number | null): Promise<Record<string, number>>;
   submitBookingRequest(slug: string, req: BookingRequestInput): Promise<void>;
   listBookingRequests(): Promise<BookingRequest[]>;
   updateBookingRequest(id: string, patch: { status: BookingStatus; reservationId?: string | null; declineReason?: string | null }): Promise<void>;

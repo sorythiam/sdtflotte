@@ -49,6 +49,7 @@ export const SECTIONS: Section[] = [
     key: 'fleet', label: 'Flotte', icon: icons.fleet,
     tabs: [
       { to: '/vehicules', label: 'Véhicules' },
+      { to: '/chauffeurs', label: 'Chauffeurs' },
       { to: '/maintenance', label: 'Entretiens' },
       { to: '/depenses', label: 'Dépenses' },
       { to: '/tarifs', label: 'Tarifs' },

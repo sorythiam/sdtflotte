@@ -159,14 +159,24 @@ export function buildInvoice(
   s: BillingSettings,
   now: Date,
 ): NewInvoice {
-  const days = Math.max(1, Math.round((Date.parse(r.end) - Date.parse(r.start)) / DAY) || 1);
-  const driverTotal = r.withDriver && rate ? Math.min(r.total, rate.driverDaily * days) : 0;
+  const mission = Math.max(0, r.missionFees ?? 0);
+  const base = r.total - mission;
   const what = vehicle ? `${vehicle.brand} ${vehicle.model} (${vehicle.plate})` : 'Véhicule';
   const period = `du ${frDay(r.start)} au ${frDay(r.end)}`;
-  const lines: InvoiceLine[] = [
-    { label: `Location ${what}, ${period}`, quantity: days, unit: 'jour', unitPrice: Math.round((r.total - driverTotal) / days), amount: r.total - driverTotal },
-  ];
-  if (driverTotal > 0) lines.push({ label: `Chauffeur, ${period}`, quantity: days, unit: 'jour', unitPrice: Math.round(driverTotal / days), amount: driverTotal });
+  const lines: InvoiceLine[] = [];
+  if (r.formula === 'forfait') {
+    lines.push({ label: `Forfait ${r.packageLabel ?? ''} avec chauffeur, ${what}, le ${frDay(r.start)}`.replace('  ', ' '), quantity: 1, unit: 'forfait', unitPrice: base, amount: base });
+  } else if (r.formula === 'demi_journee') {
+    const driverPart = r.withDriver && rate ? Math.min(base, Math.round(rate.driverDaily / 2)) : 0;
+    lines.push({ label: `Location ${what}, demi-journée du ${frDay(r.start)}`, quantity: 1, unit: 'demi-journée', unitPrice: base - driverPart, amount: base - driverPart });
+    if (driverPart > 0) lines.push({ label: 'Chauffeur, demi-journée', quantity: 1, unit: 'demi-journée', unitPrice: driverPart, amount: driverPart });
+  } else {
+    const days = Math.max(1, Math.round((Date.parse(r.end) - Date.parse(r.start)) / DAY) || 1);
+    const driverTotal = r.withDriver && rate ? Math.min(base, rate.driverDaily * days) : 0;
+    lines.push({ label: `Location ${what}, ${period}`, quantity: days, unit: 'jour', unitPrice: Math.round((base - driverTotal) / days), amount: base - driverTotal });
+    if (driverTotal > 0) lines.push({ label: `Chauffeur, ${period}`, quantity: days, unit: 'jour', unitPrice: Math.round(driverTotal / days), amount: driverTotal });
+  }
+  if (mission > 0) lines.push({ label: 'Frais de mission du chauffeur (hébergement, repas)', quantity: 1, unit: 'forfait', unitPrice: mission, amount: mission });
   const t = totals(lines, s);
   const terms = termsFor(s, client);
   const issue = isoDay(now);
@@ -191,6 +201,26 @@ export function buildFeesInvoice(r: Reservation, client: Client, s: BillingSetti
     dueDate: terms.dueDays > 0 ? isoDay(new Date(now.getTime() + terms.dueDays * DAY)) : issue, lines, ...t, depositDue: 0,
     terms: terms.dueDays > 0 ? `Paiement à ${terms.dueDays} jours date de facture` : 'Paiement au retour du véhicule', billTo: billTo(client),
     relatedInvoiceId: null, createdAt: now.toISOString(),
+  };
+}
+
+/**
+ * Avenant facturé : facture complémentaire si le prix monte, avoir partiel s'il baisse.
+ * `delta` est hors taxes, comme le montant de la réservation.
+ */
+export function buildAdjustment(r: Reservation, client: Client, s: BillingSettings, now: Date, delta: number, related: Invoice, reason?: string | null): NewInvoice {
+  const issue = isoDay(now);
+  const label = `Avenant au contrat ${r.number} : du ${frDay(r.start)} au ${frDay(r.end)}${reason ? ` (${reason})` : ''}`;
+  const lines: InvoiceLine[] = [{ label, quantity: 1, unit: 'forfait', unitPrice: delta, amount: delta }];
+  const vatRate = related.vatRate;
+  const vat = Math.round((delta * vatRate) / 100);
+  const terms = termsFor(s, client);
+  return {
+    reservationId: r.id, clientId: client.id, kind: delta > 0 ? 'complement' : 'avoir', issueDate: issue,
+    dueDate: delta > 0 && terms.dueDays > 0 ? isoDay(new Date(now.getTime() + terms.dueDays * DAY)) : issue,
+    lines, totalHt: delta, vatRate, vat, totalTtc: delta + vat, depositDue: 0,
+    terms: delta > 0 ? `Complément sur la facture ${related.number}` : `Avoir partiel sur la facture ${related.number}`,
+    billTo: billTo(client), relatedInvoiceId: related.id, createdAt: now.toISOString(),
   };
 }
 
