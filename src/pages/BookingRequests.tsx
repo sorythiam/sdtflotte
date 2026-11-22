@@ -1,7 +1,8 @@
+import { VerificationBadge } from '../components/VerificationBadge';
 import { useBilling } from '../state/useBilling';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Empty, ErrorBox, Modal } from '../components/ui';
+import { Empty, ErrorBox, Modal, ScoreBadge } from '../components/ui';
 import { createReservation } from '../data/services';
 import { availableByCategory, COUNTRY_CALLING_CODE, matchClient, whatsappLink, type BookingRequest } from '../domain/booking';
 import { taxIdLabel } from '../domain/clients';
@@ -72,7 +73,7 @@ export function BookingRequests() {
                   )}
                   <div className="small muted">
                     Reçue le {dateTime(req.createdAt)}
-                    {known && <> · client connu : <strong>{known.name}</strong></>}
+                    {known && <> · client connu : <Link to={`/clients/${known.id}`}><strong>{known.name}</strong></Link>{' '}<VerificationBadge client={known} /> <ScoreBadge score={known.score} />{known.scoreReason && known.score !== 'fiable' ? ` (${known.scoreReason})` : ''}</>}
                   </div>
                 </div>
                 {req.status === 'nouvelle' ? (

@@ -1,7 +1,7 @@
 import { categoryPhotos } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
 import type { Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
-import { seed, seedExpenses, seedInvoices } from './seed';
+import { seed, seedExpenses, seedIncidents, seedInvoices } from './seed';
 import { invoicePrefix, nextInvoiceNumber, type Invoice } from '../domain/billing';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
 import {
@@ -108,6 +108,7 @@ export class DemoStore implements Store {
         st.db.expenses ??= seedExpenses();
         st.db.invoices ??= seedInvoices(st.db);
         st.db.inspections ??= [];
+        st.db.incidents ??= seedIncidents();
         st.org.bookingSlug ??= 'sdt-demo';
         st.org.bookingEnabled ??= true;
         return st;
@@ -364,6 +365,16 @@ export class DemoStore implements Store {
   async inspectionPhotoUrls(paths: string[]): Promise<Record<string, string>> {
     return Object.fromEntries(paths.map((p) => [p, p]));
   }
+
+  async uploadClientDocument(image: Blob): Promise<string> {
+    return this.uploadVehiclePhoto(image);
+  }
+
+  async clientDocumentUrls(paths: string[]): Promise<Record<string, string>> {
+    return Object.fromEntries(paths.map((p) => [p, p]));
+  }
+
+  async deleteClientDocument(): Promise<void> {}
 
   async setDailyDigest(on: boolean): Promise<void> {
     if (!this.state.session) return;

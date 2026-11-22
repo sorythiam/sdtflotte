@@ -1,5 +1,5 @@
 import { billingSettings, buildInvoice, nextInvoiceNumber, type Invoice } from '../domain/billing';
-import type { Client, Expense, Maintenance, Payment, Rate, Reservation, Tables, Vehicle } from '../domain/types';
+import type { Client, Expense, Incident, Maintenance, Payment, Rate, Reservation, Tables, Vehicle } from '../domain/types';
 
 // Données d'exemple, recalées sur la date du jour pour que la démo soit toujours parlante.
 
@@ -46,10 +46,14 @@ export function seed(now = new Date()): Db {
   });
   const clients: Client[] = [
     c('c-baobab', 'Baobab Logistique', '+221 33 800 00 01', { kind: 'entreprise', licenseExpiry: null, email: 'compta@baobab-logistique.sn', address: 'Zone industrielle, km 4,5 Bd du Centenaire', city: 'Dakar', taxId: '005871234 2G3', tradeRegister: 'SN-DKR-2016-B-11234', contactName: 'Moussa Sarr', contactRole: 'Responsable logistique', contactPhone: '+221 77 640 12 12', contactEmail: 'm.sarr@baobab-logistique.sn' }),
-    c('c-diop', 'Aïssatou Diop', '+221 77 000 00 02'),
+    c('c-diop', 'Aïssatou Diop', '+221 77 000 00 02', {
+      idType: 'cni', idNumber: '1 754 1992 01234', idExpiry: day(now, 1400), birthDate: '1992-04-17', licenseNumber: 'SN-DK-2014-08812', licenseCategory: 'B',
+      documents: { idFront: demoDoc('CNI recto'), idBack: demoDoc('CNI verso'), license: demoDoc('Permis'), selfie: demoDoc('Photo') },
+      verifiedAt: at(now, -40, 10), verifiedBy: 'agent@sdt.sn',
+    }),
     c('c-teranga', 'Mission Teranga Tours', '+221 33 800 00 03', { kind: 'entreprise', licenseExpiry: null, address: 'Avenue Cheikh Anta Diop', city: 'Dakar', taxId: '006120987 2V2', tradeRegister: 'SN-DKR-2019-B-04521', contactName: 'Fatou Diallo', contactRole: 'Directrice des opérations', contactPhone: '+221 78 110 45 45' }),
     c('c-ndiaye', 'Moussa Ndiaye', '+221 76 000 00 04'),
-    c('c-fall', 'Ousmane Fall', '+221 78 000 00 05', { score: 'surveiller' }),
+    c('c-fall', 'Ousmane Fall', '+221 78 000 00 05', { score: 'surveiller', scoreReason: 'Deux retours en retard et une rayure non signalée', idType: 'cni', idNumber: '1 761 1988 04411', licenseNumber: 'SN-TH-2010-02231', licenseExpiry: day(now, -12) }),
     c('c-sante', 'ONG Santé Plus', '+221 33 800 00 06', { kind: 'entreprise', licenseExpiry: null, address: 'Sacré-Cœur 3, villa 9012', city: 'Dakar', contactName: 'Dr Aminata Kane', contactRole: 'Coordinatrice', contactPhone: '+221 76 300 88 21' }),
   ];
 
@@ -93,7 +97,7 @@ export function seed(now = new Date()): Db {
     { id: 'm-2', vehicleId: 'v-tucson', label: 'Vidange', start: at(now, 1, 8), end: at(now, 1, 18), cost: 45000 },
   ];
 
-  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [] };
+  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now) };
 }
 
 /** Factures des réservations d'exemple, numérotées dans l'ordre de création. */
@@ -127,5 +131,19 @@ export function seedExpenses(now = new Date()): Expense[] {
     e('e-8', 'v-picanto', -40, 'carburant', 25000, 'Plein super', 15100),
     e('e-9', 'v-hiace', -45, 'peage', 7000, 'Autoroute Dakar-AIBD aller-retour'),
     e('e-10', 'v-prado', -60, 'taxes', 60000, 'Vignette'),
+  ];
+}
+
+/** Image d'exemple pour les pièces des clients en démo. */
+function demoDoc(label: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400"><rect width="640" height="400" rx="24" fill="#e2dacb"/><rect x="32" y="32" width="150" height="190" rx="12" fill="#0b3c5d" opacity=".25"/><rect x="210" y="60" width="360" height="22" rx="6" fill="#0b3c5d" opacity=".3"/><rect x="210" y="110" width="280" height="22" rx="6" fill="#0b3c5d" opacity=".2"/><rect x="210" y="160" width="320" height="22" rx="6" fill="#0b3c5d" opacity=".2"/><text x="32" y="340" font-family="sans-serif" font-size="40" font-weight="700" fill="#0b3c5d">${label} · exemple</text></svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+export function seedIncidents(now = new Date()): Incident[] {
+  const d = (n: number) => day(now, n);
+  return [
+    { id: 'inc-1', clientId: 'c-fall', reservationId: null, kind: 'retard', severity: 'mineur', occurredOn: d(-95), amount: 25000, note: 'Retour avec 5 heures de retard, sans prévenir.', createdBy: 'agent@sdt.sn', createdAt: at(now, -95, 18) },
+    { id: 'inc-2', clientId: 'c-fall', reservationId: null, kind: 'dommage', severity: 'mineur', occurredOn: d(-60), amount: 40000, note: 'Rayure portière arrière droite, non signalée au retour.', createdBy: 'agent@sdt.sn', createdAt: at(now, -60, 17) },
   ];
 }

@@ -5,6 +5,8 @@ import { dateTime, fromLocalInput, money, num, toLocalInput } from '../domain/fo
 import { balanceDue, billedDays, cautionHeld, lateDays, returnFees } from '../domain/rules';
 import type { Payment, PaymentKind, PaymentMethod } from '../domain/types';
 import { useData } from '../state/DataContext';
+import { departureCheck } from '../domain/verification';
+import { contractSettings } from '../domain/contract';
 import { useBilling } from '../state/useBilling';
 import { creditReservation, invoiceFees, invoiceReservation } from '../data/services';
 import { payeeLines, payState, payStatusLabel, termsFor } from '../domain/billing';
@@ -59,6 +61,8 @@ export function ReservationDetail() {
   const days = billedDays(r.start, r.end);
   const canRent = can('direction', 'agent');
   const canPay = can('direction', 'agent', 'comptable');
+  const rules = contractSettings(session!.org.name, session!.org.contract);
+  const gate = r.status === 'reservee' ? departureCheck(c, now, rules.requireVerifiedClient, rules.minDriverAge, r.withDriver) : { ok: true, message: null };
 
   return (
     <>
@@ -76,8 +80,12 @@ export function ReservationDetail() {
           {r.status === 'reservee' && canRent && (
             <>
               <button className="btn btn-danger" onClick={() => setDialog('cancel')}>Annuler</button>
-              <button className="btn btn-ghost" onClick={() => setDialog('checkout')} title="Sans photos ni signature">Départ rapide</button>
-              <Link className="btn btn-primary" to={`/reservations/${r.id}/depart`}>État des lieux et remise des clés</Link>
+              {gate.ok && <button className="btn btn-ghost" onClick={() => setDialog('checkout')} title="Sans photos ni signature">Départ rapide</button>}
+              {gate.ok ? (
+                <Link className="btn btn-primary" to={`/reservations/${r.id}/depart`}>État des lieux et remise des clés</Link>
+              ) : (
+                c && <Link className="btn btn-primary" to={`/clients/${c.id}`}>Compléter le dossier client</Link>
+              )}
             </>
           )}
           {r.status === 'en_cours' && canRent && (
@@ -89,6 +97,12 @@ export function ReservationDetail() {
           <Link className="btn" to={`/reservations/${r.id}/contrat`}>Contrat PDF</Link>
         </div>
       </header>
+
+      {gate.message && (
+        <div className={`notice no-print${gate.ok ? '' : ' notice-danger'}`} role="status">
+          {gate.message} {c && <Link to={`/clients/${c.id}`}>Ouvrir la fiche du client</Link>}
+        </div>
+      )}
 
       <div className="cols no-print">
         <div className="col-2 stack" style={{ gap: 'var(--space-6)' }}>

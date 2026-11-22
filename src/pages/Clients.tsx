@@ -1,3 +1,5 @@
+import { Link, useNavigate } from 'react-router-dom';
+import { VerificationBadge } from '../components/VerificationBadge';
 import { termsFor } from '../domain/billing';
 import { useBilling } from '../state/useBilling';
 import { useState, type FormEvent } from 'react';
@@ -15,6 +17,7 @@ export function Clients() {
   const [editing, setEditing] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const editable = can('direction', 'agent');
+  const go = useNavigate();
   const stats = (id: string) => {
     const rs = data.reservations.filter((r) => r.clientId === id && r.status !== 'annulee');
     return { count: rs.length, revenue: rs.reduce((s, r) => s + r.total + r.fees, 0) };
@@ -47,15 +50,15 @@ export function Clients() {
           <div className="table-wrap">
             <table className="data">
               <thead>
-                <tr><th>Client</th><th>Contact</th><th className="right">Locations</th><th className="right">Chiffre d’affaires</th><th>Scoring</th></tr>
+                <tr><th>Client</th><th>Contact</th><th className="right">Locations</th><th className="right">Chiffre d’affaires</th><th>Dossier</th><th>Scoring</th></tr>
               </thead>
               <tbody>
                 {list.map((c) => {
                   const s = stats(c.id);
                   return (
-                    <tr key={c.id} className={editable ? 'clickable' : undefined} onClick={() => editable && setEditing(c.id)}>
+                    <tr key={c.id} className="clickable" onClick={() => go(`/clients/${c.id}`)}>
                       <td>
-                        <strong>{c.name}</strong>
+                        <Link to={`/clients/${c.id}`} onClick={(e) => e.stopPropagation()}><strong>{c.name}</strong></Link>
                         <br />
                         <span className="muted">
                           {c.kind === 'entreprise' ? ['Entreprise', legalLine(c, taxLabel)].filter(Boolean).join(' · ') : 'Particulier'}
@@ -74,6 +77,7 @@ export function Clients() {
                       </td>
                       <td className="right num">{s.count}</td>
                       <td className="right num">{money(s.revenue)}</td>
+                      <td><VerificationBadge client={c} /></td>
                       <td><ScoreBadge score={c.score} /></td>
                     </tr>
                   );
@@ -89,7 +93,7 @@ export function Clients() {
   );
 }
 
-function ClientForm({ id, onClose }: { id: string; onClose: () => void }) {
+export function ClientForm({ id, onClose }: { id: string; onClose: () => void }) {
   const { data, store, refresh, toast, session } = useData();
   const existing = data.clients.find((c) => c.id === id);
   const [f, setF] = useState<ClientInput>(() => ({ ...emptyClient(), ...(existing ?? {}) }));
@@ -110,6 +114,12 @@ function ClientForm({ id, onClose }: { id: string; onClose: () => void }) {
     if (err) return setError(err);
     try {
       const row = normalizeClient(f);
+      if (row.score === 'fiable') row.scoreReason = null;
+      // Une pièce modifiée après validation doit être revérifiée.
+      if (existing?.verifiedAt && (row.idNumber !== existing.idNumber || row.licenseExpiry !== existing.licenseExpiry)) {
+        row.verifiedAt = null;
+        row.verifiedBy = null;
+      }
       if (existing) await store.update('clients', id, row);
       else await store.insert('clients', row);
       await refresh();
@@ -192,6 +202,13 @@ function ClientForm({ id, onClose }: { id: string; onClose: () => void }) {
             <option value="fiable">Fiable</option><option value="surveiller">À surveiller</option><option value="blacklist">Blacklisté (réservation impossible)</option>
           </select>
         </label>
+        {f.score !== 'fiable' && (
+          <label className="field">
+            Motif
+            <input {...txt('scoreReason')} maxLength={500} placeholder="Ex. : impayé de mars, véhicule rendu endommagé" />
+            <span className="hint">Visible par l’équipe sur la fiche et au moment du départ.</span>
+          </label>
+        )}
         <ErrorBox error={error} />
         <div className="modal-foot">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>

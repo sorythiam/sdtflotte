@@ -44,6 +44,10 @@ export interface Store {
   // État des lieux : photos dans un espace privé, affichées par liens temporaires
   uploadInspectionPhoto(image: Blob, reservationId: string): Promise<string>;
   inspectionPhotoUrls(paths: string[]): Promise<Record<string, string>>;
+  // Pièces des clients (identité, permis, photo) : espace privé, liens temporaires
+  uploadClientDocument(image: Blob, clientId: string): Promise<string>;
+  clientDocumentUrls(paths: string[]): Promise<Record<string, string>>;
+  deleteClientDocument(path: string): Promise<void>;
   // Réservation en ligne : pages publiques (sans connexion) et traitement des demandes
   publicBookingInfo(slug: string): Promise<PublicBookingInfo | null>;
   publicAvailability(slug: string, start: string, end: string): Promise<Record<string, number>>;

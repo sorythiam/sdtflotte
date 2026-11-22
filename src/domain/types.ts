@@ -77,6 +77,34 @@ export interface Client {
   // Modalités propres à ce client (vide = celles de l'entreprise)
   depositPercent?: number | null;
   dueDays?: number | null;
+  // Vérification : pièce d'identité, permis, photos (espace privé), validation par un agent
+  idType?: IdType | null;
+  idExpiry?: string | null;
+  birthDate?: string | null;
+  licenseNumber?: string | null;
+  licenseCategory?: string | null;
+  documents?: ClientDocuments;
+  verifiedAt?: string | null;
+  verifiedBy?: string | null;
+  scoreReason?: string | null; // motif d'un client à surveiller ou blacklisté
+}
+
+export type IdType = 'cni' | 'passeport' | 'carte_cedeao' | 'carte_sejour' | 'autre';
+export type DocSlot = 'idFront' | 'idBack' | 'license' | 'selfie';
+export type ClientDocuments = Partial<Record<DocSlot, string>>; // chemins dans l'espace privé
+
+export type IncidentKind = 'retard' | 'dommage' | 'impaye' | 'accident' | 'amende' | 'comportement' | 'autre';
+export interface Incident {
+  id: string;
+  clientId: string;
+  reservationId: string | null;
+  kind: IncidentKind;
+  severity: 'mineur' | 'grave';
+  occurredOn: string; // AAAA-MM-JJ
+  amount: number;
+  note: string;
+  createdBy: string | null;
+  createdAt: string;
 }
 
 export type ReservationStatus = 'reservee' | 'en_cours' | 'terminee' | 'annulee';
@@ -158,6 +186,7 @@ export interface Tables {
   expenses: Expense;
   invoices: import('./billing').Invoice;
   inspections: import('./inspection').Inspection;
+  incidents: Incident;
 }
 export type TableName = keyof Tables;
 

@@ -40,6 +40,7 @@ function friendly(e: { message?: string; code?: string } | null): Error {
 
 const PHOTO_BUCKET = 'vehicle-photos';
 const INSPECTION_BUCKET = 'inspection-photos';
+const CLIENT_DOC_BUCKET = 'client-documents';
 
 export class SupabaseStore implements Store {
   readonly mode = 'supabase' as const;
@@ -285,11 +286,32 @@ export class SupabaseStore implements Store {
   }
 
   async inspectionPhotoUrls(paths: string[]): Promise<Record<string, string>> {
+    return this.signed(INSPECTION_BUCKET, paths);
+  }
+
+  async uploadClientDocument(image: Blob, clientId: string): Promise<string> {
+    if (!this.orgId) throw new Error('Session expirée, reconnectez-vous.');
+    const path = `${this.orgId}/${clientId}/${crypto.randomUUID()}.jpg`;
+    const { error } = await this.sb.storage.from(CLIENT_DOC_BUCKET).upload(path, image, { contentType: 'image/jpeg', upsert: false });
+    if (error) throw new Error(`Envoi de la photo impossible : ${error.message}`);
+    return path;
+  }
+
+  async clientDocumentUrls(paths: string[]): Promise<Record<string, string>> {
+    return this.signed(CLIENT_DOC_BUCKET, paths);
+  }
+
+  async deleteClientDocument(path: string): Promise<void> {
+    if (path.startsWith('data:')) return;
+    await this.sb.storage.from(CLIENT_DOC_BUCKET).remove([path]);
+  }
+
+  private async signed(bucket: string, paths: string[]): Promise<Record<string, string>> {
     const out: Record<string, string> = {};
     const stored = paths.filter((p) => !p.startsWith('data:'));
     for (const p of paths) if (p.startsWith('data:')) out[p] = p;
     if (!stored.length) return out;
-    const { data, error } = await this.sb.storage.from(INSPECTION_BUCKET).createSignedUrls(stored, 3600);
+    const { data, error } = await this.sb.storage.from(bucket).createSignedUrls(stored, 3600);
     if (error) throw friendly(error);
     for (const d of data ?? []) if (d.path && d.signedUrl) out[d.path] = d.signedUrl;
     return out;

@@ -5,7 +5,7 @@ import { SupabaseStore } from '../data/supabaseStore';
 import type { BookingRequest } from '../domain/booking';
 import type { Invoice } from '../domain/billing';
 import type { Inspection } from '../domain/inspection';
-import type { Client, Expense, Maintenance, Payment, Rate, Reservation, Role, Vehicle } from '../domain/types';
+import type { Client, Expense, Incident, Maintenance, Payment, Rate, Reservation, Role, Vehicle } from '../domain/types';
 import { billingSettings } from '../domain/billing';
 import { idbGet, idbSet } from '../offline/idb';
 import { isNetworkError, onOutboxChange, pending } from '../offline/outbox';
@@ -40,10 +40,11 @@ export interface Data {
   expenses: Expense[];
   invoices: Invoice[];
   inspections: Inspection[];
+  incidents: Incident[];
   bookingRequests: BookingRequest[];
 }
 
-const empty: Data = { vehicles: [], clients: [], rates: [], reservations: [], payments: [], maintenances: [], expenses: [], invoices: [], inspections: [], bookingRequests: [] };
+const empty: Data = { vehicles: [], clients: [], rates: [], reservations: [], payments: [], maintenances: [], expenses: [], invoices: [], inspections: [], incidents: [], bookingRequests: [] };
 
 interface Ctx {
   store: Store;
@@ -92,7 +93,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, bookingRequests] = await Promise.all([
+      const [vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, incidents, bookingRequests] = await Promise.all([
         store.list('vehicles'),
         store.list('clients'),
         store.list('rates'),
@@ -102,10 +103,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
         store.list('expenses'),
         store.list('invoices'),
         store.list('inspections'),
+        store.list('incidents').catch(() => [] as Incident[]),
         // Réservées à la direction et aux agents : les autres profils reçoivent une liste vide.
         store.listBookingRequests().catch(() => [] as BookingRequest[]),
       ]);
-      const fresh = { vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, bookingRequests };
+      const fresh = { vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, incidents, bookingRequests };
       setData(fresh);
       setOffline(navigator.onLine === false);
       setNow(new Date());

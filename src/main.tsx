@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Clients } from './pages/Clients';
+import { ClientDetail } from './pages/ClientDetail';
 import { Dashboard } from './pages/Dashboard';
 import { Team } from './pages/Team';
 import { Settings } from './pages/Settings';
@@ -43,6 +44,7 @@ function App() {
         <Route path="reservations/:id/retour" element={<InspectionPage kind="retour" />} />
         <Route path="vehicules" element={<Vehicles />} />
         <Route path="clients" element={<Clients />} />
+        <Route path="clients/:id" element={<ClientDetail />} />
         <Route path="maintenance" element={<Maintenance />} />
         <Route path="tarifs" element={<Rates />} />
         <Route path="equipe" element={<Team />} />

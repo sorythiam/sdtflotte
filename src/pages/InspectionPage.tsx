@@ -11,13 +11,15 @@ import {
 } from '../domain/inspection';
 import { returnFees } from '../domain/rules';
 import { useData } from '../state/DataContext';
+import { departureCheck } from '../domain/verification';
+import { contractSettings } from '../domain/contract';
 import { useBilling } from '../state/useBilling';
 import { useSignedUrls } from '../state/useSignedUrls';
 import { enqueue, isNetworkError, keepPhoto, localRefs, pending, type PendingInspection } from '../offline/outbox';
 
 export function InspectionPage({ kind }: { kind: InspectionKind }) {
   const { id } = useParams();
-  const { data } = useData();
+  const { data, now, session } = useData();
   const r = data.reservations.find((x) => x.id === id);
   if (!r) {
     return (
@@ -29,6 +31,21 @@ export function InspectionPage({ kind }: { kind: InspectionKind }) {
   }
   const done = data.inspections.find((i) => i.reservationId === r.id && i.kind === kind);
   if (done) return <InspectionView inspection={done} />;
+  if (kind === 'depart' && r.status === 'reservee') {
+    const rules = contractSettings(session!.org.name, session!.org.contract);
+    const gate = departureCheck(data.clients.find((c) => c.id === r.clientId), now, rules.requireVerifiedClient, rules.minDriverAge, r.withDriver);
+    if (!gate.ok)
+      return (
+        <div className="card stack">
+          <h1 style={{ fontSize: 22 }}>Remise des clés bloquée</h1>
+          <p style={{ margin: 0 }}>{gate.message}</p>
+          <div className="row">
+            <Link className="btn btn-primary" to={`/clients/${r.clientId}`}>Compléter le dossier client</Link>
+            <Link className="btn" to={`/reservations/${r.id}`}>Retour au contrat</Link>
+          </div>
+        </div>
+      );
+  }
   return <PendingGate reservationId={r.id} kind={kind} />;
 }
 

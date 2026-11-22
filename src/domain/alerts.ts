@@ -1,6 +1,7 @@
 // Alertes du jour : ce qui demande une action. Calcul pur, partagé entre l'application
 // (centre d'alertes) et la fonction serveur qui envoie le récapitulatif du matin.
 
+import { verificationOf } from './verification';
 import { balanceDue, cautionHeld, expiryAlerts, lateDays } from './rules';
 import type { Client, Maintenance, Payment, Reservation, Role, Vehicle } from './types';
 
@@ -13,6 +14,7 @@ export type AlertKind =
   | 'document'
   | 'permis'
   | 'liste_noire'
+  | 'dossier_client'
   | 'impaye'
   | 'caution_a_rendre'
   | 'entretien_jour'
@@ -126,10 +128,20 @@ export function buildAlerts(input: AlertInput, now: Date, offsetMin = -now.getTi
       if (c && !r.withDriver && c.licenseExpiry && Date.parse(c.licenseExpiry + 'T23:59:59Z') < e) {
         const expired = Date.parse(c.licenseExpiry + 'T23:59:59Z') < t;
         out.push({
-          id: `permis:${r.id}`, kind: 'permis', level: 'urgent', link: `/clients`, roles: OPS,
+          id: `permis:${r.id}`, kind: 'permis', level: 'urgent', link: `/clients/${c.id}`, roles: OPS,
           title: `Permis ${expired ? 'expiré' : 'expirant pendant la location'} : ${c.name}`,
           detail: `Permis valable jusqu’au ${dmy(c.licenseExpiry)} · contrat ${r.number} jusqu’au ${dmy(r.end)}`,
         });
+      }
+      if (c && c.score !== 'blacklist' && r.status === 'reservee' && !r.withDriver && s < t + 2 * DAY) {
+        const v = verificationOf(c, now);
+        if (v.state !== 'verifie') {
+          out.push({
+            id: `dossier:${r.id}`, kind: 'dossier_client', level: s < t + DAY ? 'urgent' : 'attention', link: `/clients/${c.id}`, roles: OPS,
+            title: `Dossier client ${v.state === 'a_revoir' ? 'à revoir' : 'non vérifié'} : ${c.name}`,
+            detail: `Départ ${r.number} le ${dmy(r.start)} · ${v.issues[0] ?? 'pièces à contrôler'}`,
+          });
+        }
       }
       if (c?.score === 'blacklist' && r.status === 'reservee') {
         out.push({

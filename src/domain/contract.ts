@@ -9,6 +9,8 @@ export interface ContractSettings {
   registration: string; // RCCM, NINEA, IFU… selon le pays
   logo: string | null; // image en data URL, réduite à l'envoi
   terms: string; // conditions générales, un article par paragraphe
+  requireVerifiedClient: boolean; // pas de remise des clés sans dossier client vérifié
+  minDriverAge: number; // 0 = pas d'âge minimum
 }
 
 export const EMPTY_CONTRACT: ContractSettings = {
@@ -20,6 +22,8 @@ export const EMPTY_CONTRACT: ContractSettings = {
   registration: '',
   logo: null,
   terms: '',
+  requireVerifiedClient: false,
+  minDriverAge: 0,
 };
 
 /**

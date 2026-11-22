@@ -95,6 +95,20 @@ export function ContractSettingsForm({ editable }: { editable: boolean }) {
             </label>
             {s.logo && <button type="button" className="btn btn-sm btn-ghost" onClick={() => setS({ ...s, logo: null })}>Retirer</button>}
           </div>
+          <fieldset className="stack" style={{ border: 0, padding: 0, margin: 0, gap: 'var(--space-2)' }}>
+            <legend className="small" style={{ fontWeight: 600, marginBottom: 6 }}>Vérification du client</legend>
+            <label className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
+              <input type="checkbox" checked={s.requireVerifiedClient} onChange={(e) => setS({ ...s, requireVerifiedClient: e.target.checked })} style={{ marginTop: 3 }} />
+              <span>Exiger un dossier client vérifié (pièce, permis valide, photos) avant la remise des clés</span>
+            </label>
+            <label className="field" style={{ maxWidth: 260 }}>
+              Âge minimum du conducteur
+              <select value={s.minDriverAge} onChange={(e) => setS({ ...s, minDriverAge: Number(e.target.value) })}>
+                <option value={0}>Pas d’âge minimum</option>
+                {[18, 21, 23, 25].map((a) => <option key={a} value={a}>{a} ans</option>)}
+              </select>
+            </label>
+          </fieldset>
           <label className="field">
             Conditions générales
             <textarea value={s.terms} onChange={set('terms')} rows={12} style={{ fontSize: 13, lineHeight: 1.45 }} />
