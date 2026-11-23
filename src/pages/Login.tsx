@@ -13,7 +13,52 @@ export function Login() {
   const [country, setCountry] = useState('SN');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [forgot, setForgot] = useState(false);
+  const [sent, setSent] = useState(false);
   const demo = store.mode === 'demo';
+
+  async function sendReset(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await store.requestPasswordReset(email);
+      setSent(true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (forgot) {
+    return (
+      <div className="auth">
+        <div className="card">
+          <h1 style={{ fontSize: 22, margin: 0 }}>Mot de passe oublié</h1>
+          {sent ? (
+            <>
+              <p style={{ margin: 0 }}>
+                Si un compte existe pour <strong>{email}</strong>, un email vient d’être envoyé avec un lien pour choisir un nouveau mot de passe. Le lien est valable une heure.
+              </p>
+              <p className="small muted" style={{ margin: 0 }}>Rien reçu après quelques minutes ? Regardez dans les courriers indésirables, ou demandez à votre administrateur de vous réinviter.</p>
+            </>
+          ) : (
+            <form className="stack" onSubmit={sendReset}>
+              <p className="small muted" style={{ margin: 0 }}>Indiquez l’email de votre compte : vous recevrez un lien pour choisir un nouveau mot de passe.</p>
+              <label className="field">
+                Email
+                <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </label>
+              <ErrorBox error={error} />
+              <button className="btn btn-primary" disabled={busy}>{busy ? 'Un instant…' : 'Recevoir le lien'}</button>
+            </form>
+          )}
+          <button type="button" className="btn btn-ghost" onClick={() => { setForgot(false); setSent(false); setError(null); }}>Retour à la connexion</button>
+        </div>
+      </div>
+    );
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -118,6 +163,11 @@ export function Login() {
             />
             {tab !== 'login' && !demo && <span className="hint">8 caractères minimum</span>}
           </label>
+          {tab === 'login' && !demo && (
+            <button type="button" className="link-button small" style={{ alignSelf: 'flex-start' }} onClick={() => { setForgot(true); setError(null); }}>
+              Mot de passe oublié ?
+            </button>
+          )}
           <ErrorBox error={error} />
           <button className="btn btn-primary" disabled={busy}>
             {busy ? 'Un instant…' : tab === 'login' ? 'Se connecter' : tab === 'join' ? 'Créer mon compte' : 'Créer mon espace'}

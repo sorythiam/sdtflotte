@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
+import { NewPassword } from './pages/NewPassword';
 import { DataProvider, useData } from './state/DataContext';
 // Polices hébergées avec l'application (pas d'appel à Google Fonts) : jeu latin seulement.
 import '@fontsource/inter/latin-400.css';
@@ -85,6 +86,7 @@ function App() {
   // Page publique de réservation : accessible sans compte.
   const pub = pathname.match(/^\/r\/([a-z0-9-]+)\/?$/i);
   usePrefetchPages();
+  if (pathname === '/nouveau-mot-de-passe') return <NewPassword />;
   if (pub) return <Suspense fallback={<Loading />}><PublicBooking slug={pub[1].toLowerCase()} /></Suspense>;
   if (!session) return <Login />;
   return (

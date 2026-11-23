@@ -486,3 +486,4 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
 .page-loading { height: 3px; width: 100%; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--ocre), transparent); background-size: 40% 100%; background-repeat: no-repeat; animation: page-loading 1s linear infinite; }
 @keyframes page-loading { from { background-position: -40% 0; } to { background-position: 140% 0; } }
 @media (prefers-reduced-motion: reduce) { .page-loading { animation: none; background: var(--sable-line); } }
+.link-button { background: none; border: 0; padding: 4px 0; color: var(--atlantique); text-decoration: underline; cursor: pointer; font: inherit; }

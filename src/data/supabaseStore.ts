@@ -221,6 +221,19 @@ export class SupabaseStore implements Store {
     }
   }
 
+  async requestPasswordReset(email: string): Promise<void> {
+    const clean = email.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean)) throw new Error('Indiquez une adresse email valide.');
+    const { error } = await this.sb.auth.resetPasswordForEmail(clean, { redirectTo: `${window.location.origin}/nouveau-mot-de-passe` });
+    // Trop de demandes : on le dit ; pour le reste, on ne révèle pas si le compte existe.
+    if (error && /rate|too many|429/i.test(error.message)) throw new Error('Trop de demandes. Réessayez dans quelques minutes.');
+  }
+
+  async hasRecoverySession(): Promise<boolean> {
+    const { data } = await this.sb.auth.getSession();
+    return !!data.session;
+  }
+
   async changePassword(password: string): Promise<void> {
     if (password.length < 8) throw new Error('8 caractères minimum.');
     const { error } = await this.sb.auth.updateUser({ password });

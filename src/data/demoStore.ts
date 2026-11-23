@@ -324,6 +324,12 @@ export class DemoStore implements Store {
     if (password.length < 8) throw new Error('8 caractères minimum.');
   }
 
+  async requestPasswordReset(): Promise<void> {}
+
+  async hasRecoverySession(): Promise<boolean> {
+    return true;
+  }
+
   // ---------------------------------------------------------------- réservation en ligne
   private publicOrg(slug: string) {
     const o = this.state.org;

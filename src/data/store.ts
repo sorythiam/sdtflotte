@@ -37,6 +37,10 @@ export interface Store {
   // Paramètres
   updateOrganization(patch: OrgPatch): Promise<void>;
   changePassword(password: string): Promise<void>;
+  /** Envoie un lien de réinitialisation du mot de passe (ne dit pas si le compte existe). */
+  requestPasswordReset(email: string): Promise<void>;
+  /** Le lien de réinitialisation a-t-il ouvert une session de récupération ? */
+  hasRecoverySession(): Promise<boolean>;
   setDailyDigest(on: boolean): Promise<void>;
   // Photos des véhicules : envoi d'une image déjà réduite, renvoie son adresse publique
   uploadVehiclePhoto(image: Blob): Promise<string>;
