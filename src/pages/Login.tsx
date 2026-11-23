@@ -124,7 +124,7 @@ export function Login() {
           </button>
         </form>
         <p className="xs muted" style={{ margin: 0, textAlign: 'center' }}>
-          <Wordmark /> · Tabibou Business Group
+          <Wordmark />
         </p>
       </div>
     </div>
