@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { alertsFor, buildAlerts } from '../domain/alerts';
 import type { DemoStore } from '../data/demoStore';
@@ -158,7 +158,9 @@ export function Layout() {
               {!offline && outboxCount > 0 && <button className="btn btn-sm" onClick={() => void syncNow()}>Envoyer maintenant</button>}
             </div>
           )}
-          <Outlet />
+          <Suspense fallback={<div className="page-loading" role="status" aria-label="Chargement" />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 

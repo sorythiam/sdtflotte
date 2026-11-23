@@ -483,3 +483,6 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .kpis .kpi-value { font-size: 22px; line-height: 28px; }
 }
+.page-loading { height: 3px; width: 100%; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--ocre), transparent); background-size: 40% 100%; background-repeat: no-repeat; animation: page-loading 1s linear infinite; }
+@keyframes page-loading { from { background-position: -40% 0; } to { background-position: 140% 0; } }
+@media (prefers-reduced-motion: reduce) { .page-loading { animation: none; background: var(--sable-line); } }

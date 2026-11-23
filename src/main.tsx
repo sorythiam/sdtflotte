@@ -1,43 +1,94 @@
-import { StrictMode } from 'react';
+import { lazy, StrictMode, Suspense, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { Clients } from './pages/Clients';
-import { VehicleDetail } from './pages/VehicleDetail';
-import { Drivers } from './pages/Drivers';
-import { Vtc } from './pages/Vtc';
-import { VtcDetail } from './pages/VtcDetail';
-import { AuditLog } from './pages/AuditLog';
-import { ClientDetail } from './pages/ClientDetail';
 import { Dashboard } from './pages/Dashboard';
-import { Team } from './pages/Team';
-import { Settings } from './pages/Settings';
-import { Reports } from './pages/Reports';
-import { Contract } from './pages/Contract';
-import { PublicBooking } from './pages/PublicBooking';
-import { BookingRequests } from './pages/BookingRequests';
-import { Expenses } from './pages/Expenses';
-import { Invoices } from './pages/Invoices';
-import { InvoicePage } from './pages/Invoice';
-import { InspectionPage } from './pages/InspectionPage';
 import { Login } from './pages/Login';
-import { Maintenance } from './pages/Maintenance';
-import { Planning } from './pages/Planning';
-import { Rates } from './pages/Rates';
-import { ReservationDetail } from './pages/ReservationDetail';
-import { Reservations } from './pages/Reservations';
-import { Vehicles } from './pages/Vehicles';
 import { DataProvider, useData } from './state/DataContext';
+// Polices hébergées avec l'application (pas d'appel à Google Fonts) : jeu latin seulement.
+import '@fontsource/inter/latin-400.css';
+import '@fontsource/inter/latin-500.css';
+import '@fontsource/inter/latin-600.css';
+import '@fontsource/inter/latin-700.css';
+import '@fontsource/sora/latin-400.css';
+import '@fontsource/sora/latin-600.css';
+import '@fontsource/sora/latin-700.css';
+import '@fontsource/sora/latin-800.css';
 import './styles/app.css';
+// Pages chargées à la demande : premier affichage plus rapide sur un petit téléphone en 3G.
+const pages = {
+  Clients: () => import('./pages/Clients'),
+  VehicleDetail: () => import('./pages/VehicleDetail'),
+  Drivers: () => import('./pages/Drivers'),
+  Vtc: () => import('./pages/Vtc'),
+  VtcDetail: () => import('./pages/VtcDetail'),
+  AuditLog: () => import('./pages/AuditLog'),
+  ClientDetail: () => import('./pages/ClientDetail'),
+  Team: () => import('./pages/Team'),
+  Settings: () => import('./pages/Settings'),
+  Reports: () => import('./pages/Reports'),
+  Contract: () => import('./pages/Contract'),
+  PublicBooking: () => import('./pages/PublicBooking'),
+  BookingRequests: () => import('./pages/BookingRequests'),
+  Expenses: () => import('./pages/Expenses'),
+  Invoices: () => import('./pages/Invoices'),
+  InvoicePage: () => import('./pages/Invoice'),
+  InspectionPage: () => import('./pages/InspectionPage'),
+  Maintenance: () => import('./pages/Maintenance'),
+  Planning: () => import('./pages/Planning'),
+  Rates: () => import('./pages/Rates'),
+  ReservationDetail: () => import('./pages/ReservationDetail'),
+  Reservations: () => import('./pages/Reservations'),
+  Vehicles: () => import('./pages/Vehicles'),
+};
+const Clients = lazy(() => pages.Clients().then((m) => ({ default: m.Clients })));
+const VehicleDetail = lazy(() => pages.VehicleDetail().then((m) => ({ default: m.VehicleDetail })));
+const Drivers = lazy(() => pages.Drivers().then((m) => ({ default: m.Drivers })));
+const Vtc = lazy(() => pages.Vtc().then((m) => ({ default: m.Vtc })));
+const VtcDetail = lazy(() => pages.VtcDetail().then((m) => ({ default: m.VtcDetail })));
+const AuditLog = lazy(() => pages.AuditLog().then((m) => ({ default: m.AuditLog })));
+const ClientDetail = lazy(() => pages.ClientDetail().then((m) => ({ default: m.ClientDetail })));
+const Team = lazy(() => pages.Team().then((m) => ({ default: m.Team })));
+const Settings = lazy(() => pages.Settings().then((m) => ({ default: m.Settings })));
+const Reports = lazy(() => pages.Reports().then((m) => ({ default: m.Reports })));
+const Contract = lazy(() => pages.Contract().then((m) => ({ default: m.Contract })));
+const PublicBooking = lazy(() => pages.PublicBooking().then((m) => ({ default: m.PublicBooking })));
+const BookingRequests = lazy(() => pages.BookingRequests().then((m) => ({ default: m.BookingRequests })));
+const Expenses = lazy(() => pages.Expenses().then((m) => ({ default: m.Expenses })));
+const Invoices = lazy(() => pages.Invoices().then((m) => ({ default: m.Invoices })));
+const InvoicePage = lazy(() => pages.InvoicePage().then((m) => ({ default: m.InvoicePage })));
+const InspectionPage = lazy(() => pages.InspectionPage().then((m) => ({ default: m.InspectionPage })));
+const Maintenance = lazy(() => pages.Maintenance().then((m) => ({ default: m.Maintenance })));
+const Planning = lazy(() => pages.Planning().then((m) => ({ default: m.Planning })));
+const Rates = lazy(() => pages.Rates().then((m) => ({ default: m.Rates })));
+const ReservationDetail = lazy(() => pages.ReservationDetail().then((m) => ({ default: m.ReservationDetail })));
+const Reservations = lazy(() => pages.Reservations().then((m) => ({ default: m.Reservations })));
+const Vehicles = lazy(() => pages.Vehicles().then((m) => ({ default: m.Vehicles })));
+
+/** Une fois l'application affichée, on charge les autres pages en tâche de fond :
+ *  elles s'ouvrent ensuite instantanément et restent disponibles hors connexion. */
+function usePrefetchPages() {
+  useEffect(() => {
+    const go = () => Object.values(pages).forEach((load) => void load().catch(() => undefined));
+    const w = window as Window & { requestIdleCallback?: (cb: () => void) => number };
+    const t = w.requestIdleCallback ? w.requestIdleCallback(go) : window.setTimeout(go, 2500);
+    return () => { if (!w.requestIdleCallback) window.clearTimeout(t); };
+  }, []);
+}
+
+const Loading = () => <div className="page-loading" role="status" aria-label="Chargement" />;
+
 
 function App() {
   const { session } = useData();
   const { pathname } = useLocation();
   // Page publique de réservation : accessible sans compte.
   const pub = pathname.match(/^\/r\/([a-z0-9-]+)\/?$/i);
-  if (pub) return <PublicBooking slug={pub[1].toLowerCase()} />;
+  usePrefetchPages();
+  if (pub) return <Suspense fallback={<Loading />}><PublicBooking slug={pub[1].toLowerCase()} /></Suspense>;
   if (!session) return <Login />;
   return (
+    <Suspense fallback={<Loading />}>
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
@@ -68,6 +119,7 @@ function App() {
         <Route path="*" element={<Dashboard />} />
       </Route>
     </Routes>
+    </Suspense>
   );
 }
 
