@@ -69,6 +69,8 @@ export interface Store {
   /** Vérifie un paiement auprès du prestataire et active la formule s'il est payé. */
   confirmPayment(paymentId: string): Promise<SubscriptionPayment>;
   listSubscriptionPayments(): Promise<SubscriptionPayment[]>;
+  /** VTC : la direction confirme avoir reçu les espèces d'un encaisseur. Renvoie le nombre de versements remis. */
+  vtcHandOver(paymentIds: string[]): Promise<number>;
   /** Démo seulement : simule la réponse du prestataire de paiement. */
   simulatePayment?(paymentId: string, paid: boolean): Promise<void>;
 }

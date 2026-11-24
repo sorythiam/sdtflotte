@@ -1,5 +1,5 @@
 import { billingSettings, buildInvoice, nextInvoiceNumber, type Invoice } from '../domain/billing';
-import type { Client, Driver, MaintenancePlan, VtcContract, VtcPayment, Expense, Incident, Package, Maintenance, Payment, Rate, Reservation, Tables, Vehicle, Season } from '../domain/types';
+import type { Client, Driver, MaintenancePlan, VtcContract, VtcPayment, Expense, Incident, Package, Maintenance, Payment, Rate, Reservation, Tables, Vehicle, Season, VtcAdjustment } from '../domain/types';
 
 // Données d'exemple, recalées sur la date du jour pour que la démo soit toujours parlante.
 
@@ -185,13 +185,13 @@ export function seedPlans(now = new Date()): MaintenancePlan[] {
 }
 
 /** Deux contrats VTC : un versement simple irrégulier, une location-vente régulière. */
-export function seedVtc(now = new Date()): { vtc_contracts: VtcContract[]; vtc_payments: VtcPayment[] } {
+export function seedVtc(now = new Date()): { vtc_contracts: VtcContract[]; vtc_payments: VtcPayment[]; vtc_adjustments: VtcAdjustment[] } {
   const contracts: VtcContract[] = [
     {
       id: 'vtc-1', number: 'VTC-2026-0001', vehicleId: 'v-celerio', driverId: 'd-4', formula: 'versement', platform: 'Yango',
       dailyAmount: 15000, restDays: [0], startDate: day(now, -60), endDate: null, caution: 100000, totalPrice: null,
       charges: { vidange: 'proprietaire', pneus: 'proprietaire', reparation: 'proprietaire', assurance: 'proprietaire', carburant: 'chauffeur', amende: 'chauffeur', degats: 'chauffeur', lavage: 'chauffeur' },
-      status: 'actif', notes: null, createdAt: at(now, -60, 9),
+      status: 'actif', notes: null, createdAt: at(now, -60, 9), lateFee: 1000, graceDays: 2,
     },
     {
       id: 'vtc-2', number: 'VTC-2026-0002', vehicleId: 'v-yaris', driverId: 'd-5', formula: 'location_vente', platform: 'Heetch',
@@ -213,10 +213,18 @@ export function seedVtc(now = new Date()): { vtc_contracts: VtcContract[]; vtc_p
       payments.push({
         id: `vp-${++n}`, contractId: c.id, paidOn: d.toISOString().slice(0, 10), amount: c.dailyAmount,
         method: k % 4 === 0 ? 'especes' : 'wave', reference: k % 4 === 0 ? null : `WV${100000 + n}`, note: null, createdBy: 'awa.agent@sdt.sn', createdAt: d.toISOString(),
+        collectedBy: k % 4 === 0 ? (k % 8 === 0 ? 'Ibou (collecteur)' : 'awa.agent@sdt.sn') : 'awa.agent@sdt.sn',
+        // Les espèces anciennes ont été remises ; celles de la dernière semaine sont encore dans la caisse des encaisseurs.
+        handedAt: k % 4 === 0 && t < Date.parse(day(now, -7) + 'T00:00:00Z') ? d.toISOString() : null,
       });
     }
   }
-  return { vtc_contracts: contracts, vtc_payments: payments };
+  const adjustments: VtcAdjustment[] = [
+    { id: 'va-1', contractId: 'vtc-1', kind: 'jour_offert', day: day(now, -20), amount: 0, note: 'Véhicule au garage', createdBy: 'direction@sdt.sn', createdAt: at(now, -20, 18) },
+    { id: 'va-2', contractId: 'vtc-1', kind: 'jour_offert', day: day(now, -19), amount: 0, note: 'Véhicule au garage', createdBy: 'direction@sdt.sn', createdAt: at(now, -20, 18) },
+    { id: 'va-3', contractId: 'vtc-2', kind: 'avance', day: day(now, -30), amount: 25000, note: 'Avance pour la visite technique', createdBy: 'direction@sdt.sn', createdAt: at(now, -30, 10) },
+  ];
+  return { vtc_contracts: contracts, vtc_payments: payments, vtc_adjustments: adjustments };
 }
 
 export function seedSeasons(now = new Date()): Season[] {

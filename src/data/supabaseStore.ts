@@ -404,6 +404,12 @@ export class SupabaseStore implements Store {
     return rowToApp<SubscriptionPayment>(p);
   }
 
+  async vtcHandOver(paymentIds: string[]): Promise<number> {
+    const { data, error } = await this.sb.rpc('vtc_hand_over', { p_ids: paymentIds });
+    if (error) throw friendly(error);
+    return Number(data ?? 0);
+  }
+
   async listSubscriptionPayments(): Promise<SubscriptionPayment[]> {
     const { data, error } = await this.sb.from('subscription_payments').select('*').eq('org_id', this.orgId).order('created_at', { ascending: false });
     if (error) throw friendly(error);

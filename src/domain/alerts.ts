@@ -5,7 +5,7 @@ import { verificationOf } from './verification';
 import { balanceDue, cautionHeld, expiryAlerts, lateDays } from './rules';
 import { planDue } from './maintenancePlan';
 import { vtcBalance } from './vtc';
-import type { Client, Expense, Maintenance, MaintenancePlan, VtcContract, VtcPayment, Payment, Reservation, Role, Vehicle } from './types';
+import type { Client, Expense, Maintenance, MaintenancePlan, VtcContract, VtcPayment, Payment, Reservation, Role, Vehicle, VtcAdjustment } from './types';
 
 export type AlertLevel = 'urgent' | 'attention' | 'info';
 export type AlertKind =
@@ -43,7 +43,7 @@ export interface AlertInput {
   maintenances: Maintenance[];
   invoices?: { reservationId: string; totalTtc: number }[];
   plans?: MaintenancePlan[];
-  vtc?: { contracts: VtcContract[]; payments: VtcPayment[]; expenses: Expense[]; drivers: { id: string; name: string }[] };
+  vtc?: { contracts: VtcContract[]; payments: VtcPayment[]; expenses: Expense[]; drivers: { id: string; name: string }[]; adjustments?: VtcAdjustment[] };
   bookingRequests?: { id: string; status: string; name: string; companyName?: string | null; category: string; start: string; end: string; createdAt: string }[];
 }
 
@@ -227,7 +227,7 @@ export function buildAlerts(input: AlertInput, now: Date, offsetMin = -now.getTi
   if (input.vtc) {
     for (const c of input.vtc.contracts) {
       if (c.status !== 'actif') continue;
-      const b = vtcBalance(c, input.vtc.payments, input.vtc.expenses, now);
+      const b = vtcBalance(c, input.vtc.payments, input.vtc.expenses, now, input.vtc.adjustments);
       if (b.daysBehind < 2) continue;
       const name = input.vtc.drivers.find((d) => d.id === c.driverId)?.name ?? 'Chauffeur';
       out.push({

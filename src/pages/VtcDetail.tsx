@@ -4,7 +4,8 @@ import { Empty, ErrorBox, Modal } from '../components/ui';
 import { whatsappLink } from '../domain/booking';
 import { dateLong, dateShort, money } from '../domain/format';
 import type { ExpenseKind, VtcStatus } from '../domain/types';
-import { DAYS_FR, isRestDay, regularityGrade, reminderText, VTC_CHARGES, vtcBalance } from '../domain/vtc';
+import { ADJUSTMENT_LABELS, cautionSettlement, DAYS_FR, isRestDay, regularityGrade, reminderText, VTC_CHARGES, vtcBalance } from '../domain/vtc';
+import { AdjustmentForm, CautionSettleButton, DayOffForm } from './VtcTools';
 import { useData } from '../state/DataContext';
 import { methodLabel } from './ReservationDetail';
 import { VtcContractForm, VtcPaymentForm, vtcStatusLabel } from './Vtc';
@@ -17,6 +18,8 @@ export function VtcDetail() {
   const [editing, setEditing] = useState(false);
   const [charging, setCharging] = useState(false);
   const [shown, setShown] = useState(15);
+  const [dayOff, setDayOff] = useState<string | null>(null);
+  const [adjusting, setAdjusting] = useState(false);
   const c = data.vtc_contracts.find((x) => x.id === id);
   if (!c) {
     return (
@@ -28,9 +31,12 @@ export function VtcDetail() {
   }
   const v = data.vehicles.find((x) => x.id === c.vehicleId);
   const d = data.drivers.find((x) => x.id === c.driverId);
-  const b = vtcBalance(c, data.vtc_payments, data.expenses, now);
+  const b = vtcBalance(c, data.vtc_payments, data.expenses, now, data.vtc_adjustments);
   const pays = data.vtc_payments.filter((p) => p.contractId === c.id).sort((x, y) => y.paidOn.localeCompare(x.paidOn) || y.createdAt.localeCompare(x.createdAt));
   const charges = data.expenses.filter((e) => e.vtcContractId === c.id).sort((x, y) => y.date.localeCompare(x.date));
+  const adjustments = data.vtc_adjustments.filter((a) => a.contractId === c.id).sort((x, y) => y.day.localeCompare(x.day) || y.createdAt.localeCompare(x.createdAt));
+  const offDays = new Set(adjustments.filter((a) => a.kind === 'jour_offert').map((a) => a.day));
+  const settlement = cautionSettlement(b);
   const [grade, gcls] = regularityGrade(b.regularity);
   const editable = can('direction', 'agent');
   const open = c.status === 'actif' || c.status === 'suspendu';
@@ -40,7 +46,7 @@ export function VtcDetail() {
     const day = new Date(now.getTime() - (27 - k) * 86400000).toISOString().slice(0, 10);
     const got = pays.filter((p) => p.paidOn === day).reduce((s, p) => s + p.amount, 0);
     const before = day < c.startDate || (c.endDate && day > c.endDate);
-    const state = before ? 'hors' : isRestDay(c, day) ? 'repos' : got >= c.dailyAmount ? 'ok' : got > 0 ? 'partiel' : day === now.toISOString().slice(0, 10) ? 'attendu' : 'manque';
+    const state = before ? 'hors' : offDays.has(day) ? 'nondu' : isRestDay(c, day) ? 'repos' : got >= c.dailyAmount ? 'ok' : got > 0 ? 'partiel' : day === now.toISOString().slice(0, 10) ? 'attendu' : 'manque';
     return { day, got, state };
   });
 
@@ -50,6 +56,12 @@ export function VtcDetail() {
     await store.update('vtc_contracts', c!.id, { status, endDate: status === 'termine' || status === 'transfere' ? now.toISOString().slice(0, 10) : c!.endDate });
     await refresh();
     toast('Contrat mis à jour');
+  }
+  async function removeAdjustment(aid: string) {
+    if (!window.confirm('Supprimer cette ligne ? Le solde du chauffeur sera recalculé.')) return;
+    await store.remove('vtc_adjustments', aid);
+    await refresh();
+    toast('Ligne supprimée');
   }
   async function removePayment(pid: string) {
     if (!window.confirm('Supprimer ce versement saisi par erreur ? La suppression reste tracée dans le journal.')) return;
@@ -88,7 +100,11 @@ export function VtcDetail() {
         <div className="card kpi">
           <span className="kpi-label">Versé depuis le début</span>
           <span className="kpi-value">{money(b.paid)}</span>
-          <span className="small muted">sur {money(b.expected)} attendus ({b.expectedDays} jours){b.charges ? ` + ${money(b.charges)} de charges` : ''}</span>
+          <span className="small muted">
+            sur {money(b.expected)} attendus ({b.expectedDays} jours{b.daysOff ? `, ${b.daysOff} non dus` : ''})
+            {b.charges ? ` + ${money(b.charges)} de charges` : ''}{b.penalties ? ` + ${money(b.penalties)} de pénalités` : ''}
+            {b.advances ? ` + ${money(b.advances)} d’avances` : ''}{b.credits ? ` − ${money(b.credits)} de remises et retenues` : ''}
+          </span>
         </div>
         {b.progress !== null ? (
           <div className="card kpi">
@@ -110,7 +126,9 @@ export function VtcDetail() {
         <h2 id="cal">Les 4 dernières semaines</h2>
         <div className="vtc-cal" role="list">
           {days.map((x) => (
-            <div key={x.day} role="listitem" className={`vtc-day vtc-${x.state}`} title={`${dateShort(x.day)} : ${x.state === 'ok' ? `${money(x.got)} versés` : x.state === 'partiel' ? `${money(x.got)} sur ${money(c.dailyAmount)}` : x.state === 'repos' ? 'repos' : x.state === 'hors' ? 'hors contrat' : x.state === 'attendu' ? 'attendu aujourd’hui' : 'rien reçu'}`}>
+            <div key={x.day} role="listitem" className={`vtc-day vtc-${x.state}`} style={editable && open && (x.state === 'manque' || x.state === 'attendu') ? { cursor: 'pointer' } : undefined}
+              onClick={() => editable && open && (x.state === 'manque' || x.state === 'attendu') && setDayOff(x.day)}
+              title={`${dateShort(x.day)} : ${x.state === 'ok' ? `${money(x.got)} versés` : x.state === 'partiel' ? `${money(x.got)} sur ${money(c.dailyAmount)}` : x.state === 'repos' ? 'repos' : x.state === 'nondu' ? 'non dû' : x.state === 'hors' ? 'hors contrat' : x.state === 'attendu' ? 'attendu aujourd’hui' : 'rien reçu, appuyez pour le déclarer non dû'}`}>
               <span>{new Date(x.day + 'T12:00:00Z').getUTCDate()}</span>
             </div>
           ))}
@@ -118,7 +136,9 @@ export function VtcDetail() {
         <div className="row small muted" style={{ gap: 'var(--space-4)', flexWrap: 'wrap' }}>
           <span><span className="vtc-dot vtc-ok" /> versé</span><span><span className="vtc-dot vtc-partiel" /> partiel</span>
           <span><span className="vtc-dot vtc-manque" /> rien reçu</span><span><span className="vtc-dot vtc-repos" /> repos ({c.restDays.map((k) => DAYS_FR[k]).join(', ') || 'aucun'})</span>
+          <span><span className="vtc-dot vtc-nondu" /> non dû</span>
         </div>
+        {editable && open && <button type="button" className="btn btn-sm btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setDayOff(now.toISOString().slice(0, 10))}>Déclarer des jours non dus (garage, accident, fête…)</button>}
       </section>
 
       <div className="cols">
@@ -127,14 +147,14 @@ export function VtcDetail() {
           {pays.length === 0 ? <Empty>Aucun versement enregistré.</Empty> : (
             <div className="table-wrap">
               <table className="data">
-                <thead><tr><th>Date</th><th className="right">Montant</th><th>Moyen</th><th>Saisi par</th><th /></tr></thead>
+                <thead><tr><th>Date</th><th className="right">Montant</th><th>Moyen</th><th>Reçu par</th><th /></tr></thead>
                 <tbody>
                   {pays.slice(0, shown).map((p) => (
                     <tr key={p.id}>
                       <td>{dateShort(p.paidOn)}</td>
                       <td className="right num">{money(p.amount)}</td>
                       <td>{methodLabel[p.method]}{p.reference ? <><br /><span className="muted small">{p.reference}</span></> : null}{p.note ? <><br /><span className="muted small">{p.note}</span></> : null}</td>
-                      <td className="small muted">{p.createdBy ?? ''}</td>
+                      <td className="small muted">{p.collectedBy ?? p.createdBy ?? ''}{p.method === 'especes' && !p.handedAt ? <><br /><span style={{ color: 'var(--ocre-text)' }}>espèces pas encore remises</span></> : null}</td>
                       <td className="right">{can('direction') && <button className="btn btn-sm btn-ghost" onClick={() => removePayment(p.id)}>Supprimer</button>}</td>
                     </tr>
                   ))}
@@ -153,20 +173,43 @@ export function VtcDetail() {
               <div><dt>Repos</dt><dd>{c.restDays.map((k) => DAYS_FR[k]).join(', ') || 'aucun'}</dd></div>
               <div><dt>Début</dt><dd>{dateLong(c.startDate)}</dd></div>
               {c.endDate && <div><dt>Fin</dt><dd>{dateLong(c.endDate)}</dd></div>}
-              <div><dt>Caution</dt><dd>{money(c.caution)}</dd></div>
+              <div><dt>Caution</dt><dd>{money(c.caution)}{b.cautionLeft !== c.caution ? ` (reste ${money(b.cautionLeft)})` : ''}</dd></div>
+              <div><dt>Pénalité de retard</dt><dd>{c.lateFee ? `${money(c.lateFee)} par jour au-delà de ${c.graceDays ?? 2} jour(s)` : 'aucune'}</dd></div>
               {c.totalPrice && <div><dt>Prix du véhicule</dt><dd>{money(c.totalPrice)}</dd></div>}
             </dl>
             <dl className="facts">
               {VTC_CHARGES.map(([k, label]) => <div key={k}><dt>{label}</dt><dd>{(c.charges[k] ?? 'proprietaire') === 'chauffeur' ? 'Chauffeur' : 'Propriétaire'}</dd></div>)}
             </dl>
             {c.notes && <p className="small" style={{ margin: 0 }}>{c.notes}</p>}
+            {open && b.balance > 0 && settlement.retain > 0 && (
+              <p className="small muted" style={{ margin: 0 }}>À la fin du contrat, {money(settlement.retain)} seraient retenus sur la caution ; {money(settlement.refund)} reviendraient au chauffeur{settlement.stillOwed ? `, et il resterait ${money(settlement.stillOwed)} à réclamer` : ''}.</p>
+            )}
             {editable && (
               <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
                 {c.status === 'actif' && <button className="btn btn-sm" onClick={() => setStatus('suspendu')}>Suspendre</button>}
                 {c.status === 'suspendu' && <button className="btn btn-sm" onClick={() => setStatus('actif')}>Réactiver</button>}
                 {open && c.formula === 'location_vente' && (b.progress ?? 0) >= 1 && <button className="btn btn-sm btn-primary" onClick={() => setStatus('transfere')}>Transférer le véhicule</button>}
+                {open && can('direction') && <CautionSettleButton contractId={c.id} />}
                 {open && <button className="btn btn-sm btn-ghost" onClick={() => setStatus('termine')}>Terminer le contrat</button>}
               </div>
+            )}
+          </section>
+
+          <section className="card" aria-labelledby="ajustements">
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <h2 id="ajustements">Avances, remises, jours non dus</h2>
+              {editable && open && <button className="btn btn-sm" onClick={() => setAdjusting(true)}>Ajouter</button>}
+            </div>
+            {adjustments.length === 0 ? <Empty>Aucun ajustement.</Empty> : (
+              <ul className="alert-list">
+                {adjustments.slice(0, 15).map((a) => (
+                  <li key={a.id} className="alert-item" style={{ borderLeftColor: a.kind === 'avance' ? 'var(--ocre)' : 'var(--success)' }}>
+                    <strong>{ADJUSTMENT_LABELS[a.kind]}{a.amount ? ` · ${money(a.amount)}` : ''}</strong>
+                    <span className="small muted">{dateShort(a.day)}{a.note ? ` · ${a.note}` : ''}{a.createdBy ? ` · ${a.createdBy}` : ''}</span>
+                    {can('direction') && <button type="button" className="btn btn-sm btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => removeAdjustment(a.id)}>Supprimer</button>}
+                  </li>
+                ))}
+              </ul>
             )}
           </section>
 
@@ -192,6 +235,8 @@ export function VtcDetail() {
       {paying && <VtcPaymentForm contractId={c.id} onClose={() => setPaying(false)} />}
       {editing && <VtcContractForm id={c.id} onClose={() => setEditing(false)} />}
       {charging && <VtcExpenseForm contractId={c.id} onClose={() => setCharging(false)} />}
+      {dayOff && <DayOffForm contractId={c.id} defaultDay={dayOff} onClose={() => setDayOff(null)} />}
+      {adjusting && <AdjustmentForm contractId={c.id} onClose={() => setAdjusting(false)} />}
     </>
   );
 }

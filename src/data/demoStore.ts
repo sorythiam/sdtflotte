@@ -129,8 +129,9 @@ export class DemoStore implements Store {
         if (!st.db.vtc_contracts) {
           // Anciennes démos : pas de véhicules VTC d'exemple, on part de zéro.
           const ok = st.db.vehicles.some((v) => v.id === 'v-celerio') && st.db.drivers.some((d) => d.id === 'd-4');
-          Object.assign(st.db, ok ? seedVtc() : { vtc_contracts: [], vtc_payments: [] });
+          Object.assign(st.db, ok ? seedVtc() : { vtc_contracts: [], vtc_payments: [], vtc_adjustments: [] });
         }
+        st.db.vtc_adjustments ??= [];
         st.org.bookingSlug ??= 'sdt-demo';
         st.org.bookingEnabled ??= true;
         return st;
@@ -491,6 +492,22 @@ export class DemoStore implements Store {
     const p = (this.state.subscriptionPayments ?? []).find((x) => x.id === paymentId);
     if (!p) throw new Error('Paiement introuvable.');
     return structuredClone(p);
+  }
+
+  async vtcHandOver(paymentIds: string[]): Promise<number> {
+    const role = this.state.session?.role;
+    if (role !== 'admin' && role !== 'direction') throw new Error('Seule la direction confirme la remise des espèces.');
+    const at = new Date().toISOString();
+    let n = 0;
+    for (const p of this.state.db.vtc_payments) {
+      if (paymentIds.includes(p.id) && !p.handedAt) {
+        p.handedAt = at;
+        p.handedBy = this.state.session?.email ?? null;
+        n++;
+      }
+    }
+    this.save();
+    return n;
   }
 
   async listSubscriptionPayments(): Promise<SubscriptionPayment[]> {

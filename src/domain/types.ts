@@ -349,6 +349,22 @@ export interface VtcContract {
   status: VtcStatus;
   notes: string | null;
   createdAt: string;
+  lateFee?: number; // pénalité par jour de retard au-delà de la tolérance, 0 = aucune
+  graceDays?: number; // jours de retard tolérés avant pénalité
+}
+
+export type VtcAdjustmentKind = 'jour_offert' | 'avance' | 'remise' | 'retenue_caution';
+
+/** Ajustement du compte d'un chauffeur : jour non dû, avance, remise, retenue sur la caution. */
+export interface VtcAdjustment {
+  id: string;
+  contractId: string;
+  kind: VtcAdjustmentKind;
+  day: string; // AAAA-MM-JJ
+  amount: number; // 0 pour un jour non dû
+  note: string | null;
+  createdBy: string | null;
+  createdAt: string;
 }
 
 export interface VtcPayment {
@@ -361,6 +377,9 @@ export interface VtcPayment {
   note: string | null;
   createdBy: string | null;
   createdAt: string;
+  collectedBy?: string | null; // qui a reçu l'argent (caisse de l'encaisseur)
+  handedAt?: string | null; // remis au propriétaire (espèces)
+  handedBy?: string | null;
 }
 
 export interface Tables {
@@ -380,6 +399,7 @@ export interface Tables {
   maintenance_plans: MaintenancePlan;
   vtc_contracts: VtcContract;
   vtc_payments: VtcPayment;
+  vtc_adjustments: VtcAdjustment;
   seasons: Season;
   quotes: Quote;
 }

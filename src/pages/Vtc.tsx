@@ -1,10 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ReceiptsModal, VtcCash, VtcToday } from './VtcTools';
 import { Empty, ErrorBox, Modal } from '../components/ui';
 import { whatsappLink } from '../domain/booking';
 import { money } from '../domain/format';
 import { isActive, overlaps } from '../domain/rules';
-import type { PaymentMethod, VtcContract, VtcFormula } from '../domain/types';
+import type { PaymentMethod, VtcContract, VtcFormula, VtcPayment } from '../domain/types';
 import { DAYS_FR, defaultCharges, nextVtcNumber, PLATFORMS, regularityGrade, reminderText, VTC_CHARGES, vtcBalance } from '../domain/vtc';
 import { useData } from '../state/DataContext';
 import { methodLabel } from './ReservationDetail';
@@ -15,12 +16,14 @@ export function Vtc() {
   const [creating, setCreating] = useState(false);
   const [paying, setPaying] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const view = (params.get('vue') ?? 'jour') as 'jour' | 'contrats' | 'caisse';
   const go = useNavigate();
   const editable = can('direction', 'agent');
   const rows = useMemo(
     () =>
       data.vtc_contracts
-        .map((c) => ({ c, b: vtcBalance(c, data.vtc_payments, data.expenses, now), v: data.vehicles.find((x) => x.id === c.vehicleId), d: data.drivers.find((x) => x.id === c.driverId) }))
+        .map((c) => ({ c, b: vtcBalance(c, data.vtc_payments, data.expenses, now, data.vtc_adjustments), v: data.vehicles.find((x) => x.id === c.vehicleId), d: data.drivers.find((x) => x.id === c.driverId) }))
         .sort((x, y) => Number(x.c.status !== 'actif') - Number(y.c.status !== 'actif') || y.b.balance - x.b.balance),
     [data, now],
   );
@@ -41,6 +44,16 @@ export function Vtc() {
         </div>
         {editable && <button className="btn btn-primary" onClick={() => setCreating(true)}>Nouveau contrat VTC</button>}
       </header>
+
+      <div className="tabs" role="tablist" aria-label="Vues">
+        {([['jour', 'Point du jour'], ['contrats', 'Contrats'], ['caisse', 'Caisse']] as const).map(([k, l]) => (
+          <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setParams(k === 'jour' ? {} : { vue: k })}>{l}</button>
+        ))}
+      </div>
+
+      {view === 'jour' && <VtcToday />}
+      {view === 'caisse' && <VtcCash />}
+      {view === 'contrats' && (<>
 
       <div className="kpis">
         <div className="card kpi"><span className="kpi-label">Attendu aujourd’hui</span><span className="kpi-value">{money(dueToday)}</span><span className="small muted">{active.filter((r) => r.b.todayDue > 0).length} chauffeur(s) au travail</span></div>
@@ -118,8 +131,9 @@ export function Vtc() {
           </div>
           </>
         )}
-        <span className="hint">Solde = versements attendus depuis le début + dépenses à la charge du chauffeur − versements reçus. « +X » = le chauffeur a de l’avance.</span>
+        <span className="hint">Solde = versements attendus (hors repos et jours non dus) + dépenses à la charge du chauffeur + pénalités + avances − remises − versements reçus. « +X » = le chauffeur a de l’avance.</span>
       </section>
+      </>)}
 
       {creating && <VtcContractForm onClose={() => setCreating(false)} />}
       {paying && <VtcPaymentForm contractId={paying} onClose={() => setPaying(null)} />}
@@ -132,7 +146,7 @@ export function VtcPaymentForm({ contractId, onClose }: { contractId: string; on
   const { data, store, refresh, toast, now, session } = useData();
   const c = data.vtc_contracts.find((x) => x.id === contractId)!;
   const d = data.drivers.find((x) => x.id === c.driverId);
-  const b = vtcBalance(c, data.vtc_payments, data.expenses, now);
+  const b = vtcBalance(c, data.vtc_payments, data.expenses, now, data.vtc_adjustments);
   const [amount, setAmount] = useState(String(b.balance > 0 && b.balance < c.dailyAmount ? b.balance : c.dailyAmount));
   const [paidOn, setPaidOn] = useState(now.toISOString().slice(0, 10));
   const [method, setMethod] = useState<PaymentMethod>('wave');
@@ -140,6 +154,7 @@ export function VtcPaymentForm({ contractId, onClose }: { contractId: string; on
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState<VtcPayment | null>(null);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -150,13 +165,13 @@ export function VtcPaymentForm({ contractId, onClose }: { contractId: string; on
     if (method !== 'especes' && !reference.trim()) return setError('Indiquez la référence de la transaction.');
     setBusy(true);
     try {
-      await store.insert('vtc_payments', {
+      const p = await store.insert('vtc_payments', {
         contractId, paidOn, amount: n, method, reference: reference.trim() || null, note: note.trim() || null,
-        createdBy: session!.userEmail, createdAt: new Date().toISOString(),
+        createdBy: session!.userEmail, createdAt: new Date().toISOString(), collectedBy: session!.userEmail, handedAt: null, handedBy: null,
       });
       await refresh();
       toast(`Versement de ${money(n)} enregistré`);
-      onClose();
+      setSaved(p);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -164,6 +179,7 @@ export function VtcPaymentForm({ contractId, onClose }: { contractId: string; on
     }
   }
 
+  if (saved) return <ReceiptsModal payments={[saved]} onClose={onClose} />;
   return (
     <Modal title={`Versement · ${d?.name ?? c.number}`} onClose={onClose}>
       <form className="stack" onSubmit={submit}>
@@ -204,7 +220,7 @@ export function VtcContractForm({ id, onClose }: { id?: string; onClose: () => v
   const [f, setF] = useState<Omit<VtcContract, 'id' | 'number' | 'createdAt'>>(
     existing ?? {
       vehicleId: '', driverId: '', formula: 'versement', platform: 'Yango', dailyAmount: 15000, restDays: [0], startDate: today, endDate: null,
-      caution: 100000, totalPrice: null, charges: defaultCharges(), status: 'actif', notes: null,
+      caution: 100000, totalPrice: null, charges: defaultCharges(), status: 'actif', notes: null, lateFee: 0, graceDays: 2,
     },
   );
   const [newDriver, setNewDriver] = useState({ name: '', phone: '' });
@@ -302,6 +318,8 @@ export function VtcContractForm({ id, onClose }: { id?: string; onClose: () => v
           <label className="field">Caution (FCFA)<input type="number" min={0} value={f.caution} onChange={(e) => set('caution', Number(e.target.value))} /></label>
           <label className="field">Début<input type="date" required value={f.startDate} onChange={(e) => set('startDate', e.target.value)} /></label>
           <label className="field">Fin (facultatif)<input type="date" value={f.endDate ?? ''} onChange={(e) => set('endDate', e.target.value || null)} /></label>
+          <label className="field">Pénalité par jour de retard (FCFA)<input type="number" min={0} max={100000} value={f.lateFee ?? 0} onChange={(e) => set('lateFee', Number(e.target.value))} /><span className="hint">0 = pas de pénalité</span></label>
+          <label className="field">Jours de retard tolérés<input type="number" min={0} max={30} value={f.graceDays ?? 2} onChange={(e) => set('graceDays', Number(e.target.value))} /><span className="hint">Pénalité à partir du {(f.graceDays ?? 2) + 1}ᵉ jour de retard</span></label>
           {f.formula === 'location_vente' && (
             <label className="field">Prix du véhicule à payer (FCFA)<input type="number" min={1} required value={f.totalPrice ?? ''} onChange={(e) => set('totalPrice', e.target.value ? Number(e.target.value) : null)} /></label>
           )}

@@ -497,3 +497,4 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
 .onb-num { flex: 0 0 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px; background: var(--sable); color: var(--atlantique); }
 .onb-steps li.done .onb-num { background: var(--success); color: #fff; }
 .onb-steps li.current .onb-num { background: var(--atlantique); color: #fff; }
+.vtc-nondu { background: #e6eef5; color: var(--atlantique); text-decoration: line-through; }
