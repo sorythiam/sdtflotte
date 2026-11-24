@@ -155,7 +155,7 @@ export const SAAS_ISSUER = {
   name: 'Yoon Fleet',
   legalName: 'Tabibou Business Group SARL',
   address: 'Cité Palène, Yoff n° 65, Dakar, Sénégal',
-  registration: 'SARL au capital de 100 000 FCFA · RCCM SN.DKR.2022.B.29537 · NINEA 009664352',
+  registration: 'RCCM SN.DKR.2022.B.29537 · NINEA 009664352',
   email: 'contact@yoonfleet.com',
 };
 
