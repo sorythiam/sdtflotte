@@ -175,15 +175,23 @@ async function bictorysCreate(payId: string, amount: number, back: string, c: { 
   return { ref, url };
 }
 
+/** Statuts Bictorys : la documentation emploie tantôt l'anglais, tantôt le français. */
+function bictorysState(raw: unknown): Outcome['state'] {
+  const st = String(raw ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (['succeeded', 'success', 'successful', 'authorized', 'completed', 'paid', 'reussi', 'succes'].includes(st)) return 'completed';
+  if (['cancelled', 'canceled', 'expired', 'expire'].includes(st)) return 'cancelled';
+  if (['failed', 'reversed', 'echoue', 'error'].includes(st)) return 'failed';
+  return 'pending';
+}
+
 async function bictorysCheck(transactionId: string): Promise<Outcome> {
   const url = `${BX_BASE}/pay/v1/transactions/${encodeURIComponent(transactionId)}/status`;
   let res = await fetch(url, { headers: { 'X-Api-Key': BX.api } });
   if ((res.status === 401 || res.status === 403) && BX.priv) res = await fetch(url, { headers: { 'X-API-Key': BX.priv } });
   const j = (await res.json().catch(() => ({}))) as { status?: string; amount?: number | string; paymentReference?: string };
-  const st = String(j.status ?? '').toLowerCase();
   const amount = Number(j.amount);
   return {
-    state: st === 'succeeded' || st === 'authorized' ? 'completed' : st === 'cancelled' || st === 'expired' ? 'cancelled' : st === 'failed' || st === 'reversed' ? 'failed' : 'pending',
+    state: bictorysState(j.status),
     // La réponse courte du statut peut omettre le montant : on ne le contrôle que s'il est donné.
     amount: Number.isFinite(amount) && amount > 0 ? amount : null,
     reference: j.paymentReference ?? null,
@@ -214,7 +222,7 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 /** Demande l'état au prestataire et met le paiement à jour. Seul cet appel, avec nos clés, fait foi. */
-async function settle(payId: string) {
+async function settle(payId: string, hint?: Outcome) {
   const { data: pay } = await admin.from('subscription_payments').select('*').eq('id', payId).maybeSingle();
   if (!pay) throw new HttpError(404, 'Paiement introuvable.');
   if (pay.status !== 'en_attente' || !pay.provider_ref) return pay;
@@ -222,6 +230,8 @@ async function settle(payId: string) {
   if (pay.provider === 'bictorys') o = await bictorysCheck(pay.provider_ref);
   else if (pay.provider === 'paydunya') o = await paydunyaCheck(pay.provider_ref);
   else return pay;
+  // Notification authentifiée qui annonce un résultat que l'API de statut ne reflète pas encore.
+  if (o.state === 'pending' && hint && hint.state !== 'pending') o = hint;
   if (o.state === 'completed') {
     if (o.reference && o.reference !== pay.id) throw new HttpError(409, 'Paiement incohérent.');
     if (o.amount !== null && o.amount < pay.amount_ttc) {
@@ -263,18 +273,38 @@ async function paydunyaWebhook(text: string) {
   if (pay) await settle(pay.id as string);
 }
 
-/** Webhook Bictorys : authentifié, puis revérifié auprès de l'API. */
+/** Webhook Bictorys : authentifié par la clé secrète, puis revérifié auprès de l'API de statut. */
 async function bictorysWebhook(req: Request, text: string) {
-  if (!(await bictorysAuthentic(req, text))) return;
-  let j: { id?: string; paymentReference?: string } = {};
+  if (!(await bictorysAuthentic(req, text))) {
+    console.log('webhook bictorys non authentifié', text.slice(0, 500));
+    return;
+  }
+  let j: Record<string, unknown> = {};
   try {
     j = JSON.parse(text);
   } catch {
     return;
   }
-  const q = admin.from('subscription_payments').select('id').eq('provider', 'bictorys');
-  const { data: pay } = j.id ? await q.eq('provider_ref', j.id).maybeSingle() : await q.eq('id', j.paymentReference ?? '').maybeSingle();
-  if (pay) await settle(pay.id as string);
+  console.log('webhook bictorys', text.slice(0, 1500));
+  // Deux formats documentés : à plat { id, status, paymentReference, amount } ou { event, data: { id, status, reference, amount } }.
+  const d = (j.data && typeof j.data === 'object' ? j.data : j) as Record<string, unknown>;
+  const ids = [d.id, d.chargeId, j.id, j.chargeId].filter((x): x is string => typeof x === 'string' && x.length > 0);
+  const refs = [d.paymentReference, d.reference, j.paymentReference].filter((x): x is string => typeof x === 'string' && /^[0-9a-f-]{36}$/i.test(x));
+  let payId: string | null = null;
+  for (const id of ids) {
+    const { data } = await admin.from('subscription_payments').select('id').eq('provider', 'bictorys').eq('provider_ref', id).maybeSingle();
+    if (data) { payId = data.id as string; break; }
+  }
+  for (const r of refs) {
+    if (payId) break;
+    const { data } = await admin.from('subscription_payments').select('id').eq('provider', 'bictorys').eq('id', r).maybeSingle();
+    if (data) payId = data.id as string;
+  }
+  if (!payId) return;
+  const event = String(j.event ?? '').toLowerCase();
+  const amount = Number(d.amount);
+  const state = event.endsWith('.successful') || event.endsWith('.success') ? 'completed' : event.endsWith('.failed') ? 'failed' : bictorysState(d.status);
+  await settle(payId, { state, amount: Number.isFinite(amount) && amount > 0 ? amount : null, reference: refs.includes(payId) ? payId : null, raw: j });
 }
 
 Deno.serve(async (req) => {
