@@ -402,6 +402,8 @@ export interface Tables {
   vtc_adjustments: VtcAdjustment;
   seasons: Season;
   quotes: Quote;
+  reservation_portals: import('./portal').ReservationPortal;
+  deposit_declarations: import('./portal').DepositDeclaration;
 }
 export type TableName = keyof Tables;
 

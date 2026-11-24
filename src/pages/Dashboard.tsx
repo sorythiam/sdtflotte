@@ -124,7 +124,10 @@ export function Dashboard() {
               </table>
             </div>
           )}
-          <Link to="/reservations">Voir toutes les réservations</Link>
+          <div className="row" style={{ gap: 'var(--space-4)' }}>
+            <Link to="/reservations?vue=suivi">Suivi du jour et messages WhatsApp</Link>
+            <Link to="/reservations">Voir toutes les réservations</Link>
+          </div>
         </section>
 
         <section className="card col-1" aria-labelledby="todo" id="alertes">

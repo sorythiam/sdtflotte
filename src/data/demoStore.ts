@@ -2,7 +2,9 @@ import { categoryPhotos } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
 import type { AuditEntry, Invitation, Member, Organization, Plan, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
 import { addPeriod, checkoutQuote, SAAS_VAT_RATE, vtcQuote, type BillingItem, type SubscriptionPayment } from '../domain/saas';
-import { seed, seedExpenses, seedDrivers, seedIncidents, seedInvoices, seedPackages, seedPlans, seedSeasons, seedVtc } from './seed';
+import { seed, seedExpenses, seedDrivers, seedIncidents, seedInvoices, seedPackages, seedPlans, seedPortals, seedSeasons, seedVtc } from './seed';
+import { depositTarget, validateDeclaration, validatePortalForm, type DepositMethod, type PortalClient, type PortalInfo } from '../domain/portal';
+import { billingSettings as orgBilling, paidOn } from '../domain/billing';
 import { invoicePrefix, nextInvoiceNumber, type Invoice } from '../domain/billing';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
 import {
@@ -91,6 +93,7 @@ function freshState(): DemoState {
         email: 'location@sdt.sn',
         registration: 'RCCM SN-DKR-2015-B-0000 · NINEA 000000000',
       },
+      billing: { payees: { wave: '77 820 00 00', orangeMoney: '512 345', freeMoney: '', mtn: '', moov: '', bankName: '', iban: '', chequeOrder: '' } },
     },
   };
 }
@@ -132,6 +135,8 @@ export class DemoStore implements Store {
           Object.assign(st.db, ok ? seedVtc() : { vtc_contracts: [], vtc_payments: [], vtc_adjustments: [] });
         }
         st.db.vtc_adjustments ??= [];
+        if (!st.db.reservation_portals) Object.assign(st.db, seedPortals(st.db.reservations.filter((r) => r.id === 'r-9' && !st.db.payments.some((p) => p.reservationId === 'r-9' && p.kind === 'acompte'))));
+        st.db.deposit_declarations ??= [];
         st.org.bookingSlug ??= 'sdt-demo';
         st.org.bookingEnabled ??= true;
         return st;
@@ -386,6 +391,81 @@ export class DemoStore implements Store {
       },
       ...(this.state.bookingRequests ?? []),
     ];
+    this.save();
+  }
+
+  // ---------------------------------------------------------------- espace client (démo : même navigateur)
+  private portalRow(token: string) {
+    const pt = this.state.db.reservation_portals.find((p) => p.token === token);
+    const r = pt && this.state.db.reservations.find((x) => x.id === pt.reservationId);
+    if (!pt || !r || r.status === 'annulee' || Date.parse(r.end) < Date.now() - 7 * 86400000) return null;
+    const c = this.state.db.clients.find((x) => x.id === r.clientId);
+    return c ? { pt, r, c } : null;
+  }
+
+  async portalInfo(token: string): Promise<PortalInfo | null> {
+    const x = this.portalRow(token);
+    if (!x) return null;
+    const { pt, r, c } = x;
+    pt.openedAt ??= new Date().toISOString();
+    this.save();
+    const o = this.state.org;
+    const b = orgBilling(o.name, o.billing);
+    const v = this.state.db.vehicles.find((y) => y.id === r.vehicleId);
+    return structuredClone({
+      org: { name: o.contract?.legalName || o.name, phone: o.contract?.phone ?? '', logo: o.contract?.logo ?? null, terms: o.contract?.terms ?? '', country: o.country, wave: b.payees.wave, orangeMoney: b.payees.orangeMoney },
+      reservation: {
+        number: r.number, status: r.status, start: r.start, end: r.end, withDriver: r.withDriver, vehicle: v ? `${v.brand} ${v.model}` : '',
+        total: r.total, caution: r.caution, depositDue: depositTarget(r, this.state.db.invoices, c.depositPercent ?? b.depositPercent), paid: paidOn(r.id, this.state.db.payments),
+        declared: this.state.db.deposit_declarations.filter((d) => d.reservationId === r.id).map(({ amount, method, reference, declaredAt, status }) => ({ amount, method, reference, declaredAt, status })),
+      },
+      client: {
+        kind: c.kind, name: c.name, phone: c.phone, email: c.email, address: c.address ?? null, city: c.city ?? null, idType: c.idType ?? null, idNumber: c.idNumber,
+        idExpiry: c.idExpiry ?? null, birthDate: c.birthDate ?? null, licenseNumber: c.licenseNumber ?? null, licenseCategory: c.licenseCategory ?? null, licenseExpiry: c.licenseExpiry,
+        docs: { idFront: !!c.documents?.idFront, idBack: !!c.documents?.idBack, license: !!c.documents?.license },
+      },
+      portal: { submittedAt: pt.submittedAt ?? null, signedAt: pt.signedAt ?? null, signerName: pt.signerName ?? null, uploadPrefix: 'demo' },
+    });
+  }
+
+  async portalSubmit(token: string, client: PortalClient, signerName: string, signature: string): Promise<void> {
+    const x = this.portalRow(token);
+    if (!x) throw new Error('Lien expiré ou invalide');
+    if (x.r.status !== 'reservee') throw new Error('Le véhicule a déjà été remis : voyez l’agence');
+    const err = validatePortalForm(client, signerName, signature, true, new Date());
+    if (err) throw new Error(err);
+    const t = (v: string | null) => (v && v.trim() ? v.trim() : null);
+    const c = x.c;
+    const before = JSON.stringify([c.idNumber, c.licenseNumber, c.idExpiry, c.licenseExpiry]);
+    if (c.kind === 'particulier') Object.assign(c, { name: client.name.trim(), phone: client.phone.trim(), email: t(client.email) ?? c.email });
+    Object.assign(c, {
+      address: t(client.address) ?? c.address ?? null, city: t(client.city) ?? c.city ?? null, idType: client.idType ?? c.idType ?? null,
+      idNumber: t(client.idNumber) ?? c.idNumber, idExpiry: t(client.idExpiry) ?? c.idExpiry ?? null, birthDate: t(client.birthDate) ?? c.birthDate ?? null,
+      licenseNumber: t(client.licenseNumber) ?? c.licenseNumber ?? null, licenseCategory: t(client.licenseCategory) ?? c.licenseCategory ?? null, licenseExpiry: t(client.licenseExpiry) ?? c.licenseExpiry,
+    });
+    if (c.verifiedAt && before !== JSON.stringify([c.idNumber, c.licenseNumber, c.idExpiry, c.licenseExpiry])) Object.assign(c, { verifiedAt: null, verifiedBy: null });
+    Object.assign(x.pt, { submittedAt: new Date().toISOString(), signerName: signerName.trim(), signature, signedAt: new Date().toISOString() });
+    this.save();
+  }
+
+  async portalUpload(token: string, _info: PortalInfo, slot: 'idFront' | 'idBack' | 'license', image: Blob): Promise<void> {
+    const x = this.portalRow(token);
+    if (!x || x.r.status !== 'reservee') throw new Error('Lien expiré ou invalide');
+    const url = await this.uploadVehiclePhoto(image);
+    x.c.documents = { ...(x.c.documents ?? {}), [slot]: url };
+    Object.assign(x.c, { verifiedAt: null, verifiedBy: null });
+    this.save();
+  }
+
+  async portalDeclare(token: string, method: DepositMethod, reference: string, amount: number): Promise<void> {
+    const x = this.portalRow(token);
+    if (!x || (x.r.status !== 'reservee' && x.r.status !== 'en_cours')) throw new Error('Lien expiré ou invalide');
+    const err = validateDeclaration(amount, reference, x.r.total);
+    if (err) throw new Error(err);
+    const mine = this.state.db.deposit_declarations.filter((d) => d.reservationId === x.r.id);
+    if (mine.filter((d) => d.status === 'declare').length >= 3) throw new Error('Déjà trois paiements en attente de vérification : contactez l’agence');
+    if (mine.some((d) => d.reference.toLowerCase() === reference.trim().toLowerCase())) throw new Error('Cette référence a déjà été déclarée');
+    this.state.db.deposit_declarations.push({ id: uid(), reservationId: x.r.id, amount, method, reference: reference.trim(), declaredAt: new Date().toISOString(), status: 'declare' });
     this.save();
   }
 

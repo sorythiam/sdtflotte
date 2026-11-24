@@ -31,6 +31,7 @@ const pages = {
   Reports: () => import('./pages/Reports'),
   Contract: () => import('./pages/Contract'),
   PublicBooking: () => import('./pages/PublicBooking'),
+  ClientPortal: () => import('./pages/ClientPortal'),
   BookingRequests: () => import('./pages/BookingRequests'),
   Expenses: () => import('./pages/Expenses'),
   Invoices: () => import('./pages/Invoices'),
@@ -59,6 +60,7 @@ const Settings = lazy(() => pages.Settings().then((m) => ({ default: m.Settings 
 const Reports = lazy(() => pages.Reports().then((m) => ({ default: m.Reports })));
 const Contract = lazy(() => pages.Contract().then((m) => ({ default: m.Contract })));
 const PublicBooking = lazy(() => pages.PublicBooking().then((m) => ({ default: m.PublicBooking })));
+const ClientPortal = lazy(() => pages.ClientPortal().then((m) => ({ default: m.ClientPortal })));
 const BookingRequests = lazy(() => pages.BookingRequests().then((m) => ({ default: m.BookingRequests })));
 const Expenses = lazy(() => pages.Expenses().then((m) => ({ default: m.Expenses })));
 const Invoices = lazy(() => pages.Invoices().then((m) => ({ default: m.Invoices })));
@@ -100,6 +102,9 @@ function App() {
   usePrefetchPages();
   if (pathname === '/nouveau-mot-de-passe') return <NewPassword />;
   if (pub) return <Suspense fallback={<Loading />}><PublicBooking slug={pub[1].toLowerCase()} /></Suspense>;
+  // Espace client d'une réservation : le lien envoyé par WhatsApp suffit.
+  const portal = pathname.match(/^\/c\/([a-f0-9]{64})\/?$/);
+  if (portal) return <Suspense fallback={<Loading />}><ClientPortal token={portal[1]} /></Suspense>;
   if (!session) return <Login />;
   return (
     <Suspense fallback={<Loading />}>

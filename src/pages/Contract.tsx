@@ -31,6 +31,7 @@ export function Contract() {
   const taxLabel = taxIdLabel(org.country);
   const invoices = data.invoices.filter((i) => i.reservationId === r.id);
   const dep = data.inspections.find((i) => i.reservationId === r.id && i.kind === 'depart');
+  const online = data.reservation_portals.find((p) => p.reservationId === r.id && p.signedAt);
   const ret = data.inspections.find((i) => i.reservationId === r.id && i.kind === 'retour');
   const v = data.vehicles.find((x) => x.id === r.vehicleId);
   const c = data.clients.find((x) => x.id === r.clientId);
@@ -270,7 +271,14 @@ export function Contract() {
               <span className="ct-small">
                 {c?.kind === 'entreprise' ? `Pour ${c.name}${c.contactName ? `, ${c.contactName}` : ''} : signature, cachet et « lu et approuvé »` : 'Signature précédée de « lu et approuvé »'}
               </span>
-              {dep?.signature && <img className="ct-sig-img" src={dep.signature} alt={`Signature de ${dep.signerName} au départ`} />}
+              {dep?.signature ? (
+                <img className="ct-sig-img" src={dep.signature} alt={`Signature de ${dep.signerName} au départ`} />
+              ) : online?.signature ? (
+                <>
+                  <img className="ct-sig-img" src={online.signature} alt={`Signature de ${online.signerName} en ligne`} />
+                  <span className="ct-small">Lu et approuvé, signé en ligne le {dateTime(online.signedAt!)} par {online.signerName}</span>
+                </>
+              ) : null}
             </div>
           </div>
           {returned && (

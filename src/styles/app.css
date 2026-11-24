@@ -498,3 +498,19 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
 .onb-steps li.done .onb-num { background: var(--success); color: #fff; }
 .onb-steps li.current .onb-num { background: var(--atlantique); color: #fff; }
 .vtc-nondu { background: #e6eef5; color: var(--atlantique); text-decoration: line-through; }
+
+/* Espace client */
+.portal-steps { display: flex; flex-wrap: wrap; gap: var(--space-2); list-style: none; padding: 0; margin: var(--space-3) 0 0; }
+.portal-steps li { padding: 4px 12px; border-radius: 999px; background: var(--surface-2, #f1f3f5); font-size: 14px; }
+.portal-steps li.done { background: #e3f4ea; color: #1d6b40; font-weight: 600; }
+.portal-docs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-3); }
+.portal-doc { display: flex; flex-direction: column; gap: 6px; padding: var(--space-3); border: 1.5px dashed var(--border, #ccd); border-radius: 12px; cursor: pointer; }
+.portal-doc.done { border-style: solid; border-color: #7cc49a; }
+.portal-doc:focus-within { outline: 2px solid var(--atlantique); outline-offset: 2px; }
+.portal-terms { max-height: 240px; overflow: auto; padding: var(--space-3); border: 1px solid var(--border, #ccd); border-radius: 10px; font-size: 14px; background: #fafbfc; }
+.portal-terms p { margin: 0 0 8px; }
+.portal-pay { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); }
+.portal-pay-card { display: flex; flex-direction: column; gap: 6px; padding: var(--space-4); border-radius: 12px; border: 1px solid var(--border, #ccd); }
+.portal-wave { background: #eaf6fd; border-color: #9dd6f5; }
+.portal-orange_money { background: #fff2e6; border-color: #ffc08a; }
+.portal-code { font-size: 22px; font-weight: 700; letter-spacing: .04em; font-variant-numeric: tabular-nums; word-break: break-all; }

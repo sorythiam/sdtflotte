@@ -1,3 +1,4 @@
+import type { DepositDeclaration, ReservationPortal } from '../domain/portal';
 import { billingSettings, buildInvoice, nextInvoiceNumber, type Invoice } from '../domain/billing';
 import type { Client, Driver, MaintenancePlan, VtcContract, VtcPayment, Expense, Incident, Package, Maintenance, Payment, Rate, Reservation, Tables, Vehicle, Season, VtcAdjustment } from '../domain/types';
 
@@ -93,6 +94,8 @@ export function seed(now = new Date()): Db {
   });
   const payments: Payment[] = [];
   for (const res of reservations) {
+    // r-6 et r-9 : acompte pas encore reçu (r-9 : déclaré par le client depuis son espace).
+    if (res.id === 'r-6' || res.id === 'r-9') continue;
     payments.push(p(res.id, 'acompte', Math.round(res.total / 2), res.id === 'r-1' ? 'virement' : 'wave'));
     if (res.status === 'en_cours') payments.push(p(res.id, 'caution', res.caution, 'orange_money'));
   }
@@ -103,7 +106,7 @@ export function seed(now = new Date()): Db {
     { id: 'm-2', vehicleId: 'v-tucson', label: 'Vidange', start: at(now, 1, 8), end: at(now, 1, 18), cost: 45000 },
   ];
 
-  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now), drivers: seedDrivers(now), packages: seedPackages(now), reservation_changes: [], maintenance_plans: seedPlans(now), ...seedVtc(now), seasons: seedSeasons(now), quotes: [] };
+  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now), drivers: seedDrivers(now), packages: seedPackages(now), reservation_changes: [], maintenance_plans: seedPlans(now), ...seedVtc(now), seasons: seedSeasons(now), quotes: [], ...seedPortals(reservations, now) };
 }
 
 /** Factures des réservations d'exemple, numérotées dans l'ordre de création. */
@@ -235,4 +238,15 @@ export function seedSeasons(now = new Date()): Season[] {
     s('se-2', 'Fêtes de fin d’année', `${y}-12-20`, `${y + 1}-01-05`, 25),
     s('se-3', 'Basse saison', `${y}-07-01`, `${y}-09-30`, -10),
   ];
+}
+
+/** Espace client : un lien déjà envoyé et un acompte Wave déclaré, à vérifier. */
+export function seedPortals(reservations: Reservation[], now = new Date()): { reservation_portals: ReservationPortal[]; deposit_declarations: DepositDeclaration[] } {
+  const r9 = reservations.find((r) => r.id === 'r-9');
+  if (!r9) return { reservation_portals: [], deposit_declarations: [] };
+  const ago = (h: number) => new Date(now.getTime() - h * 3600000).toISOString();
+  return {
+    reservation_portals: [{ id: 'pt-1', reservationId: 'r-9', token: 'd'.repeat(64), createdAt: ago(20), createdBy: 'awa.agent@sdt.sn', openedAt: ago(18), submittedAt: null, signerName: null, signature: null, signedAt: null }],
+    deposit_declarations: [{ id: 'dd-1', reservationId: 'r-9', amount: Math.round(r9.total / 2), method: 'wave', reference: 'T_8F2KQ7WX', declaredAt: ago(2), status: 'declare' }],
+  };
 }

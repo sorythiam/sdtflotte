@@ -3,6 +3,7 @@ import type { BookingRequest, BookingRequestInput, BookingStatus, PublicBookingI
 import type { ContractSettings } from '../domain/contract';
 import type { AuditEntry, Invitation, Member, Organization, Plan, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
 import type { BillingItem, SubscriptionPayment } from '../domain/saas';
+import type { DepositMethod, PortalClient, PortalInfo } from '../domain/portal';
 
 export type Row<T extends TableName> = Tables[T];
 export type NewRow<T extends TableName> = Omit<Tables[T], 'id'>;
@@ -71,6 +72,11 @@ export interface Store {
   listSubscriptionPayments(): Promise<SubscriptionPayment[]>;
   /** VTC : la direction confirme avoir reçu les espèces d'un encaisseur. Renvoie le nombre de versements remis. */
   vtcHandOver(paymentIds: string[]): Promise<number>;
+  // Espace client (sans connexion, par le jeton du lien)
+  portalInfo(token: string): Promise<PortalInfo | null>;
+  portalSubmit(token: string, client: PortalClient, signerName: string, signature: string): Promise<void>;
+  portalUpload(token: string, info: PortalInfo, slot: 'idFront' | 'idBack' | 'license', image: Blob): Promise<void>;
+  portalDeclare(token: string, method: DepositMethod, reference: string, amount: number): Promise<void>;
   /** Démo seulement : simule la réponse du prestataire de paiement. */
   simulatePayment?(paymentId: string, paid: boolean): Promise<void>;
 }

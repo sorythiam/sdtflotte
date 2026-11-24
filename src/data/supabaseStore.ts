@@ -5,6 +5,7 @@ import type { AuditEntry, Invitation, Member, Organization, Plan, Role, Subscrip
 import type { BillingItem, SubscriptionPayment } from '../domain/saas';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
 import type { BookingRequest, BookingRequestInput, BookingStatus, PublicBookingInfo } from '../domain/booking';
+import type { DepositMethod, PortalClient, PortalInfo } from '../domain/portal';
 
 // Colonnes dont le nom diffère entre l'application (camelCase) et la base (snake_case).
 const toSnake = (k: string) => k.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase());
@@ -263,6 +264,33 @@ export class SupabaseStore implements Store {
       p_name: req.name, p_phone: req.phone, p_email: req.email, p_message: req.message,
       p_company_name: req.companyName ?? null, p_company_tax_id: req.companyTaxId ?? null, p_passengers: req.passengers ?? null,
     });
+    if (error) throw friendly(error);
+  }
+
+  // ---------------------------------------------------------------- espace client
+  async portalInfo(token: string): Promise<PortalInfo | null> {
+    const { data, error } = await this.sb.rpc('portal_info', { p_token: token });
+    if (error) throw friendly(error);
+    return (data as PortalInfo | null) ?? null;
+  }
+
+  async portalSubmit(token: string, client: PortalClient, signerName: string, signature: string): Promise<void> {
+    const { error } = await this.sb.rpc('portal_submit', { p_token: token, p_client: client, p_signer: signerName, p_signature: signature });
+    if (error) throw friendly(error);
+  }
+
+  async portalUpload(token: string, info: PortalInfo, slot: 'idFront' | 'idBack' | 'license', image: Blob): Promise<void> {
+    const prefix = info.portal.uploadPrefix;
+    if (!prefix) throw new Error('Lien expiré, rechargez la page.');
+    const path = `${prefix}-${crypto.randomUUID()}.jpg`;
+    const { error } = await this.sb.storage.from(CLIENT_DOC_BUCKET).upload(path, image, { contentType: 'image/jpeg', upsert: false });
+    if (error) throw new Error(`Envoi de la photo impossible : ${error.message}`);
+    const { error: e2 } = await this.sb.rpc('portal_attach', { p_token: token, p_slot: slot, p_path: path });
+    if (e2) throw friendly(e2);
+  }
+
+  async portalDeclare(token: string, method: DepositMethod, reference: string, amount: number): Promise<void> {
+    const { error } = await this.sb.rpc('portal_declare', { p_token: token, p_method: method, p_reference: reference, p_amount: amount });
     if (error) throw friendly(error);
   }
 

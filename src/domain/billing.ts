@@ -26,6 +26,7 @@ export interface BillingSettings {
   vatEnabled: boolean; // assujetti à la TVA
   vatRate: number; // en %, 18 au Sénégal
   depositPercent: number; // acompte demandé à la réservation, 0 à 100
+  depositDelayHours: number; // délai laissé au client pour payer l'acompte, 0 = pas de suivi
   balanceWhen: 'depart' | 'retour'; // échéance du solde pour un particulier
   companyDueDays: number; // délai accordé aux entreprises, 0 = mêmes règles
   payees: Payees;
@@ -38,6 +39,7 @@ export const DEFAULT_BILLING: BillingSettings = {
   vatEnabled: false,
   vatRate: 18,
   depositPercent: 50,
+  depositDelayHours: 24,
   balanceWhen: 'depart',
   companyDueDays: 30,
   payees: EMPTY_PAYEES,

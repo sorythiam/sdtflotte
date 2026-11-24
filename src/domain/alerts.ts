@@ -23,7 +23,8 @@ export type AlertKind =
   | 'entretien_jour'
   | 'entretien_a_prevoir'
   | 'vtc_retard'
-  | 'demande_en_ligne';
+  | 'demande_en_ligne'
+  | 'acompte_declare';
 
 export interface Alert {
   id: string; // stable : sert de clé et de repère dans l'email
@@ -44,6 +45,8 @@ export interface AlertInput {
   invoices?: { reservationId: string; totalTtc: number }[];
   plans?: MaintenancePlan[];
   vtc?: { contracts: VtcContract[]; payments: VtcPayment[]; expenses: Expense[]; drivers: { id: string; name: string }[]; adjustments?: VtcAdjustment[] };
+  /** Acomptes déclarés par les clients depuis leur espace, à vérifier. */
+  declarations?: { id: string; reservationId: string; status: string; amount: number; method: string; reference: string }[];
   bookingRequests?: { id: string; status: string; name: string; companyName?: string | null; category: string; start: string; end: string; createdAt: string }[];
 }
 
@@ -245,6 +248,16 @@ export function buildAlerts(input: AlertInput, now: Date, offsetMin = -now.getTi
       id: `demande:${b.id}`, kind: 'demande_en_ligne', level: soon ? 'urgent' : 'attention', link: '/demandes', roles: OPS,
       title: `Demande en ligne à traiter : ${b.companyName ? `${b.companyName} (${b.name})` : b.name}`,
       detail: `${b.category} du ${dmy(b.start)} au ${dmy(b.end)}${soon ? ' · départ dans moins de 48 h' : ''}`,
+    });
+  }
+
+  for (const d of input.declarations ?? []) {
+    const r = input.reservations.find((x) => x.id === d.reservationId);
+    if (d.status !== 'declare' || !r || r.status === 'annulee') continue;
+    out.push({
+      id: `acompte:${d.id}`, kind: 'acompte_declare', level: Date.parse(r.start) - t < DAY ? 'urgent' : 'attention', link: `/reservations/${r.id}`, roles: ['direction', 'agent', 'comptable'],
+      title: `Acompte déclaré à vérifier : ${fcfa(d.amount)}`,
+      detail: `${cName(r.clientId)} · ${d.method === 'wave' ? 'Wave' : 'Orange Money'} réf. ${d.reference} · contrat ${r.number}`,
     });
   }
 

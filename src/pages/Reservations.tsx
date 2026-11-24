@@ -9,9 +9,12 @@ import { dateShort, fromLocalInput, money, time, toLocalInput } from '../domain/
 import { balanceDue, findConflicts, lateDays } from '../domain/rules';
 import type { Formula, ReservationStatus } from '../domain/types';
 import { useData } from '../state/DataContext';
+import { followUps } from '../domain/portal';
+import { FollowUp } from './FollowUp';
 
-const filters: [ReservationStatus | 'actives' | 'toutes', string][] = [
+const filters: [ReservationStatus | 'actives' | 'toutes' | 'suivi', string][] = [
   ['actives', 'En cours et à venir'],
+  ['suivi', 'Suivi du jour'],
   ['en_cours', 'En cours'],
   ['reservee', 'À venir'],
   ['terminee', 'Terminées'],
@@ -23,7 +26,12 @@ export function Reservations() {
   const { data, now, can } = useData();
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
-  const [filter, setFilter] = useState<(typeof filters)[number][0]>('actives');
+  const [filter, setFilterState] = useState<(typeof filters)[number][0]>(params.get('vue') === 'suivi' ? 'suivi' : 'actives');
+  const setFilter = (k: (typeof filters)[number][0]) => {
+    setFilterState(k);
+    setParams(k === 'suivi' ? { vue: 'suivi' } : {}, { replace: true });
+  };
+  const todo = followUps(data.reservations, now).length;
   const [q, setQ] = useState('');
   const creating = params.get('nouvelle') === '1';
   const veh = new Map(data.vehicles.map((v) => [v.id, v]));
@@ -31,7 +39,7 @@ export function Reservations() {
 
   const list = data.reservations
     .filter((r) =>
-      filter === 'toutes' ? true : filter === 'actives' ? r.status === 'en_cours' || r.status === 'reservee' : r.status === filter,
+      filter === 'toutes' || filter === 'suivi' ? true : filter === 'actives' ? r.status === 'en_cours' || r.status === 'reservee' : r.status === filter,
     )
     .filter((r) => {
       if (!q) return true;
@@ -45,7 +53,7 @@ export function Reservations() {
       <header className="page-head">
         <div>
           <h1>Réservations et contrats</h1>
-          <p className="muted small">{list.length} résultat(s)</p>
+          {filter !== 'suivi' && <p className="muted small">{list.length} résultat(s)</p>}
         </div>
         {can('direction', 'agent') && (
           <button className="btn btn-primary" onClick={() => setParams({ nouvelle: '1' })}>
@@ -57,16 +65,16 @@ export function Reservations() {
         <div className="tabs" role="group" aria-label="Filtre">
           {filters.map(([k, label]) => (
             <button key={k} type="button" aria-selected={filter === k} onClick={() => setFilter(k)}>
-              {label}
+              {label}{k === 'suivi' && todo ? ` (${todo})` : ''}
             </button>
           ))}
         </div>
-        <label className="field grow" style={{ minWidth: 220 }}>
+        {filter !== 'suivi' && <label className="field grow" style={{ minWidth: 220 }}>
           <span className="sr-only">Rechercher</span>
           <input type="search" placeholder="Rechercher un contrat, un client, une plaque…" value={q} onChange={(e) => setQ(e.target.value)} />
-        </label>
+        </label>}
       </div>
-      <section className="card">
+      {filter === 'suivi' ? <FollowUp /> : <section className="card">
         {list.length === 0 ? (
           <Empty>Aucune réservation pour ce filtre.</Empty>
         ) : (
@@ -113,7 +121,7 @@ export function Reservations() {
             </table>
           </div>
         )}
-      </section>
+      </section>}
       {creating && <NewReservation onClose={() => setParams({})} />}
     </>
   );

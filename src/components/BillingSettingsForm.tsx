@@ -47,6 +47,11 @@ export function BillingSettingsForm({ editable }: { editable: boolean }) {
                 </select>
               </label>
               <label className="field">
+                Délai pour payer l’acompte (heures)
+                <input type="number" min={0} max={168} value={s.depositDelayHours} onChange={(e) => setS({ ...s, depositDelayHours: n(e.target.value, 0, 168) })} />
+                <span className="hint">Passé ce délai, la réservation est signalée « acompte non reçu ». 0 = pas de suivi.</span>
+              </label>
+              <label className="field">
                 Délai de paiement des entreprises (jours)
                 <input type="number" min={0} max={180} value={s.companyDueDays} onChange={(e) => setS({ ...s, companyDueDays: n(e.target.value, 0, 180) })} />
                 <span className="hint">0 = mêmes règles que les particuliers. Modifiable client par client.</span>
@@ -78,10 +83,10 @@ export function BillingSettingsForm({ editable }: { editable: boolean }) {
 
           <fieldset className="form-group stack">
             <legend>Vos moyens d’encaissement</legend>
-            <span className="hint">Affichés sur les factures, les contrats et le message WhatsApp envoyé au client. Laissez vide ce que vous n’utilisez pas.</span>
+            <span className="hint">Affichés sur les factures, les contrats et l’espace client. Wave et Orange Money servent aussi à l’acompte en ligne : le client vous paie directement, puis déclare la référence que vous confirmez. Laissez vide ce que vous n’utilisez pas.</span>
             <div className="grid-2">
-              <label className="field">Numéro Wave<input inputMode="tel" value={s.payees.wave} onChange={setP('wave')} /></label>
-              <label className="field">Numéro Orange Money<input inputMode="tel" value={s.payees.orangeMoney} onChange={setP('orangeMoney')} /></label>
+              <label className="field">Wave : code marchand ou numéro<input value={s.payees.wave} onChange={setP('wave')} /></label>
+              <label className="field">Orange Money : code marchand ou numéro<input value={s.payees.orangeMoney} onChange={setP('orangeMoney')} /></label>
               <label className="field">Numéro Free Money<input inputMode="tel" value={s.payees.freeMoney} onChange={setP('freeMoney')} /></label>
               <label className="field">Numéro MTN MoMo<input inputMode="tel" value={s.payees.mtn} onChange={setP('mtn')} /></label>
               <label className="field">Numéro Moov Money<input inputMode="tel" value={s.payees.moov} onChange={setP('moov')} /></label>

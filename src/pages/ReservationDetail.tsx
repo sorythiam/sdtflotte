@@ -12,6 +12,7 @@ import { amendReservation, creditReservation, driverConflict, invoiceFees, invoi
 import { dealFor, kmIncludedFor, priceFor } from '../domain/tariff';
 import { payeeLines, payState, payStatusLabel, termsFor } from '../domain/billing';
 import { COUNTRY_CALLING_CODE, whatsappLink } from '../domain/booking';
+import { PortalCard } from '../components/PortalCard';
 
 export const methodLabel: Record<PaymentMethod, string> = {
   especes: 'Espèces',
@@ -198,6 +199,7 @@ export function ReservationDetail() {
               {r.notes && <><br />Notes : {r.notes}</>}
             </p>
           </section>
+          <PortalCard r={r} />
         </div>
 
         <section className="card col-1" aria-labelledby="paiements">
