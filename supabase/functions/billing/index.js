@@ -43,6 +43,26 @@ function priceFor(plan, vehicles, billing = "annuel") {
 // src/domain/saas.ts
 var SAAS_VAT_RATE = 18;
 var MIN_PAYMENT = 200;
+var VTC_MODULE = { label: "Module Chauffeurs VTC", monthlyHt: 25e3, yearlyHt: 25e3 * 12 };
+function vtcQuote(billing, vtcUntil, now, vatRate = 0) {
+  const baseHt = billing === "annuel" ? VTC_MODULE.yearlyHt : VTC_MODULE.monthlyHt;
+  const start = vtcUntil && Date.parse(vtcUntil) > now.getTime() ? new Date(vtcUntil).toISOString() : now.toISOString();
+  const vat = Math.round(baseHt * vatRate / 100);
+  return {
+    plan: "essentiel",
+    billing,
+    vehicles: 1,
+    baseHt,
+    creditHt: 0,
+    amountHt: baseHt,
+    vatRate,
+    vat,
+    amountTtc: baseHt + vat,
+    periodStart: start,
+    periodEnd: addPeriod(start, billing),
+    error: null
+  };
+}
 function addPeriod(fromIso, billing) {
   const d = new Date(fromIso);
   const day = d.getUTCDate();
@@ -154,22 +174,30 @@ var publicRow = (r) => {
   return rest;
 };
 async function lastPaid(orgId) {
-  const { data } = await admin.from("subscription_payments").select("*").eq("org_id", orgId).eq("status", "payee").order("paid_at", { ascending: false }).limit(1).maybeSingle();
+  const { data } = await admin.from("subscription_payments").select("*").eq("org_id", orgId).eq("status", "payee").eq("item", "abonnement").order("paid_at", { ascending: false }).limit(1).maybeSingle();
   return data ? toApp(data) : null;
 }
 async function checkout(req, body) {
   const who = await caller(req);
   if (who.role !== "admin") throw new HttpError(403, "Seul l\u2019administrateur du compte peut payer l\u2019abonnement.");
   if (!providerReady()) throw new HttpError(503, "Le paiement en ligne n\u2019est pas encore activ\xE9. Envoyez une demande d\u2019activation, nous vous recontactons.");
-  const plan = body.plan;
-  if (!PLAN_INFO[plan]) throw new HttpError(400, "Formule inconnue.");
+  const item = body.item === "vtc" ? "vtc" : "abonnement";
   const billing = body.billing === "mensuel" ? "mensuel" : "annuel";
-  const vehicles = Math.floor(Number(body.vehicles));
-  const { data: org } = await admin.from("organizations").select("id, name, country, paid_until, contract").eq("id", who.orgId).single();
-  const q = checkoutQuote({ plan, vehicles, billing }, { paidUntil: org?.paid_until ?? null, last: await lastPaid(who.orgId) }, /* @__PURE__ */ new Date(), VAT_RATE);
-  if (q.error) throw new HttpError(400, q.error);
+  const { data: org } = await admin.from("organizations").select("id, name, country, plan, paid_until, vtc_until, contract").eq("id", who.orgId).single();
+  let plan = body.plan;
+  let q;
+  if (item === "vtc") {
+    plan = org?.plan ?? "essentiel";
+    q = vtcQuote(billing, org?.vtc_until ?? null, /* @__PURE__ */ new Date(), VAT_RATE);
+  } else {
+    if (!PLAN_INFO[plan]) throw new HttpError(400, "Formule inconnue.");
+    const vehicles = Math.floor(Number(body.vehicles));
+    q = checkoutQuote({ plan, vehicles, billing }, { paidUntil: org?.paid_until ?? null, last: await lastPaid(who.orgId) }, /* @__PURE__ */ new Date(), VAT_RATE);
+    if (q.error) throw new HttpError(400, q.error);
+  }
   const { data: pay, error } = await admin.from("subscription_payments").insert({
     org_id: who.orgId,
+    item,
     plan,
     vehicles: q.vehicles,
     billing,
@@ -184,7 +212,7 @@ async function checkout(req, body) {
     created_by: who.email
   }).select("*").single();
   if (error || !pay) throw new HttpError(500, "Impossible de pr\xE9parer le paiement.");
-  const label = `Yoon Fleet ${PLAN_INFO[plan].label}, ${q.vehicles} v\xE9hicules, ${billing === "annuel" ? "1 an" : "1 mois"}`;
+  const label = item === "vtc" ? `Yoon Fleet ${VTC_MODULE.label}, ${billing === "annuel" ? "1 an" : "1 mois"}` : `Yoon Fleet ${PLAN_INFO[plan].label}, ${q.vehicles} v\xE9hicules, ${billing === "annuel" ? "1 an" : "1 mois"}`;
   const back = `${APP_URL}/abonnement/retour?paiement=${pay.id}`;
   try {
     const { ref, url } = PROVIDER === "bictorys" ? await bictorysCreate(pay.id, q.amountTtc, back, { name: org?.contract?.legalName || org?.name || "", email: who.email, phone: org?.contract?.phone ?? "", country: org?.country ?? "SN" }) : await paydunyaCreate(pay.id, q.amountTtc, back, `${label} \u2014 ${org?.name ?? ""}`, label, who.orgId);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addPeriod, checkoutQuote, subscriptionStatus } from './saas';
+import { addPeriod, checkoutQuote, subscriptionStatus, vtcModuleActive, vtcQuote } from './saas';
 
 const now = new Date('2026-11-24T10:00:00Z');
 
@@ -46,5 +46,23 @@ describe('montant à payer', () => {
     const q = checkoutQuote({ plan: 'essentiel', vehicles: 5, billing: 'mensuel' }, { paidUntil: null, last: null }, now, 18);
     expect(q.amountHt).toBe(12000);
     expect(q.amountTtc).toBe(14160);
+  });
+});
+
+
+describe('module Chauffeurs VTC', () => {
+  it('inclus pendant l’essai et l’accès offert, payant ensuite', () => {
+    expect(vtcModuleActive({ trialEndsAt: '2026-12-21T00:00:00Z', paidUntil: null }, now)).toBe(true);
+    expect(vtcModuleActive({ trialEndsAt: null, paidUntil: '2027-02-28T00:00:00Z', billingCycle: null }, now)).toBe(true);
+    expect(vtcModuleActive({ trialEndsAt: null, paidUntil: '2027-06-01T00:00:00Z', billingCycle: 'annuel' }, now)).toBe(false);
+    expect(vtcModuleActive({ trialEndsAt: null, paidUntil: '2027-06-01T00:00:00Z', billingCycle: 'annuel', vtcUntil: '2026-12-24T00:00:00Z' }, now)).toBe(true);
+  });
+  it('25 000 FCFA HT par mois, la période s’ajoute à celle en cours', () => {
+    const q = vtcQuote('mensuel', '2026-12-10T00:00:00.000Z', now, 18);
+    expect(q.amountHt).toBe(25000);
+    expect(q.amountTtc).toBe(29500);
+    expect(q.periodStart).toBe('2026-12-10T00:00:00.000Z');
+    expect(q.periodEnd).toBe('2027-01-10T00:00:00.000Z');
+    expect(vtcQuote('annuel', null, now).amountHt).toBe(300000);
   });
 });

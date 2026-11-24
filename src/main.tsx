@@ -5,6 +5,7 @@ import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
 import { NewPassword } from './pages/NewPassword';
+import { VtcGate } from './components/VtcGate';
 import { DataProvider, useData } from './state/DataContext';
 // Polices hébergées avec l'application (pas d'appel à Google Fonts) : jeu latin seulement.
 import '@fontsource/inter/latin-400.css';
@@ -121,8 +122,8 @@ function App() {
         <Route path="vehicules" element={<Vehicles />} />
         <Route path="vehicules/:id" element={<VehicleDetail />} />
         <Route path="chauffeurs" element={<Drivers />} />
-        <Route path="vtc" element={<Vtc />} />
-        <Route path="vtc/:id" element={<VtcDetail />} />
+        <Route path="vtc" element={<VtcGate><Vtc /></VtcGate>} />
+        <Route path="vtc/:id" element={<VtcGate><VtcDetail /></VtcGate>} />
         <Route path="clients" element={<Clients />} />
         <Route path="clients/:id" element={<ClientDetail />} />
         <Route path="maintenance" element={<Maintenance />} />

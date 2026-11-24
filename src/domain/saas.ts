@@ -25,11 +25,38 @@ export interface SubStatus {
   graceEnds: string | null;
 }
 
+// ---------------------------------------------------------------- modules en option
+
+export type BillingItem = 'abonnement' | 'vtc';
+
+/** Module Chauffeurs VTC : prix fixe, quel que soit le nombre de véhicules. */
+export const VTC_MODULE = { label: 'Module Chauffeurs VTC', monthlyHt: 25000, yearlyHt: 25000 * 12 };
+
+/** Le module VTC est-il utilisable ? Inclus pendant l'essai gratuit et pendant un accès offert. */
+export function vtcModuleActive(org: Pick<Organization, 'trialEndsAt' | 'paidUntil' | 'billingCycle' | 'vtcUntil'>, now: Date, demo = false): boolean {
+  if (demo) return true;
+  if (org.vtcUntil && Date.parse(org.vtcUntil) > now.getTime()) return true;
+  const s = subscriptionStatus(org, now);
+  return s.state === 'essai' || s.state === 'offert' || (s.state !== 'bloque' && !!org.paidUntil && !org.billingCycle);
+}
+
+/** Achat ou renouvellement du module : la nouvelle période s'ajoute à celle en cours, sans prorata. */
+export function vtcQuote(billing: Billing, vtcUntil: string | null | undefined, now: Date, vatRate = 0): CheckoutQuote {
+  const baseHt = billing === 'annuel' ? VTC_MODULE.yearlyHt : VTC_MODULE.monthlyHt;
+  const start = vtcUntil && Date.parse(vtcUntil) > now.getTime() ? new Date(vtcUntil).toISOString() : now.toISOString();
+  const vat = Math.round((baseHt * vatRate) / 100);
+  return {
+    plan: 'essentiel', billing, vehicles: 1, baseHt, creditHt: 0, amountHt: baseHt, vatRate, vat, amountTtc: baseHt + vat,
+    periodStart: start, periodEnd: addPeriod(start, billing), error: null,
+  };
+}
+
 export type SubPaymentStatus = 'en_attente' | 'payee' | 'echouee' | 'annulee';
 
 /** Paiement d'abonnement par le loueur à Yoon Fleet. */
 export interface SubscriptionPayment {
   id: string;
+  item?: BillingItem; // abonnement (défaut) ou module VTC
   plan: Plan;
   vehicles: number; // véhicules facturés (minimum de la formule compris)
   billing: Billing;

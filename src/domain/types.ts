@@ -14,6 +14,8 @@ export interface Organization {
   /** Fin de la période payée ; null tant qu'aucun paiement n'a été fait. */
   paidUntil?: string | null;
   billingCycle?: 'annuel' | 'mensuel' | null;
+  /** Module Chauffeurs VTC payé jusqu'à cette date ; null = jamais acheté. */
+  vtcUntil?: string | null;
   /** Coordonnées, logo et conditions générales du contrat. */
   contract?: Partial<import('./contract').ContractSettings> | null;
   /** Modalités de paiement, TVA et moyens d'encaissement. */

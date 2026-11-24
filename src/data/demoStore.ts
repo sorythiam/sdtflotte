@@ -1,7 +1,7 @@
 import { categoryPhotos } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
 import type { AuditEntry, Invitation, Member, Organization, Plan, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
-import { checkoutQuote, SAAS_VAT_RATE, type SubscriptionPayment } from '../domain/saas';
+import { addPeriod, checkoutQuote, SAAS_VAT_RATE, vtcQuote, type BillingItem, type SubscriptionPayment } from '../domain/saas';
 import { seed, seedExpenses, seedDrivers, seedIncidents, seedInvoices, seedPackages, seedPlans, seedSeasons, seedVtc } from './seed';
 import { invoicePrefix, nextInvoiceNumber, type Invoice } from '../domain/billing';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
@@ -446,15 +446,18 @@ export class DemoStore implements Store {
 
   // ---------------------------------------------------------------- abonnement (simulé)
   private lastPaid(): SubscriptionPayment | null {
-    return (this.state.subscriptionPayments ?? []).find((p) => p.status === 'payee') ?? null;
+    return (this.state.subscriptionPayments ?? []).find((p) => p.status === 'payee' && (p.item ?? 'abonnement') === 'abonnement') ?? null;
   }
 
-  async startCheckout(input: { plan: Plan; vehicles: number; billing: 'annuel' | 'mensuel' }): Promise<{ paymentId: string; url: string }> {
+  async startCheckout(input: { plan: Plan; vehicles: number; billing: 'annuel' | 'mensuel'; item?: BillingItem }): Promise<{ paymentId: string; url: string }> {
     if (this.state.session?.role !== 'admin') throw new Error('Seul l’administrateur peut payer l’abonnement.');
-    const q = checkoutQuote(input, { paidUntil: this.state.org.paidUntil ?? null, last: this.lastPaid() }, new Date(), SAAS_VAT_RATE);
+    const item = input.item ?? 'abonnement';
+    const q = item === 'vtc'
+      ? vtcQuote(input.billing, this.state.org.vtcUntil, new Date(), SAAS_VAT_RATE)
+      : checkoutQuote(input, { paidUntil: this.state.org.paidUntil ?? null, last: this.lastPaid() }, new Date(), SAAS_VAT_RATE);
     if (q.error) throw new Error(q.error);
     const p: SubscriptionPayment = {
-      id: uid(), plan: q.plan, vehicles: q.vehicles, billing: q.billing, baseHt: q.baseHt, creditHt: q.creditHt, amountHt: q.amountHt,
+      id: uid(), item, plan: item === 'vtc' ? this.state.org.plan : q.plan, vehicles: q.vehicles, billing: q.billing, baseHt: q.baseHt, creditHt: q.creditHt, amountHt: q.amountHt,
       vatRate: q.vatRate, vat: q.vat, amountTtc: q.amountTtc, provider: 'simulation', status: 'en_attente', periodStart: null, periodEnd: null,
       invoiceNumber: null, paidAt: null, createdBy: this.state.session?.email ?? null, createdAt: new Date().toISOString(),
     };
@@ -473,11 +476,14 @@ export class DemoStore implements Store {
       return;
     }
     const now = new Date();
-    const q = checkoutQuote({ plan: p.plan, vehicles: p.vehicles, billing: p.billing }, { paidUntil: this.state.org.paidUntil ?? null, last: this.lastPaid() }, now);
     const year = now.getFullYear();
     const n = list.filter((x) => x.invoiceNumber?.startsWith(`YF-${year}-`)).length + 1;
-    Object.assign(p, { status: 'payee', paidAt: now.toISOString(), periodStart: q.periodStart, periodEnd: q.periodEnd, invoiceNumber: `YF-${year}-${String(n).padStart(4, '0')}` });
-    Object.assign(this.state.org, { plan: p.plan, vehicleQuota: p.vehicles, paidUntil: q.periodEnd, billingCycle: p.billing, trialEndsAt: null });
+    const vtcUntil = this.state.org.vtcUntil;
+    const start = p.item === 'vtc' && vtcUntil && Date.parse(vtcUntil) > now.getTime() ? vtcUntil : now.toISOString();
+    const end = addPeriod(start, p.billing);
+    Object.assign(p, { status: 'payee', paidAt: now.toISOString(), periodStart: start, periodEnd: end, invoiceNumber: `YF-${year}-${String(n).padStart(4, '0')}` });
+    if (p.item === 'vtc') this.state.org.vtcUntil = end;
+    else Object.assign(this.state.org, { plan: p.plan, vehicleQuota: p.vehicles, paidUntil: end, billingCycle: p.billing, trialEndsAt: null });
     this.save();
   }
 

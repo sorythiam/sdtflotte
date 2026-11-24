@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ErrorBox } from '../components/ui';
 import { dateLong, money } from '../domain/format';
 import { PLAN_INFO, type Billing } from '../domain/pricing';
-import { checkoutQuote, SAAS_VAT_RATE, paymentStatusLabel, planLabel, SAAS_ISSUER, subscriptionStatus, subStateLabel, type SubscriptionPayment } from '../domain/saas';
+import { checkoutQuote, SAAS_VAT_RATE, VTC_MODULE, vtcModuleActive, vtcQuote, paymentStatusLabel, planLabel, SAAS_ISSUER, subscriptionStatus, subStateLabel, type SubscriptionPayment } from '../domain/saas';
 import type { Plan } from '../domain/types';
 import { useData } from '../state/DataContext';
 
@@ -153,6 +153,8 @@ export function Subscription() {
         <p className="notice">Seul l’administrateur du compte peut payer ou changer l’abonnement.</p>
       )}
 
+      <VtcModuleCard />
+
       {payments.length > 0 && (
         <section className="card" aria-labelledby="historique">
           <h2 id="historique">Paiements et factures</h2>
@@ -163,7 +165,7 @@ export function Subscription() {
                 {payments.map((p) => (
                   <tr key={p.id}>
                     <td>{dateLong(p.paidAt ?? p.createdAt)}</td>
-                    <td>{planLabel(p.plan)} · {p.vehicles} véhicules · {p.billing}</td>
+                    <td>{p.item === 'vtc' ? `${VTC_MODULE.label} · ${p.billing}` : `${planLabel(p.plan)} · ${p.vehicles} véhicules · ${p.billing}`}</td>
                     <td className="right num">{money(p.amountTtc)}</td>
                     <td><span className={`badge ${paymentStatusLabel[p.status][1]}`}>{paymentStatusLabel[p.status][0]}</span></td>
                     <td>{p.invoiceNumber ? <Link to={`/abonnement/facture/${p.id}`}>{p.invoiceNumber}</Link> : '—'}</td>
@@ -221,7 +223,10 @@ export function PaymentReturn() {
       {p?.status === 'payee' && (
         <>
           <p style={{ margin: 0 }}>
-            <strong>Merci, paiement reçu.</strong> La formule {planLabel(p.plan)} est active pour {p.vehicles} véhicules jusqu’au {p.periodEnd ? dateLong(p.periodEnd) : '—'}.
+            <strong>Merci, paiement reçu.</strong>{' '}
+            {p.item === 'vtc'
+              ? <>Le module Chauffeurs VTC est actif jusqu’au {p.periodEnd ? dateLong(p.periodEnd) : '—'}.</>
+              : <>La formule {planLabel(p.plan)} est active pour {p.vehicles} véhicules jusqu’au {p.periodEnd ? dateLong(p.periodEnd) : '—'}.</>}
           </p>
           <div className="row" style={{ flexWrap: 'wrap' }}>
             <Link className="btn btn-primary" to="/">Retour à l’accueil</Link>
@@ -261,7 +266,7 @@ export function TestCheckout() {
     <section className="card" style={{ maxWidth: 480, margin: '24px auto' }}>
       <span className="badge badge-muted" style={{ alignSelf: 'flex-start' }}>Démonstration : aucun argent réel</span>
       <h1 style={{ margin: 0 }}>Page de paiement</h1>
-      {p && <p style={{ margin: 0 }}>Yoon Fleet {planLabel(p.plan)}, {p.vehicles} véhicules : <strong>{money(p.amountTtc)}</strong></p>}
+      {p && <p style={{ margin: 0 }}>Yoon Fleet {p.item === 'vtc' ? VTC_MODULE.label : `${planLabel(p.plan)}, ${p.vehicles} véhicules`} : <strong>{money(p.amountTtc)}</strong></p>}
       <p className="small muted" style={{ margin: 0 }}>En production, c’est ici la page sécurisée du prestataire, avec Wave, Orange Money et carte bancaire.</p>
       <div className="row" style={{ flexWrap: 'wrap' }}>
         <button className="btn btn-primary" onClick={() => void go(true)}>Payer avec Wave</button>
@@ -281,7 +286,8 @@ export function SaasInvoicePage() {
   const c = org.contract ?? {};
   if (!p) return <div className="card"><p>Facture introuvable.</p><Link to="/abonnement">Retour à l’abonnement</Link></div>;
   if (!p.invoiceNumber) return <div className="card"><p>Ce paiement n’a pas de facture : il n’a pas abouti.</p><Link to="/abonnement">Retour</Link></div>;
-  const label = `Abonnement Yoon Fleet ${planLabel(p.plan)}, ${p.vehicles} véhicules, du ${dateLong(p.periodStart!)} au ${dateLong(p.periodEnd!)}`;
+  const period = `du ${dateLong(p.periodStart!)} au ${dateLong(p.periodEnd!)}`;
+  const label = p.item === 'vtc' ? `Yoon Fleet, ${VTC_MODULE.label}, ${period}` : `Abonnement Yoon Fleet ${planLabel(p.plan)}, ${p.vehicles} véhicules, ${period}`;
   return (
     <>
       <header className="page-head no-print">
@@ -336,5 +342,60 @@ export function SaasInvoicePage() {
         </p>
       </article>
     </>
+  );
+}
+
+/** Module Chauffeurs VTC : état et achat (1 mois ou 1 an), la période s'ajoute à celle en cours. */
+function VtcModuleCard() {
+  const { session, now, store, can } = useData();
+  const org = session!.org;
+  const [billing, setBilling] = useState<Billing>('mensuel');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const active = vtcModuleActive(org, now);
+  const paid = org.vtcUntil && Date.parse(org.vtcUntil) > now.getTime();
+  const q = vtcQuote(billing, org.vtcUntil, now, SAAS_VAT_RATE);
+
+  async function buy() {
+    setError(null);
+    setBusy(true);
+    try {
+      const { url } = await store.startCheckout({ plan: org.plan, vehicles: 1, billing, item: 'vtc' });
+      window.location.assign(url);
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card" id="modules" aria-labelledby="modules-titre">
+      <h2 id="modules-titre">Modules en option</h2>
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div className="stack" style={{ gap: 4, maxWidth: 520 }}>
+          <strong>{VTC_MODULE.label}</strong>
+          <span className="small muted">Véhicules confiés à des chauffeurs VTC contre un versement journalier : suivi des versements, retards, relances, location-vente.</span>
+          <span className="small">
+            {paid ? <>Actif jusqu’au <strong>{dateLong(org.vtcUntil!)}</strong></> : active ? 'Inclus pendant votre période d’essai ou d’accès offert' : 'Non activé'}
+          </span>
+        </div>
+        <span className="num" style={{ fontWeight: 600 }}>{money(VTC_MODULE.monthlyHt)} HT / mois</span>
+      </div>
+      {can() && (
+        <div className="stack">
+          <div className="tabs" role="group" aria-label="Durée du module">
+            <button type="button" aria-selected={billing === 'mensuel'} onClick={() => setBilling('mensuel')}>1 mois</button>
+            <button type="button" aria-selected={billing === 'annuel'} onClick={() => setBilling('annuel')}>1 an</button>
+          </div>
+          <span className="small">
+            {money(q.amountHt)} HT{q.vat ? ` + TVA ${q.vatRate} % : ${money(q.vat)}` : ''} = <strong>{money(q.amountTtc)}</strong> · du {dateLong(q.periodStart)} au {dateLong(q.periodEnd)}
+          </span>
+          <ErrorBox error={error} />
+          <button type="button" className="btn btn-primary" style={{ alignSelf: 'flex-start' }} disabled={busy} onClick={buy}>
+            {busy ? 'Ouverture du paiement…' : paid ? `Prolonger, payer ${money(q.amountTtc)}` : `Activer, payer ${money(q.amountTtc)}`}
+          </button>
+        </div>
+      )}
+    </section>
   );
 }

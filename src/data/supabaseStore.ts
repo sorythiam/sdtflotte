@@ -2,7 +2,7 @@ import { storagePath } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { AuditEntry, Invitation, Member, Organization, Plan, Role, SubscriptionRequest, TableName } from '../domain/types';
-import type { SubscriptionPayment } from '../domain/saas';
+import type { BillingItem, SubscriptionPayment } from '../domain/saas';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
 import type { BookingRequest, BookingRequestInput, BookingStatus, PublicBookingInfo } from '../domain/booking';
 
@@ -95,6 +95,7 @@ export class SupabaseStore implements Store {
       trialEndsAt: (o.trial_ends_at as string) ?? null,
       paidUntil: (o.paid_until as string) ?? null,
       billingCycle: (o.billing_cycle as Organization['billingCycle']) ?? null,
+      vtcUntil: (o.vtc_until as string) ?? null,
       contract: (o.contract as Organization['contract']) ?? null,
       billing: (o.billing as Organization['billing']) ?? null,
       bookingSlug: (o.booking_slug as string) ?? null,
@@ -394,7 +395,7 @@ export class SupabaseStore implements Store {
     return data as T;
   }
 
-  async startCheckout(input: { plan: Plan; vehicles: number; billing: 'annuel' | 'mensuel' }): Promise<{ paymentId: string; url: string }> {
+  async startCheckout(input: { plan: Plan; vehicles: number; billing: 'annuel' | 'mensuel'; item?: BillingItem }): Promise<{ paymentId: string; url: string }> {
     return this.billing({ action: 'checkout', ...input, origin: window.location.origin });
   }
 

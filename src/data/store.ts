@@ -2,7 +2,7 @@ import type { BillingSettings } from '../domain/billing';
 import type { BookingRequest, BookingRequestInput, BookingStatus, PublicBookingInfo } from '../domain/booking';
 import type { ContractSettings } from '../domain/contract';
 import type { AuditEntry, Invitation, Member, Organization, Plan, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
-import type { SubscriptionPayment } from '../domain/saas';
+import type { BillingItem, SubscriptionPayment } from '../domain/saas';
 
 export type Row<T extends TableName> = Tables[T];
 export type NewRow<T extends TableName> = Omit<Tables[T], 'id'>;
@@ -65,7 +65,7 @@ export interface Store {
   requestSubscription(req: Omit<SubscriptionRequest, 'id' | 'status' | 'createdAt'>): Promise<SubscriptionRequest>;
   // Abonnement en libre-service
   /** Crée le paiement et renvoie la page de paiement (Wave, Orange Money, carte). */
-  startCheckout(input: { plan: Plan; vehicles: number; billing: 'annuel' | 'mensuel' }): Promise<{ paymentId: string; url: string }>;
+  startCheckout(input: { plan: Plan; vehicles: number; billing: 'annuel' | 'mensuel'; item?: BillingItem }): Promise<{ paymentId: string; url: string }>;
   /** Vérifie un paiement auprès du prestataire et active la formule s'il est payé. */
   confirmPayment(paymentId: string): Promise<SubscriptionPayment>;
   listSubscriptionPayments(): Promise<SubscriptionPayment[]>;

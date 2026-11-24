@@ -5,7 +5,7 @@
 // Rien n'est jamais validé sur la seule parole du navigateur ou de la notification :
 // c'est l'appel « confirm » de PayDunya, avec nos clés, qui fait foi.
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
-import { checkoutQuote, SAAS_VAT_RATE, type SubscriptionPayment } from '../../../src/domain/saas';
+import { checkoutQuote, SAAS_VAT_RATE, VTC_MODULE, vtcQuote, type SubscriptionPayment } from '../../../src/domain/saas';
 import { PLAN_INFO } from '../../../src/domain/pricing';
 import type { Plan } from '../../../src/domain/types';
 
@@ -72,7 +72,7 @@ const publicRow = (r: Record<string, unknown>) => {
 };
 
 async function lastPaid(orgId: string) {
-  const { data } = await admin.from('subscription_payments').select('*').eq('org_id', orgId).eq('status', 'payee')
+  const { data } = await admin.from('subscription_payments').select('*').eq('org_id', orgId).eq('status', 'payee').eq('item', 'abonnement')
     .order('paid_at', { ascending: false }).limit(1).maybeSingle();
   return data ? toApp(data) : null;
 }
@@ -81,21 +81,30 @@ async function checkout(req: Request, body: Record<string, unknown>) {
   const who = await caller(req);
   if (who.role !== 'admin') throw new HttpError(403, 'Seul l’administrateur du compte peut payer l’abonnement.');
   if (!providerReady()) throw new HttpError(503, 'Le paiement en ligne n’est pas encore activé. Envoyez une demande d’activation, nous vous recontactons.');
-  const plan = body.plan as Plan;
-  if (!PLAN_INFO[plan]) throw new HttpError(400, 'Formule inconnue.');
+  const item = body.item === 'vtc' ? 'vtc' : 'abonnement';
   const billing = body.billing === 'mensuel' ? 'mensuel' : 'annuel';
-  const vehicles = Math.floor(Number(body.vehicles));
-  const { data: org } = await admin.from('organizations').select('id, name, country, paid_until, contract').eq('id', who.orgId).single();
-  const q = checkoutQuote({ plan, vehicles, billing }, { paidUntil: org?.paid_until ?? null, last: await lastPaid(who.orgId) }, new Date(), VAT_RATE);
-  if (q.error) throw new HttpError(400, q.error);
+  const { data: org } = await admin.from('organizations').select('id, name, country, plan, paid_until, vtc_until, contract').eq('id', who.orgId).single();
+  let plan = body.plan as Plan;
+  let q;
+  if (item === 'vtc') {
+    plan = (org?.plan as Plan) ?? 'essentiel';
+    q = vtcQuote(billing, org?.vtc_until ?? null, new Date(), VAT_RATE);
+  } else {
+    if (!PLAN_INFO[plan]) throw new HttpError(400, 'Formule inconnue.');
+    const vehicles = Math.floor(Number(body.vehicles));
+    q = checkoutQuote({ plan, vehicles, billing }, { paidUntil: org?.paid_until ?? null, last: await lastPaid(who.orgId) }, new Date(), VAT_RATE);
+    if (q.error) throw new HttpError(400, q.error);
+  }
 
   const { data: pay, error } = await admin.from('subscription_payments').insert({
-    org_id: who.orgId, plan, vehicles: q.vehicles, billing, base_ht: q.baseHt, credit_ht: q.creditHt, amount_ht: q.amountHt,
+    org_id: who.orgId, item, plan, vehicles: q.vehicles, billing, base_ht: q.baseHt, credit_ht: q.creditHt, amount_ht: q.amountHt,
     vat_rate: q.vatRate, vat: q.vat, amount_ttc: q.amountTtc, provider: PROVIDER, status: 'en_attente', created_by: who.email,
   }).select('*').single();
   if (error || !pay) throw new HttpError(500, 'Impossible de préparer le paiement.');
 
-  const label = `Yoon Fleet ${PLAN_INFO[plan].label}, ${q.vehicles} véhicules, ${billing === 'annuel' ? '1 an' : '1 mois'}`;
+  const label = item === 'vtc'
+    ? `Yoon Fleet ${VTC_MODULE.label}, ${billing === 'annuel' ? '1 an' : '1 mois'}`
+    : `Yoon Fleet ${PLAN_INFO[plan].label}, ${q.vehicles} véhicules, ${billing === 'annuel' ? '1 an' : '1 mois'}`;
   const back = `${APP_URL}/abonnement/retour?paiement=${pay.id}`;
   try {
     const { ref, url } = PROVIDER === 'bictorys'

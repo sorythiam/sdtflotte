@@ -6,7 +6,7 @@ import { useData } from '../state/DataContext';
 import { icons, SECTIONS, sectionOf, visibleTabs, type Section } from './nav';
 import { Logo, roleLabel, Wordmark } from './ui';
 import { LockScreen, SubscriptionBanner } from './SubscriptionBanner';
-import { subscriptionStatus } from '../domain/saas';
+import { subscriptionStatus, vtcModuleActive } from '../domain/saas';
 
 const planLabel = { essentiel: 'Essentiel', pro: 'Pro', entreprise: 'Entreprise' };
 /** Sections de la barre du bas sur téléphone ; les autres vont dans « Plus ». */
@@ -17,7 +17,7 @@ export function Layout() {
   const nav = useNavigate();
   const { pathname } = useLocation();
   const [sheet, setSheet] = useState(false);
-  const alerts = useMemo(() => (session ? alertsFor(buildAlerts({ ...data, plans: data.maintenance_plans, vtc: { contracts: data.vtc_contracts, payments: data.vtc_payments, expenses: data.expenses, drivers: data.drivers } }, now), session.role) : []), [data, now, session]);
+  const alerts = useMemo(() => (session ? alertsFor(buildAlerts({ ...data, plans: data.maintenance_plans, vtc: session && !vtcModuleActive(session.org, now) ? undefined : { contracts: data.vtc_contracts, payments: data.vtc_payments, expenses: data.expenses, drivers: data.drivers } }, now), session.role) : []), [data, now, session]);
   useEffect(() => setSheet(false), [pathname]);
   useEffect(() => {
     if (!sheet) return;

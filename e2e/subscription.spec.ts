@@ -25,3 +25,24 @@ test('abonnement : un agent ne peut pas payer', async ({ page }) => {
   await page.goto('/abonnement');
   await expect(page.getByText('Seul l’administrateur du compte peut payer')).toBeVisible();
 });
+
+test('module VTC : payant après l’essai, activable en libre-service', async ({ page }) => {
+  const check = failOnErrors(page);
+  await login(page, 'admin');
+  // Paiement de l'abonnement : l'essai (qui inclut le module) prend fin.
+  await page.goto('/abonnement');
+  await page.getByRole('button', { name: /^Payer/ }).click();
+  await page.getByRole('button', { name: 'Payer avec Wave' }).click();
+  await expect(page.getByText('Merci, paiement reçu.')).toBeVisible();
+  await page.goto('/vtc');
+  await expect(page.getByText('Module en option')).toBeVisible();
+  await page.getByRole('link', { name: 'Activer le module' }).click();
+  await expect(page.locator('#modules')).toContainText('29 500');
+  await page.locator('#modules').getByRole('button', { name: /Activer, payer/ }).click();
+  await page.getByRole('button', { name: 'Payer avec Wave' }).click();
+  await expect(page.getByText('Le module Chauffeurs VTC est actif')).toBeVisible();
+  await page.goto('/vtc');
+  await expect(page.getByRole('heading', { name: 'Chauffeurs VTC', level: 1 })).toBeVisible();
+  await expect(page.getByText('Module en option')).toHaveCount(0);
+  check();
+});
