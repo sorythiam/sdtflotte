@@ -1,6 +1,7 @@
 import { categoryPhotos } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
-import type { AuditEntry, Invitation, Member, Organization, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
+import type { AuditEntry, Invitation, Member, Organization, Plan, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
+import { checkoutQuote, type SubscriptionPayment } from '../domain/saas';
 import { seed, seedExpenses, seedDrivers, seedIncidents, seedInvoices, seedPackages, seedPlans, seedSeasons, seedVtc } from './seed';
 import { invoicePrefix, nextInvoiceNumber, type Invoice } from '../domain/billing';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
@@ -19,6 +20,7 @@ interface DemoState {
   members?: Member[];
   invitations?: Invitation[];
   subscriptionRequests?: SubscriptionRequest[];
+  subscriptionPayments?: SubscriptionPayment[];
   bookingRequests?: BookingRequest[];
   audit?: AuditEntry[];
 }
@@ -440,6 +442,53 @@ export class DemoStore implements Store {
     (this.state.subscriptionRequests ??= []).unshift(full);
     this.save();
     return full;
+  }
+
+  // ---------------------------------------------------------------- abonnement (simulé)
+  private lastPaid(): SubscriptionPayment | null {
+    return (this.state.subscriptionPayments ?? []).find((p) => p.status === 'payee') ?? null;
+  }
+
+  async startCheckout(input: { plan: Plan; vehicles: number; billing: 'annuel' | 'mensuel' }): Promise<{ paymentId: string; url: string }> {
+    if (this.state.session?.role !== 'admin') throw new Error('Seul l’administrateur peut payer l’abonnement.');
+    const q = checkoutQuote(input, { paidUntil: this.state.org.paidUntil ?? null, last: this.lastPaid() }, new Date());
+    if (q.error) throw new Error(q.error);
+    const p: SubscriptionPayment = {
+      id: uid(), plan: q.plan, vehicles: q.vehicles, billing: q.billing, baseHt: q.baseHt, creditHt: q.creditHt, amountHt: q.amountHt,
+      vatRate: q.vatRate, vat: q.vat, amountTtc: q.amountTtc, provider: 'simulation', status: 'en_attente', periodStart: null, periodEnd: null,
+      invoiceNumber: null, paidAt: null, createdBy: this.state.session?.email ?? null, createdAt: new Date().toISOString(),
+    };
+    (this.state.subscriptionPayments ??= []).unshift(p);
+    this.save();
+    return { paymentId: p.id, url: `/abonnement/paiement-test?paiement=${p.id}` };
+  }
+
+  async simulatePayment(paymentId: string, paid: boolean): Promise<void> {
+    const list = this.state.subscriptionPayments ?? [];
+    const p = list.find((x) => x.id === paymentId);
+    if (!p || p.status !== 'en_attente') return;
+    if (!paid) {
+      p.status = 'annulee';
+      this.save();
+      return;
+    }
+    const now = new Date();
+    const q = checkoutQuote({ plan: p.plan, vehicles: p.vehicles, billing: p.billing }, { paidUntil: this.state.org.paidUntil ?? null, last: this.lastPaid() }, now);
+    const year = now.getFullYear();
+    const n = list.filter((x) => x.invoiceNumber?.startsWith(`YF-${year}-`)).length + 1;
+    Object.assign(p, { status: 'payee', paidAt: now.toISOString(), periodStart: q.periodStart, periodEnd: q.periodEnd, invoiceNumber: `YF-${year}-${String(n).padStart(4, '0')}` });
+    Object.assign(this.state.org, { plan: p.plan, vehicleQuota: p.vehicles, paidUntil: q.periodEnd, billingCycle: p.billing, trialEndsAt: null });
+    this.save();
+  }
+
+  async confirmPayment(paymentId: string): Promise<SubscriptionPayment> {
+    const p = (this.state.subscriptionPayments ?? []).find((x) => x.id === paymentId);
+    if (!p) throw new Error('Paiement introuvable.');
+    return structuredClone(p);
+  }
+
+  async listSubscriptionPayments(): Promise<SubscriptionPayment[]> {
+    return structuredClone(this.state.subscriptionPayments ?? []);
   }
 }
 

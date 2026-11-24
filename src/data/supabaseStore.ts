@@ -1,7 +1,8 @@
 import { storagePath } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { AuditEntry, Invitation, Member, Organization, Role, SubscriptionRequest, TableName } from '../domain/types';
+import type { AuditEntry, Invitation, Member, Organization, Plan, Role, SubscriptionRequest, TableName } from '../domain/types';
+import type { SubscriptionPayment } from '../domain/saas';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
 import type { BookingRequest, BookingRequestInput, BookingStatus, PublicBookingInfo } from '../domain/booking';
 
@@ -92,6 +93,8 @@ export class SupabaseStore implements Store {
       plan: o.plan as Organization['plan'],
       vehicleQuota: o.vehicle_quota as number,
       trialEndsAt: (o.trial_ends_at as string) ?? null,
+      paidUntil: (o.paid_until as string) ?? null,
+      billingCycle: (o.billing_cycle as Organization['billingCycle']) ?? null,
       contract: (o.contract as Organization['contract']) ?? null,
       billing: (o.billing as Organization['billing']) ?? null,
       bookingSlug: (o.booking_slug as string) ?? null,
@@ -371,5 +374,38 @@ export class SupabaseStore implements Store {
       .single();
     if (error) throw friendly(error);
     return rowToApp<SubscriptionRequest>(data);
+  }
+
+  // ---------------------------------------------------------------- abonnement en libre-service
+  private async billing<T>(body: Record<string, unknown>): Promise<T> {
+    const { data, error } = await this.sb.functions.invoke('billing', { body });
+    if (error) {
+      // Le message utile est dans le corps de la réponse.
+      let msg = 'Le service de paiement ne répond pas. Réessayez dans un instant.';
+      try {
+        const ctx = (error as { context?: Response }).context;
+        const j = ctx ? await ctx.json() : null;
+        if (j?.error) msg = j.error;
+      } catch {
+        /* corps illisible : message par défaut */
+      }
+      throw new Error(msg);
+    }
+    return data as T;
+  }
+
+  async startCheckout(input: { plan: Plan; vehicles: number; billing: 'annuel' | 'mensuel' }): Promise<{ paymentId: string; url: string }> {
+    return this.billing({ action: 'checkout', ...input, origin: window.location.origin });
+  }
+
+  async confirmPayment(paymentId: string): Promise<SubscriptionPayment> {
+    const p = await this.billing<Record<string, unknown>>({ action: 'confirm', paymentId });
+    return rowToApp<SubscriptionPayment>(p);
+  }
+
+  async listSubscriptionPayments(): Promise<SubscriptionPayment[]> {
+    const { data, error } = await this.sb.from('subscription_payments').select('*').eq('org_id', this.orgId).order('created_at', { ascending: false });
+    if (error) throw friendly(error);
+    return (data ?? []).map((r) => rowToApp<SubscriptionPayment>(r));
   }
 }

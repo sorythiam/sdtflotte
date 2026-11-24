@@ -11,6 +11,9 @@ export interface Organization {
   plan: Plan;
   vehicleQuota: number;
   trialEndsAt: string | null; // ISO
+  /** Fin de la période payée ; null tant qu'aucun paiement n'a été fait. */
+  paidUntil?: string | null;
+  billingCycle?: 'annuel' | 'mensuel' | null;
   /** Coordonnées, logo et conditions générales du contrat. */
   contract?: Partial<import('./contract').ContractSettings> | null;
   /** Modalités de paiement, TVA et moyens d'encaissement. */

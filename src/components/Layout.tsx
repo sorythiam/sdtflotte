@@ -5,6 +5,8 @@ import type { DemoStore } from '../data/demoStore';
 import { useData } from '../state/DataContext';
 import { icons, SECTIONS, sectionOf, visibleTabs, type Section } from './nav';
 import { Logo, roleLabel, Wordmark } from './ui';
+import { LockScreen, SubscriptionBanner } from './SubscriptionBanner';
+import { subscriptionStatus } from '../domain/saas';
 
 const planLabel = { essentiel: 'Essentiel', pro: 'Pro', entreprise: 'Entreprise' };
 /** Sections de la barre du bas sur téléphone ; les autres vont dans « Plus ». */
@@ -29,7 +31,8 @@ export function Layout() {
   const urgent = alerts.filter((a) => a.level === 'urgent').length;
   const pendingRequests = role === 'admin' || role === 'direction' || role === 'agent' ? data.bookingRequests.filter((r) => r.status === 'nouvelle').length : 0;
   const { org } = session;
-  const trialDays = org.trialEndsAt ? Math.ceil((Date.parse(org.trialEndsAt) - now.getTime()) / 86400000) : null;
+  const trialDays = org.trialEndsAt && !org.paidUntil ? Math.ceil((Date.parse(org.trialEndsAt) - now.getTime()) / 86400000) : null;
+  const locked = store.mode === 'supabase' && subscriptionStatus(org, now).state === 'bloque' && !/^\/(abonnement|parametres)(\/|$)/.test(pathname);
 
   const sections = SECTIONS.filter((s) => visibleTabs(s, role).length > 0);
   const current = sectionOf(pathname);
@@ -158,9 +161,14 @@ export function Layout() {
               {!offline && outboxCount > 0 && <button className="btn btn-sm" onClick={() => void syncNow()}>Envoyer maintenant</button>}
             </div>
           )}
-          <Suspense fallback={<div className="page-loading" role="status" aria-label="Chargement" />}>
-            <Outlet />
-          </Suspense>
+          <SubscriptionBanner org={org} role={role} now={now} />
+          {locked ? (
+            <LockScreen org={org} role={role} />
+          ) : (
+            <Suspense fallback={<div className="page-loading" role="status" aria-label="Chargement" />}>
+              <Outlet />
+            </Suspense>
+          )}
         </main>
       </div>
 

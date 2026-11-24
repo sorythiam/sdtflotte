@@ -97,8 +97,72 @@ function planDue(plan, vehicle, now) {
   return { plan, nextKm, nextDate, kmLeft, daysLeft, state: over ? "depasse" : soon ? "bientot" : "ok", text: parts.join(" ou ") };
 }
 
-// src/domain/alerts.ts
+// src/domain/vtc.ts
 var DAY = 864e5;
+var isoDay = (d) => d.toISOString().slice(0, 10);
+var parse = (iso) => Date.parse(iso.slice(0, 10) + "T00:00:00Z");
+function workingDays(c, until) {
+  const end = c.endDate && c.endDate < until ? c.endDate : until;
+  const a = parse(c.startDate);
+  const b = parse(end);
+  if (b < a) return 0;
+  const total = Math.round((b - a) / DAY) + 1;
+  const rest = new Set(c.restDays);
+  if (rest.size === 0) return total;
+  const weeks = Math.floor(total / 7);
+  let n = weeks * (7 - rest.size);
+  const startDow = new Date(a).getUTCDay();
+  for (let i = weeks * 7; i < total; i++) if (!rest.has((startDow + i) % 7)) n++;
+  return n;
+}
+var isRestDay = (c, day2) => c.restDays.includes(new Date(parse(day2)).getUTCDay());
+function vtcBalance(c, payments, expenses, now) {
+  const today = isoDay(now);
+  const active = c.status === "actif" || c.status === "suspendu";
+  const until = active ? today : c.endDate ?? today;
+  const expectedDays = workingDays(c, until);
+  const expected = expectedDays * c.dailyAmount;
+  const mine = payments.filter((p) => p.contractId === c.id);
+  const paid = mine.reduce((s, p) => s + p.amount, 0);
+  const charges = expenses.filter((e) => e.vtcContractId === c.id && e.chargedTo === "chauffeur").reduce((s, e) => s + e.amount, 0);
+  const balance = expected + charges - paid;
+  const todayDue = c.status === "actif" && today >= c.startDate && (!c.endDate || today <= c.endDate) && !isRestDay(c, today) ? c.dailyAmount : 0;
+  const paidToday = mine.filter((p) => p.paidOn === today).reduce((s, p) => s + p.amount, 0);
+  const dates = mine.map((p) => p.paidOn).sort();
+  const lastPaidOn = dates.length ? dates[dates.length - 1] : null;
+  const from = isoDay(new Date(Math.max(parse(c.startDate), parse(today) - 29 * DAY)));
+  const windowDays = workingDays({ ...c, startDate: from }, until);
+  const windowPaid = mine.filter((p) => p.paidOn >= from && p.paidOn <= today).reduce((s, p) => s + p.amount, 0);
+  const regularity = windowDays ? Math.min(1, windowPaid / (windowDays * c.dailyAmount)) : 1;
+  let progress = null;
+  let remainingPrice = null;
+  let estimatedEnd = null;
+  if (c.formula === "location_vente" && c.totalPrice) {
+    const towardVehicle = Math.max(0, paid - charges);
+    progress = Math.min(1, towardVehicle / c.totalPrice);
+    remainingPrice = Math.max(0, c.totalPrice - towardVehicle);
+    const perWeek = c.dailyAmount * (7 - new Set(c.restDays).size);
+    if (perWeek > 0) estimatedEnd = isoDay(new Date(parse(today) + Math.ceil(remainingPrice / perWeek * 7) * DAY));
+  }
+  return {
+    expectedDays,
+    expected,
+    charges,
+    paid,
+    balance,
+    daysBehind: balance > 0 ? Math.ceil(balance / c.dailyAmount) : 0,
+    todayDue,
+    paidToday,
+    lastPaidOn,
+    regularity,
+    progress,
+    remainingPrice,
+    estimatedEnd
+  };
+}
+
+// src/domain/alerts.ts
+var DAY2 = 864e5;
 var OPS = ["direction", "agent"];
 var FIN = ["direction", "comptable"];
 var FLEET = ["direction", "agent", "mecanicien"];
@@ -132,8 +196,8 @@ var COUNTRY_UTC_OFFSET = {
 };
 function localDay(now, offsetMin) {
   const local = now.getTime() + offsetMin * 6e4;
-  const start = Math.floor(local / DAY) * DAY - offsetMin * 6e4;
-  return { start, end: start + DAY };
+  const start = Math.floor(local / DAY2) * DAY2 - offsetMin * 6e4;
+  return { start, end: start + DAY2 };
 }
 function hhmm(iso, offsetMin) {
   const d = new Date(Date.parse(iso) + offsetMin * 6e4);
@@ -181,7 +245,7 @@ function buildAlerts(input, now, offsetMin = -now.getTimezoneOffset()) {
           title: `Retour aujourd\u2019hui \xE0 ${hhmm(r.end, offsetMin)} : ${vLabel(r.vehicleId)}`,
           detail: `${cName(r.clientId)} \xB7 contrat ${r.number}`
         });
-      } else if (e < tomorrow + DAY) {
+      } else if (e < tomorrow + DAY2) {
         out.push({
           id: `retour-demain:${r.id}`,
           kind: "retour_demain",
@@ -216,7 +280,7 @@ function buildAlerts(input, now, offsetMin = -now.getTimezoneOffset()) {
         });
       }
     }
-    if (r.status === "reservee" && s < t + 7 * DAY || r.status === "en_cours") {
+    if (r.status === "reservee" && s < t + 7 * DAY2 || r.status === "en_cours") {
       const c = client(r.clientId);
       if (c && !r.withDriver && c.licenseExpiry && Date.parse(c.licenseExpiry + "T23:59:59Z") < e) {
         const expired = Date.parse(c.licenseExpiry + "T23:59:59Z") < t;
@@ -230,13 +294,13 @@ function buildAlerts(input, now, offsetMin = -now.getTimezoneOffset()) {
           detail: `Permis valable jusqu\u2019au ${dmy(c.licenseExpiry)} \xB7 contrat ${r.number} jusqu\u2019au ${dmy(r.end)}`
         });
       }
-      if (c && c.score !== "blacklist" && r.status === "reservee" && !r.withDriver && s < t + 2 * DAY) {
+      if (c && c.score !== "blacklist" && r.status === "reservee" && !r.withDriver && s < t + 2 * DAY2) {
         const v = verificationOf(c, now);
         if (v.state !== "verifie") {
           out.push({
             id: `dossier:${r.id}`,
             kind: "dossier_client",
-            level: s < t + DAY ? "urgent" : "attention",
+            level: s < t + DAY2 ? "urgent" : "attention",
             link: `/clients/${c.id}`,
             roles: OPS,
             title: `Dossier client ${v.state === "a_revoir" ? "\xE0 revoir" : "non v\xE9rifi\xE9"} : ${c.name}`,
@@ -325,9 +389,26 @@ function buildAlerts(input, now, offsetMin = -now.getTimezoneOffset()) {
       detail: `\xC9ch\xE9ance ${d.text}`
     });
   }
+  if (input.vtc) {
+    for (const c of input.vtc.contracts) {
+      if (c.status !== "actif") continue;
+      const b = vtcBalance(c, input.vtc.payments, input.vtc.expenses, now);
+      if (b.daysBehind < 2) continue;
+      const name = input.vtc.drivers.find((d) => d.id === c.driverId)?.name ?? "Chauffeur";
+      out.push({
+        id: `vtc:${c.id}`,
+        kind: "vtc_retard",
+        level: b.daysBehind >= 5 ? "urgent" : "attention",
+        link: `/vtc/${c.id}`,
+        roles: ["direction", "agent", "comptable"],
+        title: `Versements VTC en retard : ${name}`,
+        detail: `${fcfa(b.balance)} dus (${b.daysBehind} jours) \xB7 ${vLabel(c.vehicleId)}${b.lastPaidOn ? ` \xB7 dernier versement le ${dmy(b.lastPaidOn)}` : ""}`
+      });
+    }
+  }
   for (const b of input.bookingRequests ?? []) {
     if (b.status !== "nouvelle") continue;
-    const soon = Date.parse(b.start) - t < 2 * DAY;
+    const soon = Date.parse(b.start) - t < 2 * DAY2;
     out.push({
       id: `demande:${b.id}`,
       kind: "demande_en_ligne",

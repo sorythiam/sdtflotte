@@ -42,6 +42,7 @@ const pages = {
   Reservations: () => import('./pages/Reservations'),
   Vehicles: () => import('./pages/Vehicles'),
   Quotes: () => import('./pages/Quotes'),
+  Subscription: () => import('./pages/Subscription'),
   QuotePage: () => import('./pages/QuotePage'),
   Profitability: () => import('./pages/Profitability'),
 };
@@ -68,6 +69,10 @@ const Rates = lazy(() => pages.Rates().then((m) => ({ default: m.Rates })));
 const ReservationDetail = lazy(() => pages.ReservationDetail().then((m) => ({ default: m.ReservationDetail })));
 const Reservations = lazy(() => pages.Reservations().then((m) => ({ default: m.Reservations })));
 const Vehicles = lazy(() => pages.Vehicles().then((m) => ({ default: m.Vehicles })));
+const Subscription = lazy(() => pages.Subscription().then((m) => ({ default: m.Subscription })));
+const PaymentReturn = lazy(() => pages.Subscription().then((m) => ({ default: m.PaymentReturn })));
+const TestCheckout = lazy(() => pages.Subscription().then((m) => ({ default: m.TestCheckout })));
+const SaasInvoicePage = lazy(() => pages.Subscription().then((m) => ({ default: m.SaasInvoicePage })));
 const Quotes = lazy(() => pages.Quotes().then((m) => ({ default: m.Quotes })));
 const QuotePage = lazy(() => pages.QuotePage().then((m) => ({ default: m.QuotePage })));
 const Profitability = lazy(() => pages.Profitability().then((m) => ({ default: m.Profitability })));
@@ -102,6 +107,10 @@ function App() {
         <Route index element={<Dashboard />} />
         <Route path="planning" element={<Planning />} />
         <Route path="reservations" element={<Reservations />} />
+        <Route path="abonnement" element={<Subscription />} />
+        <Route path="abonnement/retour" element={<PaymentReturn />} />
+        <Route path="abonnement/paiement-test" element={<TestCheckout />} />
+        <Route path="abonnement/facture/:id" element={<SaasInvoicePage />} />
         <Route path="devis" element={<Quotes />} />
         <Route path="devis/:id" element={<QuotePage />} />
         <Route path="rentabilite" element={<Profitability />} />

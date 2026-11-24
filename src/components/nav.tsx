@@ -71,6 +71,7 @@ export const SECTIONS: Section[] = [
     key: 'settings', label: 'Paramètres', icon: icons.settings,
     tabs: [
       { to: '/parametres', label: 'Entreprise et compte' },
+      { to: '/abonnement', label: 'Abonnement', roles: ['direction'] },
       { to: '/equipe', label: 'Équipe', roles: ['direction'] },
       { to: '/journal', label: 'Journal des actions', roles: ['direction'] },
     ],

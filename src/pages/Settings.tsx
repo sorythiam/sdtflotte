@@ -1,11 +1,12 @@
 import { BillingSettingsForm } from '../components/BillingSettingsForm';
 import { BookingSettingsForm } from '../components/BookingSettingsForm';
 import { ContractSettingsForm } from '../components/ContractSettingsForm';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
+import { subscriptionStatus, subStateLabel } from '../domain/saas';
 import { ErrorBox, roleLabel } from '../components/ui';
-import { dateLong, money } from '../domain/format';
-import { PLAN_INFO, priceFor, type Billing } from '../domain/pricing';
-import type { Plan, SubscriptionRequest } from '../domain/types';
+import { dateLong } from '../domain/format';
+import { PLAN_INFO } from '../domain/pricing';
 import { useData } from '../state/DataContext';
 
 const countries: [string, string][] = [
@@ -13,12 +14,6 @@ const countries: [string, string][] = [
   ['BF', 'Burkina Faso'], ['BJ', 'Bénin'], ['TG', 'Togo'], ['NE', 'Niger'], ['CM', 'Cameroun'], ['GA', 'Gabon'], ['CG', 'Congo'], ['MA', 'Maroc'],
 ];
 
-const statusLabel: Record<SubscriptionRequest['status'], [string, string]> = {
-  nouvelle: ['Envoyée', 'badge-warning'],
-  en_cours: ['En cours de traitement', ''],
-  payee: ['Payée et activée', 'badge-success'],
-  annulee: ['Annulée', 'badge-muted'],
-};
 
 export function Settings() {
   const { session, store, setSession, toast, data, now, can } = useData();
@@ -43,39 +38,8 @@ export function Settings() {
 
   // ---- abonnement
   const activeVehicles = data.vehicles.filter((v) => !v.outOfService).length;
-  const [plan, setPlan] = useState<Plan>('pro');
-  const [vehicles, setVehicles] = useState(Math.max(activeVehicles, PLAN_INFO.pro.minVehicles));
-  const [billing, setBilling] = useState<Billing>('annuel');
-  const [phone, setPhone] = useState('');
-  const [requests, setRequests] = useState<SubscriptionRequest[]>([]);
-  const [subError, setSubError] = useState<string | null>(null);
-  const q = priceFor(plan, vehicles, billing);
-  const trialDays = org.trialEndsAt ? Math.ceil((Date.parse(org.trialEndsAt) - now.getTime()) / 86400000) : null;
-  const pending = requests.find((r) => r.status === 'nouvelle' || r.status === 'en_cours');
-
-  const loadRequests = useCallback(async () => {
-    if (!admin) return;
-    try {
-      setRequests(await store.listSubscriptionRequests());
-    } catch (err) {
-      setSubError((err as Error).message);
-    }
-  }, [store, admin]);
-  useEffect(() => {
-    void loadRequests();
-  }, [loadRequests]);
-
-  async function request(e: FormEvent) {
-    e.preventDefault();
-    setSubError(null);
-    try {
-      await store.requestSubscription({ plan, vehicles: q.billedVehicles, billing, amount: billing === 'annuel' ? q.yearly : q.perMonth, contactPhone: phone || null });
-      await loadRequests();
-      toast('Demande envoyée à Yoon Fleet');
-    } catch (err) {
-      setSubError((err as Error).message);
-    }
-  }
+  const sub = subscriptionStatus(org, now);
+  const trialDays = sub.state === 'essai' ? sub.daysLeft : null;
 
   // ---- mot de passe
   const [pw, setPw] = useState('');
@@ -113,11 +77,8 @@ export function Settings() {
                 <div className="kpi-label">Formule</div>
                 <div className="kpi-value" style={{ fontSize: 24, lineHeight: '32px' }}>{PLAN_INFO[org.plan].label}</div>
                 <div className="small muted">
-                  {trialDays !== null && trialDays >= 0
-                    ? `Essai gratuit, ${trialDays} jour(s) restant(s)`
-                    : trialDays !== null
-                      ? 'Essai terminé'
-                      : 'Abonnement actif'}
+                  {trialDays !== null ? `Essai gratuit, ${trialDays} jour(s) restant(s)` : subStateLabel[sub.state][0]}
+                  {sub.until && org.paidUntil ? `, jusqu’au ${dateLong(sub.until)}` : ''}
                 </div>
               </div>
               <div>
@@ -136,123 +97,20 @@ export function Settings() {
                   />
                 </div>
               </div>
-              {trialDays !== null && org.trialEndsAt && (
+              {trialDays !== null && org.trialEndsAt && !org.paidUntil && (
                 <div>
                   <div className="kpi-label">Fin de l’essai</div>
                   <div className="kpi-value" style={{ fontSize: 20, lineHeight: '32px' }}>{dateLong(org.trialEndsAt)}</div>
                 </div>
               )}
             </div>
+            {can('direction') && (
+              <Link className={`btn${admin ? ' btn-primary' : ''}`} to="/abonnement" style={{ alignSelf: 'flex-start' }}>
+                {admin ? (org.paidUntil ? 'Renouveler ou changer de formule' : 'Choisir ma formule et payer en ligne') : 'Voir l’abonnement et les factures'}
+              </Link>
+            )}
           </section>
 
-          {admin && (
-            <section className="card" aria-labelledby="payant">
-              <h2 id="payant">Passer à la version payante</h2>
-              <p className="small muted" style={{ margin: 0 }}>
-                Licence annuelle par véhicule, support et mises à jour inclus. Choisissez votre formule et votre nombre de véhicules.
-              </p>
-              <div className="grid-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }} role="radiogroup" aria-label="Formule">
-                {(Object.keys(PLAN_INFO) as Plan[]).map((p) => {
-                  const info = PLAN_INFO[p];
-                  const selected = plan === p;
-                  return (
-                    <label
-                      key={p}
-                      className="card"
-                      style={{
-                        cursor: 'pointer',
-                        gap: 'var(--space-2)',
-                        padding: 'var(--space-4)',
-                        border: selected ? '2px solid var(--atlantique)' : '1px solid var(--sable-line)',
-                        background: selected ? '#eef4f8' : '#fff',
-                      }}
-                    >
-                      <span className="row" style={{ justifyContent: 'space-between' }}>
-                        <strong style={{ fontFamily: 'var(--font-display)', color: 'var(--atlantique)', fontSize: 18 }}>{info.label}</strong>
-                        <input
-                          type="radio"
-                          name="plan"
-                          checked={selected}
-                          onChange={() => {
-                            setPlan(p);
-                            setVehicles(Math.max(vehicles, PLAN_INFO[p].minVehicles));
-                          }}
-                          style={{ width: 20, height: 20, accentColor: 'var(--atlantique)' }}
-                        />
-                      </span>
-                      <span className="num" style={{ fontWeight: 600 }}>{money(info.perVehicleYear)} / véhicule / an</span>
-                      <span className="xs muted">
-                        {info.users} · minimum {info.minVehicles} véhicules
-                        <br />
-                        {info.summary}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-              <form className="stack" onSubmit={request}>
-                <div className="grid-2">
-                  <label className="field">
-                    Nombre de véhicules
-                    <input type="number" min={1} max={10000} required value={vehicles} onChange={(e) => setVehicles(Number(e.target.value))} />
-                    <span className="hint">Vous en avez {activeVehicles} en service aujourd’hui.</span>
-                  </label>
-                  <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-                    <legend className="small" style={{ fontWeight: 600, marginBottom: 6 }}>Paiement</legend>
-                    <div className="tabs">
-                      <button type="button" aria-selected={billing === 'annuel'} onClick={() => setBilling('annuel')}>Annuel</button>
-                      <button type="button" aria-selected={billing === 'mensuel'} onClick={() => setBilling('mensuel')}>Mensuel (+20 %)</button>
-                    </div>
-                  </fieldset>
-                </div>
-                {q.onQuote ? (
-                  <div className="notice">Au-delà de 300 véhicules, le prix se fait sur devis : envoyez la demande, nous vous recontactons.</div>
-                ) : (
-                  <div className="notice">
-                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 22, color: 'var(--atlantique)' }}>
-                      {billing === 'annuel' ? `${money(q.yearly)} / an` : `${money(q.perMonth)} / mois`}
-                    </span>
-                    <br />
-                    <span className="small">
-                      {PLAN_INFO[plan].label}, {q.billedVehicles} véhicules
-                      {q.billedVehicles > q.vehicles ? ` (minimum de la formule)` : ''} ·{' '}
-                      {billing === 'annuel' ? `soit ${money(q.perMonth)} par mois` : `soit ${money(q.perMonth * 12)} sur l’année`} · prix HT
-                      {q.billedVehicles > 100 ? ' · −20 % au-delà du 100e véhicule' : ''}
-                    </span>
-                  </div>
-                )}
-                <label className="field">
-                  Téléphone pour vous recontacter (WhatsApp de préférence)
-                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+221 77 000 00 00" />
-                </label>
-                <ErrorBox error={subError} />
-                <button className="btn btn-primary" disabled={!!pending}>
-                  {pending ? 'Demande déjà envoyée' : 'Demander l’activation'}
-                </button>
-                <p className="xs muted" style={{ margin: 0 }}>
-                  Le paiement en ligne (Wave, Orange Money, carte) arrive bientôt. En attendant, l’équipe Yoon Fleet vous contacte pour
-                  finaliser le paiement ; votre formule et votre quota sont mis à jour dès réception.
-                </p>
-              </form>
-              {requests.length > 0 && (
-                <div className="table-wrap">
-                  <table className="data">
-                    <thead><tr><th>Date</th><th>Demande</th><th className="right">Montant HT</th><th>Statut</th></tr></thead>
-                    <tbody>
-                      {requests.map((r) => (
-                        <tr key={r.id}>
-                          <td>{dateLong(r.createdAt)}</td>
-                          <td>{PLAN_INFO[r.plan].label} · {r.vehicles} véhicules · {r.billing}</td>
-                          <td className="right num">{money(r.amount)}{r.billing === 'mensuel' ? ' / mois' : ' / an'}</td>
-                          <td><span className={`badge ${statusLabel[r.status][1]}`}>{statusLabel[r.status][0]}</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-          )}
         </div>
 
         <div className="col-1 stack" style={{ gap: 'var(--space-6)' }}>

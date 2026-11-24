@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -b",
-    "build:functions": "esbuild supabase/functions/daily-digest/source.ts --bundle --format=esm --platform=neutral --target=es2022 --external:'npm:*' --outfile=supabase/functions/daily-digest/index.js",
+    "build:functions": "esbuild supabase/functions/daily-digest/source.ts --bundle --format=esm --platform=neutral --target=es2022 --external:'npm:*' --outfile=supabase/functions/daily-digest/index.js && esbuild supabase/functions/billing/source.ts --bundle --format=esm --platform=neutral --target=es2022 --external:'npm:*' --outfile=supabase/functions/billing/index.js",
     "test:e2e": "playwright test"
   },
   "dependencies": {
