@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ErrorBox } from '../components/ui';
 import { dateLong, money } from '../domain/format';
 import { PLAN_INFO, type Billing } from '../domain/pricing';
-import { checkoutQuote, paymentStatusLabel, planLabel, SAAS_ISSUER, subscriptionStatus, subStateLabel, type SubscriptionPayment } from '../domain/saas';
+import { checkoutQuote, SAAS_VAT_RATE, paymentStatusLabel, planLabel, SAAS_ISSUER, subscriptionStatus, subStateLabel, type SubscriptionPayment } from '../domain/saas';
 import type { Plan } from '../domain/types';
 import { useData } from '../state/DataContext';
 
@@ -38,7 +38,7 @@ export function Subscription() {
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
   const last = payments.find((p) => p.status === 'payee') ?? null;
-  const q = checkoutQuote({ plan, vehicles, billing }, { paidUntil: org.paidUntil ?? null, last }, now);
+  const q = checkoutQuote({ plan, vehicles, billing }, { paidUntil: org.paidUntil ?? null, last }, now, SAAS_VAT_RATE);
 
   async function pay(e: FormEvent) {
     e.preventDefault();
@@ -127,8 +127,9 @@ export function Subscription() {
               <span className="small"> à payer maintenant{q.vatRate ? ' TTC' : ''}</span>
               <br />
               <span className="small">
-                {planLabel(q.plan)}, {q.vehicles} véhicules{q.vehicles > vehicles ? ' (minimum de la formule)' : ''} · {billing === 'annuel' ? '1 an' : '1 mois'} : {money(q.baseHt)}
+                {planLabel(q.plan)}, {q.vehicles} véhicules{q.vehicles > vehicles ? ' (minimum de la formule)' : ''} · {billing === 'annuel' ? '1 an' : '1 mois'} : {money(q.baseHt)} HT
                 {q.creditHt > 0 && <> − {money(q.creditHt)} déjà payés et non utilisés</>}
+                {q.vat > 0 && <> + TVA {q.vatRate} % : {money(q.vat)}</>}
                 <br />Période couverte : du {dateLong(q.periodStart)} au {dateLong(q.periodEnd)}
                 {billing === 'mensuel' && ' · à renouveler chaque mois'}
               </span>

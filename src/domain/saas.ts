@@ -11,6 +11,8 @@ const DAY = 86400000;
 export const GRACE_DAYS = 7;
 /** Rappel de renouvellement : annuel 30 jours avant, mensuel 5 jours avant. */
 export const NOTICE_DAYS: Record<Billing, number> = { annuel: 30, mensuel: 5 };
+/** TVA sur l'abonnement : Tabibou Business Group est assujettie, taux normal du Sénégal. */
+export const SAAS_VAT_RATE = 18;
 /** Montant minimum d'un paiement en ligne (FCFA). */
 export const MIN_PAYMENT = 200;
 

@@ -5,7 +5,7 @@
 // Rien n'est jamais validé sur la seule parole du navigateur ou de la notification :
 // c'est l'appel « confirm » de PayDunya, avec nos clés, qui fait foi.
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
-import { checkoutQuote, type SubscriptionPayment } from '../../../src/domain/saas';
+import { checkoutQuote, SAAS_VAT_RATE, type SubscriptionPayment } from '../../../src/domain/saas';
 import { PLAN_INFO } from '../../../src/domain/pricing';
 import type { Plan } from '../../../src/domain/types';
 
@@ -23,7 +23,7 @@ const bxReady = () => !!BX.api;
 const PROVIDER = (env('BILLING_PROVIDER') || (bxReady() ? 'bictorys' : 'paydunya')) as 'bictorys' | 'paydunya';
 const providerReady = () => (PROVIDER === 'bictorys' ? bxReady() : pdReady());
 const APP_URL = (env('APP_URL') || 'https://yoonfleet.vercel.app').replace(/\/$/, '');
-const VAT_RATE = Number(env('SAAS_VAT_RATE') || '0');
+const VAT_RATE = Number(env('SAAS_VAT_RATE') || SAAS_VAT_RATE);
 const ALLOWED_ORIGINS = [APP_URL, 'http://localhost:5173', 'http://localhost:4173'];
 
 const cors = (origin: string | null) => ({

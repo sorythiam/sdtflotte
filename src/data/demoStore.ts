@@ -1,7 +1,7 @@
 import { categoryPhotos } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
 import type { AuditEntry, Invitation, Member, Organization, Plan, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
-import { checkoutQuote, type SubscriptionPayment } from '../domain/saas';
+import { checkoutQuote, SAAS_VAT_RATE, type SubscriptionPayment } from '../domain/saas';
 import { seed, seedExpenses, seedDrivers, seedIncidents, seedInvoices, seedPackages, seedPlans, seedSeasons, seedVtc } from './seed';
 import { invoicePrefix, nextInvoiceNumber, type Invoice } from '../domain/billing';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
@@ -451,7 +451,7 @@ export class DemoStore implements Store {
 
   async startCheckout(input: { plan: Plan; vehicles: number; billing: 'annuel' | 'mensuel' }): Promise<{ paymentId: string; url: string }> {
     if (this.state.session?.role !== 'admin') throw new Error('Seul l’administrateur peut payer l’abonnement.');
-    const q = checkoutQuote(input, { paidUntil: this.state.org.paidUntil ?? null, last: this.lastPaid() }, new Date());
+    const q = checkoutQuote(input, { paidUntil: this.state.org.paidUntil ?? null, last: this.lastPaid() }, new Date(), SAAS_VAT_RATE);
     if (q.error) throw new Error(q.error);
     const p: SubscriptionPayment = {
       id: uid(), plan: q.plan, vehicles: q.vehicles, billing: q.billing, baseHt: q.baseHt, creditHt: q.creditHt, amountHt: q.amountHt,

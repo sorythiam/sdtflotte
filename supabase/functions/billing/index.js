@@ -41,6 +41,7 @@ function priceFor(plan, vehicles, billing = "annuel") {
 }
 
 // src/domain/saas.ts
+var SAAS_VAT_RATE = 18;
 var MIN_PAYMENT = 200;
 function addPeriod(fromIso, billing) {
   const d = new Date(fromIso);
@@ -98,7 +99,7 @@ var bxReady = () => !!BX.api;
 var PROVIDER = env("BILLING_PROVIDER") || (bxReady() ? "bictorys" : "paydunya");
 var providerReady = () => PROVIDER === "bictorys" ? bxReady() : pdReady();
 var APP_URL = (env("APP_URL") || "https://yoonfleet.vercel.app").replace(/\/$/, "");
-var VAT_RATE = Number(env("SAAS_VAT_RATE") || "0");
+var VAT_RATE = Number(env("SAAS_VAT_RATE") || SAAS_VAT_RATE);
 var ALLOWED_ORIGINS = [APP_URL, "http://localhost:5173", "http://localhost:4173"];
 var cors = (origin) => ({
   "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : APP_URL,

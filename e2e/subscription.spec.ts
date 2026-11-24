@@ -7,7 +7,7 @@ test('abonnement : l’administrateur paie seul et la formule s’active', async
   await page.goto('/abonnement');
   await page.getByRole('radio').nth(2).check(); // Entreprise
   await page.getByLabel('Nombre de véhicules').fill('35');
-  await expect(page.locator('.notice').filter({ hasText: 'à payer maintenant' })).toContainText('1 680 000');
+  await expect(page.locator('.notice').filter({ hasText: 'à payer maintenant' })).toContainText('1 982 400');
   await page.getByRole('button', { name: /^Payer/ }).click();
   await expect(page.getByRole('heading', { name: 'Page de paiement' })).toBeVisible();
   await page.getByRole('button', { name: 'Payer avec Wave' }).click();
