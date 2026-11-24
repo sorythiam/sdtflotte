@@ -119,7 +119,7 @@ begin
       'vehicle', v.brand || ' ' || v.model, 'total', r.total, 'caution', r.caution,
       'depositDue', coalesce(
         (select sum(i.deposit_due) from invoices i where i.reservation_id = r.id and i.kind = 'facture'),
-        round(r.total * least(100, greatest(0, coalesce(c.deposit_percent, (o.billing->>'depositPercent')::int, 50))) / 100.0)),
+        round(r.total * least(100, greatest(0, coalesce(c.deposit_percent, (o.billing->>'depositPercent')::numeric, 50))) / 100.0)),
       'paid', coalesce((select sum(case when p.kind = 'remboursement' then -p.amount else p.amount end) from payments p
                         where p.reservation_id = r.id and p.status = 'paye' and p.kind in ('acompte', 'solde', 'frais', 'remboursement')), 0),
       'declared', coalesce((select jsonb_agg(jsonb_build_object('amount', d.amount, 'method', d.method, 'reference', d.reference,
