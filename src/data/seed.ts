@@ -1,5 +1,5 @@
 import { billingSettings, buildInvoice, nextInvoiceNumber, type Invoice } from '../domain/billing';
-import type { Client, Driver, MaintenancePlan, VtcContract, VtcPayment, Expense, Incident, Package, Maintenance, Payment, Rate, Reservation, Tables, Vehicle } from '../domain/types';
+import type { Client, Driver, MaintenancePlan, VtcContract, VtcPayment, Expense, Incident, Package, Maintenance, Payment, Rate, Reservation, Tables, Vehicle, Season } from '../domain/types';
 
 // Données d'exemple, recalées sur la date du jour pour que la démo soit toujours parlante.
 
@@ -30,7 +30,7 @@ export function seed(now = new Date()): Db {
 
   const v = (id: string, plate: string, brand: string, model: string, category: string, mileage: number, extra: Partial<Vehicle> = {}): Vehicle => ({
     id, plate, brand, model, category, mileage, year: 2022, fuel: 'diesel', outOfService: false,
-    insuranceExpiry: day(now, 200), inspectionExpiry: day(now, 150), vignetteExpiry: day(now, 300), ...extra,
+    insuranceExpiry: day(now, 200), inspectionExpiry: day(now, 150), vignetteExpiry: day(now, 300), createdAt: at(now, -75, 9), ...extra,
   });
   const vehicles: Vehicle[] = [
     v('v-hilux', 'DK-2210-AB', 'Toyota', 'Hilux', '4x4', 61200, { seats: 5, luggage: 4, vin: 'MR0FB3CD300712245' }),
@@ -41,7 +41,7 @@ export function seed(now = new Date()): Db {
     v('v-lc', 'DK-6610-AA', 'Toyota', 'Land Cruiser', '4x4', 97400, { inspectionExpiry: day(now, -3), seats: 7, luggage: 5 }),
     v('v-picanto', 'DK-1188-BE', 'Kia', 'Picanto', 'Citadine', 15300, { fuel: 'essence', seats: 4, luggage: 1 }),
     v('v-celerio', 'DK-7301-BF', 'Suzuki', 'Celerio', 'Citadine', 64200, { fuel: 'essence', seats: 4, luggage: 1, year: 2024 }),
-    v('v-yaris', 'DK-8820-BG', 'Toyota', 'Yaris', 'Berline', 41800, { fuel: 'essence', seats: 5, luggage: 2, year: 2023 }),
+    v('v-yaris', 'DK-8820-BG', 'Toyota', 'Yaris', 'Berline', 41800, { fuel: 'essence', seats: 5, luggage: 2, year: 2023, createdAt: at(now, -130, 9) }),
     v('v-coaster', 'DK-5050-AG', 'Toyota', 'Coaster', 'Bus', 132500, { seats: 30, luggage: 25, driverRequired: true, year: 2019 }),
   ];
 
@@ -103,7 +103,7 @@ export function seed(now = new Date()): Db {
     { id: 'm-2', vehicleId: 'v-tucson', label: 'Vidange', start: at(now, 1, 8), end: at(now, 1, 18), cost: 45000 },
   ];
 
-  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now), drivers: seedDrivers(now), packages: seedPackages(now), reservation_changes: [], maintenance_plans: seedPlans(now), ...seedVtc(now) };
+  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now), drivers: seedDrivers(now), packages: seedPackages(now), reservation_changes: [], maintenance_plans: seedPlans(now), ...seedVtc(now), seasons: seedSeasons(now), quotes: [] };
 }
 
 /** Factures des réservations d'exemple, numérotées dans l'ordre de création. */
@@ -217,4 +217,14 @@ export function seedVtc(now = new Date()): { vtc_contracts: VtcContract[]; vtc_p
     }
   }
   return { vtc_contracts: contracts, vtc_payments: payments };
+}
+
+export function seedSeasons(now = new Date()): Season[] {
+  const y = now.getFullYear();
+  const s = (id: string, label: string, startDate: string, endDate: string, percent: number): Season => ({ id, label, startDate, endDate, recurring: true, percent, active: true, createdAt: now.toISOString() });
+  return [
+    s('se-1', 'Haute saison', `${y}-11-15`, `${y + 1}-04-15`, 15),
+    s('se-2', 'Fêtes de fin d’année', `${y}-12-20`, `${y + 1}-01-05`, 25),
+    s('se-3', 'Basse saison', `${y}-07-01`, `${y}-09-30`, -10),
+  ];
 }

@@ -4,6 +4,7 @@ import { dateShort, dateTime, money, time } from '../domain/format';
 import { isLate, lateDays, occupancy, vehicleStatusAt } from '../domain/rules';
 import { useData } from '../state/DataContext';
 import { AlertList } from './Alerts';
+import { Onboarding } from '../components/Onboarding';
 
 function sameDay(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -47,6 +48,8 @@ export function Dashboard() {
           </button>
         )}
       </header>
+
+      <Onboarding />
 
       <section className="kpis" aria-label="Indicateurs">
         <div className="card kpi">

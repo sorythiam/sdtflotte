@@ -2,7 +2,7 @@ import { findConflicts, isActive, nextContractNumber, overlaps } from '../domain
 import { buildAdjustment, buildCancellationFeeInvoice, buildCreditNote, buildFeesInvoice, buildInvoice, type BillingSettings, type Invoice, type NewInvoice } from '../domain/billing';
 import { vtcOverlap } from '../domain/vtc';
 import { dealFor, fitsPassengers, passengerSeats, priceFor } from '../domain/tariff';
-import type { VtcContract } from '../domain/types';
+import type { Quote, Season, VtcContract } from '../domain/types';
 import type { Client, Driver, Formula, Maintenance, Package, Rate, Reservation, Vehicle } from '../domain/types';
 import type { Store } from './store';
 
@@ -21,6 +21,7 @@ export interface ReservationInput {
   fuelIncluded?: boolean;
   itinerary?: string | null;
   crossBorder?: string | null;
+  agreedTotal?: number; // prix convenu (devis accepté) : remplace le calcul de la grille
 }
 
 export interface DataSnapshot {
@@ -32,6 +33,7 @@ export interface DataSnapshot {
   packages?: Package[];
   clients?: Client[];
   vtc_contracts?: VtcContract[];
+  seasons?: Season[];
 }
 
 /** Le chauffeur est-il déjà pris sur cette période ? */
@@ -161,7 +163,8 @@ export async function createReservation(
   // Bus, minibus et forfaits : toujours avec chauffeur.
   const withDriver = input.withDriver || !!vehicle?.driverRequired || formula === 'forfait';
   const deal = dealFor(snap.clients?.find((c) => c.id === input.clientId), vehicle?.category, input.start);
-  const q = priceFor({ formula, rate, pkg, start: input.start, end: input.end, withDriver, missionFees: input.missionFees, deal });
+  const q = priceFor({ formula, rate, pkg, start: input.start, end: input.end, withDriver, missionFees: input.missionFees, deal, seasons: snap.seasons });
+  const total = input.agreedTotal !== undefined ? Math.max(0, Math.round(input.agreedTotal)) : q.total;
   checkCrew(snap, vehicle, { ...input, withDriver });
   const number = nextContractNumber(snap.reservations.map((r) => r.number), new Date(input.start).getFullYear());
   const created = await store.insert('reservations', {
@@ -173,7 +176,7 @@ export async function createReservation(
     withDriver,
     status: 'reservee',
     dailyRate: q.dailyRate,
-    total: q.total,
+    total,
     caution: q.caution,
     fees: 0,
     mileageOut: null,
@@ -237,4 +240,44 @@ export async function amendReservation(store: Store, snap: DataSnapshot, b: Bill
     await issueInvoice(store, buildAdjustment({ ...r, ...updated }, client, b.settings, now, delta, first, input.reason));
   }
   return { ...r, ...updated };
+}
+
+/**
+ * Transforme un devis accepté en réservations, une par véhicule choisi, au prix du devis.
+ * Tous les véhicules sont contrôlés avant de créer quoi que ce soit.
+ */
+export async function convertQuote(
+  store: Store, snap: DataSnapshot, quote: Quote, vehicleIds: string[], now = new Date(), billing?: BillingContext,
+): Promise<Reservation[]> {
+  if (quote.status === 'converti' || quote.status === 'refuse') throw new Error('Ce devis est déjà clos.');
+  const ids = [...new Set(vehicleIds.filter(Boolean))];
+  if (ids.length !== quote.quantity) throw new Error(`Choisissez ${quote.quantity} véhicule${quote.quantity > 1 ? 's différents' : ''}.`);
+  const perVehiclePax = quote.passengers ? Math.ceil(quote.passengers / quote.quantity) : null;
+  for (const id of ids) {
+    const v = snap.vehicles.find((x) => x.id === id);
+    if (!v) throw new Error('Véhicule introuvable.');
+    if (v.category !== quote.category) throw new Error(`${v.plate ?? 'Ce véhicule'} n’est pas de la catégorie ${quote.category}.`);
+    const c = findConflicts(id, quote.start, quote.end, snap.reservations, snap.maintenances)[0];
+    if (c) throw new Error(`${v.plate ?? 'Un véhicule'} n’est pas libre sur cette période (${c.label}).`);
+    if (vtcOverlap(id, quote.start, quote.end, snap.vtc_contracts)) throw new Error(`${v.plate ?? 'Un véhicule'} est confié à un chauffeur VTC.`);
+    checkCrew(snap, v, { start: quote.start, end: quote.end, withDriver: quote.withDriver, passengers: perVehiclePax });
+  }
+  const created: Reservation[] = [];
+  let reservations = snap.reservations;
+  for (const id of ids) {
+    const r = await createReservation(
+      store, { ...snap, reservations },
+      {
+        vehicleId: id, clientId: quote.clientId, start: quote.start, end: quote.end, withDriver: quote.withDriver,
+        notes: [`Devis ${quote.number}`, quote.notes].filter(Boolean).join(' · '), formula: quote.formula, packageId: quote.packageId,
+        passengers: perVehiclePax, missionFees: quote.missionFees, fuelIncluded: quote.fuelIncluded, itinerary: quote.itinerary,
+        crossBorder: quote.crossBorder, agreedTotal: quote.unitTotal,
+      },
+      now, billing,
+    );
+    created.push(r);
+    reservations = [...reservations, r];
+  }
+  await store.update('quotes', quote.id, { status: 'converti', reservationIds: created.map((r) => r.id) });
+  return created;
 }

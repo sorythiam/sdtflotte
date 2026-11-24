@@ -43,6 +43,7 @@ export const SECTIONS: Section[] = [
     key: 'reservations', label: 'Réservations', icon: icons.reservations, badge: 'requests',
     tabs: [
       { to: '/reservations', label: 'Réservations et contrats' },
+      { to: '/devis', label: 'Devis', roles: ['direction', 'agent', 'comptable'] },
       { to: '/demandes', label: 'Demandes en ligne', roles: ['direction', 'agent'], badge: 'requests' },
     ],
   },
@@ -63,6 +64,7 @@ export const SECTIONS: Section[] = [
     tabs: [
       { to: '/factures', label: 'Factures', roles: ['direction', 'agent', 'comptable'] },
       { to: '/rapports', label: 'Rapports', roles: ['direction', 'comptable'] },
+      { to: '/rentabilite', label: 'Rentabilité', roles: ['direction', 'comptable'] },
     ],
   },
   {

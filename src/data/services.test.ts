@@ -230,3 +230,25 @@ describe('annulation avec acompte (mode démo)', () => {
     expect(st).toMatchObject({ owed: 20000, remaining: 20000 });
   });
 });
+
+describe('convertQuote (mode démo)', () => {
+  it('crée une réservation par véhicule au prix du devis et clôt le devis', async () => {
+    const { buildQuote } = await import('../domain/quotes');
+    const { convertQuote } = await import('./services');
+    const store = new DemoStore(memory());
+    const data = { ...(await snapshot(store)), clients: await store.list('clients'), packages: await store.list('packages'), seasons: await store.list('seasons'), quotes: [] };
+    const start = new Date(Date.now() + 40 * 86400000);
+    start.setHours(9, 0, 0, 0);
+    const end = new Date(start.getTime() + 2 * 86400000);
+    const draft = buildQuote({ clientId: 'c-teranga', category: '4x4', quantity: 2, formula: 'jour', start: start.toISOString(), end: end.toISOString(), withDriver: true }, data, new Date(), null);
+    const q = await store.insert('quotes', { ...draft, unitTotal: 123000, total: 246000 });
+    await expect(convertQuote(store, data, q, ['v-hilux'])).rejects.toThrow(/2 véhicules/);
+    const made = await convertQuote(store, data, q, ['v-hilux', 'v-prado']);
+    expect(made).toHaveLength(2);
+    expect(made.every((r) => r.total === 123000 && r.clientId === 'c-teranga')).toBe(true);
+    const after = (await store.list('quotes')).find((x) => x.id === q.id)!;
+    expect(after.status).toBe('converti');
+    expect(after.reservationIds).toEqual(made.map((r) => r.id));
+    await expect(convertQuote(store, data, after, ['v-hilux', 'v-prado'])).rejects.toThrow(/clos/);
+  });
+});

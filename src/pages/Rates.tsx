@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { money } from '../domain/format';
 import { ErrorBox } from '../components/ui';
 import type { Rate } from '../domain/types';
+import { seasonLabel, seasonOn } from '../domain/tariff';
 import { useData } from '../state/DataContext';
 
 const cols: [Exclude<keyof Rate, 'id' | 'category'>, string][] = [
@@ -103,6 +104,7 @@ export function Rates() {
         )}
         <span className="hint">Demi-journée : 6 heures au plus ; 0 = non proposée. Le chauffeur est compté pour moitié.</span>
       </section>
+      <Seasons />
       <Packages />
     </>
   );
@@ -171,6 +173,85 @@ function Packages() {
           <button className="btn">Ajouter le forfait</button>
         </form>
       )}
+      <ErrorBox error={error} />
+    </section>
+  );
+}
+
+const frShort = (d: string, recurring: boolean) =>
+  new Date(d + 'T12:00:00').toLocaleDateString('fr-FR', recurring ? { day: 'numeric', month: 'long' } : { day: 'numeric', month: 'long', year: 'numeric' });
+
+/** Saisons : majoration ou remise en % sur la location (pas sur le chauffeur ni sur un prix négocié). */
+function Seasons() {
+  const { data, store, refresh, toast, can, now } = useData();
+  const editable = can('direction');
+  const y = now.getFullYear();
+  const [f, setF] = useState({ label: '', start: '', end: '', percent: '', recurring: true });
+  const [error, setError] = useState<string | null>(null);
+  const list = data.seasons.slice().sort((a, b) => a.startDate.slice(5).localeCompare(b.startDate.slice(5)));
+  const today = now.toISOString().slice(0, 10);
+  const current = seasonOn(data.seasons, today);
+
+  async function add(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const percent = Math.round(Number(f.percent));
+    if (f.label.trim().length < 2) return setError('Donnez un nom à la saison.');
+    if (!f.start || !f.end) return setError('Indiquez le début et la fin.');
+    if (!f.recurring && f.end < f.start) return setError('La fin doit être après le début.');
+    if (!percent || percent < -50 || percent > 200) return setError('Pourcentage entre −50 et +200, différent de 0.');
+    try {
+      await store.insert('seasons', { label: f.label.trim(), startDate: f.start, endDate: f.end, recurring: f.recurring, percent, active: true, createdAt: new Date().toISOString() });
+      setF({ label: '', start: '', end: '', percent: '', recurring: true });
+      await refresh();
+      toast('Saison ajoutée');
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+  async function toggle(id: string, active: boolean) {
+    await store.update('seasons', id, { active });
+    await refresh();
+  }
+
+  return (
+    <section className="card" aria-labelledby="saisons">
+      <h2 id="saisons">Saisons tarifaires</h2>
+      <p className="small muted" style={{ margin: 0 }}>
+        Majoration (haute saison, fêtes, Magal) ou remise (basse saison) sur le prix de la location, appliquée jour par jour.
+        Le chauffeur, les frais de mission et les prix négociés d’un contrat cadre ne changent pas. Si deux saisons se chevauchent, la plus courte l’emporte.
+      </p>
+      <p className="small" style={{ margin: 0 }}>
+        Aujourd’hui : <strong>{current ? seasonLabel(current) : 'tarif normal'}</strong>
+      </p>
+      {list.length > 0 && (
+        <div className="table-wrap">
+          <table className="data">
+            <thead><tr><th>Saison</th><th>Période</th><th className="right">Variation</th><th>État</th></tr></thead>
+            <tbody>
+              {list.map((s) => (
+                <tr key={s.id} style={s.active ? undefined : { opacity: 0.55 }}>
+                  <td><strong>{s.label}</strong></td>
+                  <td>du {frShort(s.startDate, s.recurring)} au {frShort(s.endDate, s.recurring)}{s.recurring ? ', chaque année' : ''}</td>
+                  <td className="right num" style={{ color: s.percent > 0 ? 'var(--ocre-text)' : 'var(--success)', fontWeight: 600 }}>{s.percent > 0 ? '+' : '−'}{Math.abs(s.percent)} %</td>
+                  <td>{editable ? <button className="btn btn-sm btn-ghost" onClick={() => toggle(s.id, !s.active)}>{s.active ? 'Désactiver' : 'Réactiver'}</button> : s.active ? 'Active' : 'Inactive'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {editable && (
+        <form className="row" style={{ flexWrap: 'wrap', alignItems: 'flex-end' }} onSubmit={add}>
+          <label className="field" style={{ flex: '2 1 200px' }}>Nom<input value={f.label} maxLength={80} onChange={(e) => setF({ ...f, label: e.target.value })} placeholder={`Grand Magal ${y + 1}`} /></label>
+          <label className="field" style={{ flex: '1 1 150px' }}>Début<input type="date" value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })} /></label>
+          <label className="field" style={{ flex: '1 1 150px' }}>Fin (incluse)<input type="date" value={f.end} onChange={(e) => setF({ ...f, end: e.target.value })} /></label>
+          <label className="field" style={{ flex: '1 1 110px' }}>Variation (%)<input type="number" min={-50} max={200} value={f.percent} onChange={(e) => setF({ ...f, percent: e.target.value })} placeholder="+20 ou -10" /></label>
+          <label className="check" style={{ flex: '1 1 160px' }}><input type="checkbox" checked={f.recurring} onChange={(e) => setF({ ...f, recurring: e.target.checked })} />Chaque année</label>
+          <button className="btn">Ajouter la saison</button>
+        </form>
+      )}
+      {editable && <span className="hint">Fête à date mobile (Magal, Tabaski) : décochez « Chaque année » et saisissez les dates de l’année.</span>}
       <ErrorBox error={error} />
     </section>
   );

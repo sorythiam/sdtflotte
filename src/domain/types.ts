@@ -43,6 +43,7 @@ export interface Vehicle {
   driverRequired?: boolean; // bus, minibus : toujours loué avec chauffeur
   vin?: string | null; // numéro de châssis
   documents?: VehicleDocuments; // scans dans l'espace privé
+  createdAt?: string; // entrée dans la flotte (rempli par la base)
 }
 
 export type VehicleDocSlot = 'carteGrise' | 'assurance' | 'visiteTechnique' | 'autre';
@@ -84,6 +85,59 @@ export interface ReservationChange {
   reason: string | null;
   changedBy: string | null;
   createdAt: string;
+}
+
+/** Saison tarifaire : majoration (haute saison, fêtes) ou remise (basse saison) en % sur la location. */
+export interface Season {
+  id: string;
+  label: string;
+  startDate: string; // AAAA-MM-JJ
+  endDate: string; // AAAA-MM-JJ, incluse
+  recurring: boolean; // se répète chaque année aux mêmes jours
+  percent: number; // +20 = majoration de 20 %, -10 = remise de 10 %
+  active: boolean;
+  createdAt: string;
+}
+
+export type QuoteStatus = 'envoye' | 'accepte' | 'refuse' | 'converti';
+
+/** Devis : une proposition chiffrée, sans bloquer de véhicule tant qu'elle n'est pas transformée. */
+export interface Quote {
+  id: string;
+  number: string; // DV-2026-0001
+  clientId: string;
+  category: string;
+  quantity: number; // nombre de véhicules identiques
+  formula: Formula;
+  packageId: string | null;
+  packageLabel: string | null;
+  start: string;
+  end: string;
+  withDriver: boolean;
+  passengers: number | null;
+  missionFees: number; // par véhicule
+  fuelIncluded: boolean;
+  itinerary: string | null;
+  crossBorder: string | null;
+  unitTotal: number; // prix d'un véhicule, hors taxes
+  total: number; // unitTotal × quantité, hors taxes
+  caution: number; // par véhicule
+  detail: QuoteDetail;
+  validUntil: string; // AAAA-MM-JJ
+  status: QuoteStatus;
+  reservationIds: string[];
+  notes: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export interface QuoteDetail {
+  days: number;
+  rental: number;
+  driver: number;
+  kmIncluded: number | null;
+  seasonNote: string | null;
+  dealNote: string | null;
 }
 
 export interface Rate {
@@ -321,6 +375,8 @@ export interface Tables {
   maintenance_plans: MaintenancePlan;
   vtc_contracts: VtcContract;
   vtc_payments: VtcPayment;
+  seasons: Season;
+  quotes: Quote;
 }
 export type TableName = keyof Tables;
 

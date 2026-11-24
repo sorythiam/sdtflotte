@@ -172,7 +172,7 @@ function NewReservation({ onClose }: { onClose: () => void }) {
   const deal = dealFor(client0, vehicle?.category, sIso || now);
   if (vehicle && validPeriod) {
     try {
-      qt = priceFor({ formula, rate, pkg, start: sIso, end: eIso, withDriver: driverOn, missionFees: Number(missionFees) || 0, deal });
+      qt = priceFor({ formula, rate, pkg, start: sIso, end: eIso, withDriver: driverOn, missionFees: Number(missionFees) || 0, deal, seasons: data.seasons });
     } catch (e) {
       priceError = (e as Error).message;
     }
@@ -334,6 +334,7 @@ function NewReservation({ onClose }: { onClose: () => void }) {
             {qt.missionFees ? `, dont ${money(qt.missionFees)} de frais de mission` : ''} · caution {money(qt.caution)}
             {qt.kmIncluded !== null ? ` · ${qt.kmIncluded} km inclus` : ' · kilométrage non compté'}
             {qt.dealNote && <><br /><span className="small" style={{ color: 'var(--success)', fontWeight: 600 }}>{qt.dealNote}</span></>}
+            {qt.seasonNote && <><br /><span className="small" style={{ color: 'var(--ocre-text)', fontWeight: 600 }}>Saison : {qt.seasonNote}</span></>}
           </div>
         )}
         {priceError && <div className="error">{priceError}</div>}

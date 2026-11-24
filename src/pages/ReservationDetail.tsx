@@ -670,7 +670,7 @@ function AmendDialog({ onClose }: { onClose: () => void }) {
     } else {
       try {
         const deal = dealFor(data.clients.find((c) => c.id === r.clientId), v?.category, sIso);
-        computed = priceFor({ formula: r.formula ?? 'jour', rate, start: sIso, end: eIso, withDriver: r.withDriver, missionFees: r.missionFees, deal }).total;
+        computed = priceFor({ formula: r.formula ?? 'jour', rate, start: sIso, end: eIso, withDriver: r.withDriver, missionFees: r.missionFees, deal, seasons: data.seasons }).total;
       } catch (e) {
         hint = (e as Error).message;
       }

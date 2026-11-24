@@ -94,7 +94,10 @@ export function ClientDetail() {
             {company && c.contactName ? ` · contact : ${c.contactName}${c.contactPhone ? ` (${c.contactPhone})` : ''}` : ''}
           </p>
         </div>
-        {editable && <button className="btn" onClick={() => setEditing(true)}>Modifier la fiche</button>}
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          {can('direction', 'agent') && c.score !== 'blacklist' && <Link className="btn" to={`/devis?nouveau=1&client=${c.id}`}>Faire un devis</Link>}
+          {editable && <button className="btn" onClick={() => setEditing(true)}>Modifier la fiche</button>}
+        </div>
       </header>
 
       {c.score !== 'fiable' && (

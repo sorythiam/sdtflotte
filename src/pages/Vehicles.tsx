@@ -14,7 +14,7 @@ export function Vehicles() {
   const { data, now, can, session } = useData();
   const [params, setParams] = useSearchParams();
   const [q, setQ] = useState('');
-  const [importing, setImporting] = useState(false);
+  const [importing, setImporting] = useState(() => new URLSearchParams(window.location.search).get('importer') === '1');
   const editing = params.get('v');
   const alerts = expiryAlerts(data.vehicles, now, 30);
   const list = data.vehicles

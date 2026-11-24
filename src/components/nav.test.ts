@@ -15,9 +15,9 @@ describe('menu', () => {
   it('montre les onglets selon le profil', () => {
     const fin = SECTIONS.find((s) => s.key === 'finances')!;
     expect(visibleTabs(fin, 'agent').map((t) => t.label)).toEqual(['Factures']);
-    expect(visibleTabs(fin, 'comptable').map((t) => t.label)).toEqual(['Factures', 'Rapports']);
+    expect(visibleTabs(fin, 'comptable').map((t) => t.label)).toEqual(['Factures', 'Rapports', 'Rentabilité']);
     expect(visibleTabs(fin, 'mecanicien')).toEqual([]);
-    expect(visibleTabs(fin, 'admin')).toHaveLength(2);
+    expect(visibleTabs(fin, 'admin')).toHaveLength(3);
   });
   it('garde huit sections', () => {
     expect(SECTIONS.map((s) => s.label)).toEqual(['Accueil', 'Planning', 'Réservations', 'Flotte', 'Chauffeurs VTC', 'Clients', 'Finances', 'Paramètres']);

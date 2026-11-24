@@ -487,3 +487,13 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
 @keyframes page-loading { from { background-position: -40% 0; } to { background-position: 140% 0; } }
 @media (prefers-reduced-motion: reduce) { .page-loading { animation: none; background: var(--sable-line); } }
 .link-button { background: none; border: 0; padding: 4px 0; color: var(--atlantique); text-decoration: underline; cursor: pointer; font: inherit; }
+/* ---------- assistant de démarrage */
+.onboarding { border-left: 4px solid var(--ocre); }
+.onb-bar { height: 6px; background: var(--sable); border-radius: 3px; overflow: hidden; }
+.onb-bar span { display: block; height: 100%; background: var(--success); border-radius: 3px; }
+.onb-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+.onb-steps li { display: flex; gap: var(--space-3); align-items: flex-start; }
+.onb-steps li.done { color: var(--ink-muted); }
+.onb-num { flex: 0 0 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px; background: var(--sable); color: var(--atlantique); }
+.onb-steps li.done .onb-num { background: var(--success); color: #fff; }
+.onb-steps li.current .onb-num { background: var(--atlantique); color: #fff; }
