@@ -150,12 +150,12 @@ export const paymentStatusLabel: Record<SubPaymentStatus, [string, string]> = {
   annulee: ['Annulé', 'badge-muted'],
 };
 
-/** Émetteur des factures d'abonnement. À compléter avec les mentions légales de la société qui exploite Yoon Fleet. */
+/** Émetteur des factures d'abonnement : la société qui édite Yoon Fleet. */
 export const SAAS_ISSUER = {
   name: 'Yoon Fleet',
-  legalName: 'Yoon Fleet',
-  address: 'Dakar, Sénégal',
-  registration: '', // RCCM et NINEA de la société éditrice
+  legalName: 'Tabibou Business Group SARL',
+  address: 'Cité Palène, Yoff n° 65, Dakar, Sénégal',
+  registration: 'SARL au capital de 100 000 FCFA · RCCM SN.DKR.2022.B.29537 · NINEA 009664352',
   email: 'contact@yoonfleet.com',
 };
 

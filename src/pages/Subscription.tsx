@@ -294,7 +294,8 @@ export function SaasInvoicePage() {
         <header className="ct-head">
           <div className="ct-brand">
             <div>
-              <div className="ct-org">{SAAS_ISSUER.legalName}</div>
+              <div className="ct-org">{SAAS_ISSUER.name}</div>
+              <div className="ct-small" style={{ fontWeight: 600 }}>édité par {SAAS_ISSUER.legalName}</div>
               <div className="ct-small">{SAAS_ISSUER.address}{SAAS_ISSUER.registration && <><br />{SAAS_ISSUER.registration}</>}<br />{SAAS_ISSUER.email}</div>
             </div>
           </div>
@@ -329,6 +330,9 @@ export function SaasInvoicePage() {
             <tr className="ct-total"><td>Total payé</td><td>{money(p.amountTtc)}</td></tr>
           </tbody>
         </table>
+        <p className="ct-small" style={{ marginTop: 'auto' }}>
+          {SAAS_ISSUER.legalName} · {SAAS_ISSUER.registration}{!p.vatRate && ' · TVA non applicable.'}
+        </p>
       </article>
     </>
   );
