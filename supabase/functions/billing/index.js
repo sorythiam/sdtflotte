@@ -246,9 +246,10 @@ async function bictorysCreate(payId, amount, back, c) {
     })
   });
   const j = await res.json().catch(() => ({}));
-  const url = j.redirectUrl || j.link;
-  if (!res.ok || !j.transactionId || !url?.startsWith("http")) throw new Error(`Bictorys ${res.status} ${JSON.stringify(j).slice(0, 300)}`);
-  return { ref: j.transactionId, url };
+  const url = j.link || j.redirectUrl;
+  const ref = j.chargeId || j.transactionId;
+  if (!res.ok || !ref || !url?.startsWith("http")) throw new Error(`Bictorys ${res.status} ${JSON.stringify(j).slice(0, 300)}`);
+  return { ref, url };
 }
 async function bictorysCheck(transactionId) {
   const url = `${BX_BASE}/pay/v1/transactions/${encodeURIComponent(transactionId)}/status`;
@@ -262,7 +263,7 @@ async function bictorysCheck(transactionId) {
     // La réponse courte du statut peut omettre le montant : on ne le contrôle que s'il est donné.
     amount: Number.isFinite(amount) && amount > 0 ? amount : null,
     reference: j.paymentReference ?? null,
-    raw: j
+    raw: { httpStatus: res.status, ...j }
   };
 }
 async function bictorysAuthentic(req, raw) {
@@ -307,6 +308,7 @@ async function settle(payId) {
     const { data } = await admin.from("subscription_payments").update({ status: o.state === "cancelled" ? "annulee" : "echouee", raw: o.raw }).eq("id", pay.id).select("*").single();
     return data ?? pay;
   }
+  await admin.from("subscription_payments").update({ raw: o.raw }).eq("id", pay.id);
   return pay;
 }
 async function confirm(req, body) {

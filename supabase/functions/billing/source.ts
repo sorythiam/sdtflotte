@@ -166,10 +166,13 @@ async function bictorysCreate(payId: string, amount: number, back: string, c: { 
       customerObject: { name: c.name.slice(0, 120) || 'Client Yoon Fleet', email: c.email || undefined, phone: e164(c.phone, country), country },
     }),
   });
-  const j = (await res.json().catch(() => ({}))) as { transactionId?: string; redirectUrl?: string; link?: string };
-  const url = j.redirectUrl || j.link;
-  if (!res.ok || !j.transactionId || !url?.startsWith('http')) throw new Error(`Bictorys ${res.status} ${JSON.stringify(j).slice(0, 300)}`);
-  return { ref: j.transactionId, url };
+  // Page hébergée : réponse 202 « CheckoutLinkObject » { link, chargeId, opToken } ;
+  // l'API directe renvoie plutôt { transactionId, redirectUrl }.
+  const j = (await res.json().catch(() => ({}))) as { transactionId?: string; chargeId?: string; redirectUrl?: string; link?: string };
+  const url = j.link || j.redirectUrl;
+  const ref = j.chargeId || j.transactionId;
+  if (!res.ok || !ref || !url?.startsWith('http')) throw new Error(`Bictorys ${res.status} ${JSON.stringify(j).slice(0, 300)}`);
+  return { ref, url };
 }
 
 async function bictorysCheck(transactionId: string): Promise<Outcome> {
@@ -184,7 +187,7 @@ async function bictorysCheck(transactionId: string): Promise<Outcome> {
     // La réponse courte du statut peut omettre le montant : on ne le contrôle que s'il est donné.
     amount: Number.isFinite(amount) && amount > 0 ? amount : null,
     reference: j.paymentReference ?? null,
-    raw: j,
+    raw: { httpStatus: res.status, ...j },
   };
 }
 
@@ -233,6 +236,7 @@ async function settle(payId: string) {
     const { data } = await admin.from('subscription_payments').update({ status: o.state === 'cancelled' ? 'annulee' : 'echouee', raw: o.raw }).eq('id', pay.id).select('*').single();
     return data ?? pay;
   }
+  await admin.from('subscription_payments').update({ raw: o.raw }).eq('id', pay.id); // pour le diagnostic
   return pay; // en cours : le client n'a pas encore validé sur son téléphone
 }
 
