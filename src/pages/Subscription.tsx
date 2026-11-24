@@ -312,7 +312,7 @@ export function SaasInvoicePage() {
           </section>
           <section>
             <h3>Paiement</h3>
-            <dl className="ct-dl"><dt>Moyen</dt><dd>En ligne ({p.provider === 'paydunya' ? 'PayDunya' : p.provider})</dd><dt>Statut</dt><dd>Payée</dd></dl>
+            <dl className="ct-dl"><dt>Moyen</dt><dd>En ligne ({({ bictorys: 'Bictorys', paydunya: 'PayDunya', simulation: 'démonstration' } as Record<string, string>)[p.provider] ?? p.provider})</dd><dt>Statut</dt><dd>Payée</dd></dl>
           </section>
         </div>
         <table className="ct-table">
