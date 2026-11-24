@@ -101,7 +101,7 @@ export function Subscription() {
                     <strong style={{ fontFamily: 'var(--font-display)', color: 'var(--atlantique)', fontSize: 18 }}>{info.label}</strong>
                     <input type="radio" name="plan" checked={selected} onChange={() => { setPlan(p); setVehicles(Math.max(vehicles, info.minVehicles)); }} style={{ width: 20, height: 20, accentColor: 'var(--atlantique)' }} />
                   </span>
-                  <span className="num" style={{ fontWeight: 600 }}>{money(info.perVehicleYear)} / véhicule / an</span>
+                  <span className="num" style={{ fontWeight: 600 }}>{money(info.perVehicleYear)} HT / véhicule / an</span>
                   <span className="xs muted">{info.users} · minimum {info.minVehicles} véhicules<br />{info.summary}</span>
                 </label>
               );
