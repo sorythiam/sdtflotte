@@ -66,6 +66,7 @@ export function Layout() {
     toast('Données d’exemple rechargées');
   }
 
+  const orgLogo = org.contract?.logo ?? null;
   const account = (
     <div className="side-foot">
       <span>
@@ -105,6 +106,10 @@ export function Layout() {
           <Logo />
           <Wordmark />
         </div>
+        <div className="org-brand" title={org.name}>
+          {orgLogo && <img src={orgLogo} alt="" />}
+          <span className="org-brand-name">{org.name}</span>
+        </div>
         <nav className="nav" aria-label="Navigation principale">
           {sections.map((s) => (
             <NavLink key={s.key} to={first(s)} className={isActive(s) ? 'active' : undefined} aria-current={isActive(s) ? 'page' : undefined} title={s.label}>
@@ -126,6 +131,7 @@ export function Layout() {
             <Logo />
           </NavLink>
           <span className="topbar-title">{current.label}</span>
+          {orgLogo && <img className="topbar-org" src={orgLogo} alt={org.name} />}
           {badge(current.key === 'home' ? undefined : 'alerts') && (
             <NavLink to="/" className="topbar-alert" aria-label="Voir les alertes">
               {badge('alerts')}

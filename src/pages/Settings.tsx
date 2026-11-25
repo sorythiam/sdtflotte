@@ -1,6 +1,7 @@
 import { BillingSettingsForm } from '../components/BillingSettingsForm';
 import { BookingSettingsForm } from '../components/BookingSettingsForm';
 import { ContractSettingsForm } from '../components/ContractSettingsForm';
+import { LogoCard } from '../components/LogoCard';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { subscriptionStatus, subStateLabel } from '../domain/saas';
@@ -135,6 +136,8 @@ export function Settings() {
               )}
             </form>
           </section>
+
+          <LogoCard editable={admin} />
 
           <BillingSettingsForm editable={admin} />
 

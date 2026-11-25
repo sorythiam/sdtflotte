@@ -4,30 +4,6 @@ import { contractSettings, DEFAULT_TERMS, type ContractSettings } from '../domai
 import { useData } from '../state/DataContext';
 import { ErrorBox } from './ui';
 
-/** Réduit une image à 400 px de large au plus, en PNG si transparente sinon JPEG. */
-async function shrinkImage(file: File): Promise<string> {
-  if (!file.type.startsWith('image/')) throw new Error('Choisissez une image (PNG ou JPEG).');
-  if (file.size > 5_000_000) throw new Error('Image trop lourde (5 Mo maximum).');
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((ok, ko) => {
-      const i = new Image();
-      i.onload = () => ok(i);
-      i.onerror = () => ko(new Error('Image illisible.'));
-      i.src = url;
-    });
-    const scale = Math.min(1, 400 / img.width, 160 / img.height);
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(img.width * scale));
-    canvas.height = Math.max(1, Math.round(img.height * scale));
-    canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-    const png = canvas.toDataURL('image/png');
-    return png.length < 150_000 ? png : canvas.toDataURL('image/jpeg', 0.85);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
 export function ContractSettingsForm({ editable }: { editable: boolean }) {
   const { session, store, setSession, toast } = useData();
   const org = session!.org;
@@ -35,16 +11,6 @@ export function ContractSettingsForm({ editable }: { editable: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof ContractSettings) => (e: { target: { value: string } }) => setS({ ...s, [k]: e.target.value });
-
-  async function onLogo(file: File | undefined) {
-    if (!file) return;
-    setError(null);
-    try {
-      setS({ ...s, logo: await shrinkImage(file) });
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -54,6 +20,7 @@ export function ContractSettingsForm({ editable }: { editable: boolean }) {
       // On n'enregistre pas les CG si elles sont restées celles du modèle : les mises à jour du modèle s'appliqueront.
       const contract: Partial<ContractSettings> = {
         ...s,
+        logo: org.contract?.logo ?? null, // le logo se gère dans sa propre carte
         legalName: s.legalName.trim() === org.name ? '' : s.legalName.trim(),
         terms: s.terms.trim() === DEFAULT_TERMS.trim() ? '' : s.terms,
       };
@@ -83,18 +50,7 @@ export function ContractSettingsForm({ editable }: { editable: boolean }) {
             <label className="field">Téléphone<input value={s.phone} onChange={set('phone')} maxLength={40} inputMode="tel" /></label>
             <label className="field">Email<input value={s.email} onChange={set('email')} maxLength={120} type="email" /></label>
           </div>
-          <div className="row" style={{ alignItems: 'center' }}>
-            {s.logo ? (
-              <img src={s.logo} alt="Logo actuel" style={{ maxHeight: 56, maxWidth: 160, objectFit: 'contain', border: '1px solid var(--sable-line)', borderRadius: 6, padding: 4, background: '#fff' }} />
-            ) : (
-              <span className="small muted">Aucun logo</span>
-            )}
-            <label className="btn btn-sm">
-              {s.logo ? 'Changer le logo' : 'Ajouter un logo'}
-              <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => onLogo(e.target.files?.[0])} />
-            </label>
-            {s.logo && <button type="button" className="btn btn-sm btn-ghost" onClick={() => setS({ ...s, logo: null })}>Retirer</button>}
-          </div>
+          <p className="small muted" style={{ margin: 0 }}>Le logo se règle dans la carte « Logo » de cette page.</p>
           <fieldset className="stack" style={{ border: 0, padding: 0, margin: 0, gap: 'var(--space-2)' }}>
             <legend className="small" style={{ fontWeight: 600, marginBottom: 6 }}>Vérification du client</legend>
             <label className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
