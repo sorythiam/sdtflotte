@@ -528,3 +528,4 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
   .org-brand-name { display: none; }
   .org-brand img { max-width: 56px; max-height: 32px; }
 }
+.side-foot .copyright { font-size: 11px; opacity: 0.8; }

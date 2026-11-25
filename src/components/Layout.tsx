@@ -93,6 +93,7 @@ export function Layout() {
           Se déconnecter
         </button>
       </div>
+      <span className="copyright">© {new Date().getFullYear()} TBG · Yoon Fleet</span>
     </div>
   );
 

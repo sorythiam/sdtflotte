@@ -176,6 +176,7 @@ export function Login() {
         <p className="xs muted" style={{ margin: 0, textAlign: 'center' }}>
           <Wordmark />
         </p>
+        <p className="xs muted" style={{ margin: 0, textAlign: 'center' }}>© {new Date().getFullYear()} TBG. Tous droits réservés.</p>
       </div>
     </div>
   );
