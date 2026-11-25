@@ -14,14 +14,14 @@ export const PLAN_INFO: Record<Plan, { label: string; perVehicleYear: number; mi
     perVehicleYear: 36000,
     minVehicles: 10,
     users: 'Utilisateurs illimités',
-    summary: 'Essentiel + maintenance, frais au retour. À venir : état des lieux mobile, mobile money, export SYSCOHADA',
+    summary: 'Essentiel + maintenance, frais au retour',
   },
   entreprise: {
     label: 'Entreprise',
     perVehicleYear: 48000,
     minVehicles: 30,
     users: 'Utilisateurs illimités',
-    summary: 'Pro + support prioritaire. À venir : multi-agences et multi-pays, portail client',
+    summary: 'Pro + support prioritaire',
   },
 };
 
