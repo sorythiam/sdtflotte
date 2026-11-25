@@ -408,6 +408,7 @@ export interface Tables {
   quotes: Quote;
   reservation_portals: import('./portal').ReservationPortal;
   deposit_declarations: import('./portal').DepositDeclaration;
+  driver_absences: import('./drivers').DriverAbsence;
 }
 export type TableName = keyof Tables;
 

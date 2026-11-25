@@ -14,6 +14,7 @@ import { payeeLines, payState, payStatusLabel, termsFor } from '../domain/billin
 import { COUNTRY_CALLING_CODE, whatsappLink } from '../domain/booking';
 import { PortalCard } from '../components/PortalCard';
 import { flightLabel, flightTrackUrl } from '../domain/flight';
+import { driverBlocker, missionSheet } from '../domain/drivers';
 
 export const methodLabel: Record<PaymentMethod, string> = {
   especes: 'Espèces',
@@ -139,6 +140,15 @@ export function ReservationDetail() {
                 {r.passengers ? ` · ${r.passengers} passager(s)` : ''}
                 <br />
                 {r.withDriver ? (driver ? <>Chauffeur : <strong>{driver.name}</strong>, {driver.phone}</> : <span style={{ color: 'var(--ocre-text)' }}>Avec chauffeur, à désigner</span>) : 'Sans chauffeur'}
+                {driver && (r.status === 'reservee' || r.status === 'en_cours') && (
+                  <>
+                    {' · '}
+                    <a className="no-print" target="_blank" rel="noreferrer"
+                      href={whatsappLink(driver.phone, missionSheet(r, c, v, driver, session!.org.name), COUNTRY_CALLING_CODE[session!.org.country] ?? '221')}>
+                      Envoyer la feuille de mission
+                    </a>
+                  </>
+                )}
                 {r.mileageOut != null && (
                   <>
                     <br />
@@ -723,7 +733,8 @@ function AmendDialog({ onClose }: { onClose: () => void }) {
               <option value="">À désigner</option>
               {data.drivers.filter((d) => d.active).map((d) => {
                 const b = driverConflict(d.id, sIso, eIso, data.reservations, r.id);
-                return <option key={d.id} value={d.id} disabled={!!b}>{d.name}{b ? ` — pris (${b.number})` : ''}</option>;
+                const block = sIso && eIso ? driverBlocker(d, v, sIso, eIso, data.driver_absences, data.vtc_contracts) : null;
+                return <option key={d.id} value={d.id} disabled={!!b || !!block}>{d.name}{b ? ` — pris (${b.number})` : block ? ` — ${block}` : ''}</option>;
               })}
             </select>
           </label>

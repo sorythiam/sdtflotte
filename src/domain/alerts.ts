@@ -24,7 +24,8 @@ export type AlertKind =
   | 'entretien_a_prevoir'
   | 'vtc_retard'
   | 'demande_en_ligne'
-  | 'acompte_declare';
+  | 'acompte_declare'
+  | 'permis_chauffeur';
 
 export interface Alert {
   id: string; // stable : sert de clé et de repère dans l'email
@@ -47,6 +48,8 @@ export interface AlertInput {
   vtc?: { contracts: VtcContract[]; payments: VtcPayment[]; expenses: Expense[]; drivers: { id: string; name: string }[]; adjustments?: VtcAdjustment[] };
   /** Acomptes déclarés par les clients depuis leur espace, à vérifier. */
   declarations?: { id: string; reservationId: string; status: string; amount: number; method: string; reference: string }[];
+  /** Chauffeurs : permis expiré ou proche de l'expiration, mission avec un permis qui ne couvre pas la fin. */
+  drivers?: { id: string; name: string; active: boolean; licenseExpiry: string | null }[];
   bookingRequests?: { id: string; status: string; name: string; companyName?: string | null; category: string; start: string; end: string; createdAt: string }[];
 }
 
@@ -249,6 +252,18 @@ export function buildAlerts(input: AlertInput, now: Date, offsetMin = -now.getTi
       title: `Demande en ligne à traiter : ${b.companyName ? `${b.companyName} (${b.name})` : b.name}`,
       detail: `${b.category} du ${dmy(b.start)} au ${dmy(b.end)}${soon ? ' · départ dans moins de 48 h' : ''}`,
     });
+  }
+
+  for (const dr of (input.drivers ?? []).filter((x) => x.active && x.licenseExpiry)) {
+    const exp = Date.parse(dr.licenseExpiry + 'T23:59:59Z');
+    const mission = input.reservations.find((r) => r.driverId === dr.id && (r.status === 'reservee' || r.status === 'en_cours') && Date.parse(r.end) > exp);
+    if (exp < t || mission || exp - t < 30 * DAY) {
+      out.push({
+        id: `permis-chauffeur:${dr.id}`, kind: 'permis_chauffeur', level: exp < t || mission ? 'urgent' : 'attention', link: '/chauffeurs', roles: OPS,
+        title: exp < t ? `Permis expiré : ${dr.name}` : mission ? `Permis de ${dr.name} expiré avant la fin d’une mission` : `Permis de ${dr.name} à renouveler`,
+        detail: `${exp < t ? 'Expiré le' : 'Valable jusqu’au'} ${dmy(dr.licenseExpiry!)}${mission ? ` · contrat ${mission.number} jusqu’au ${dmy(mission.end)} : changez de chauffeur` : ''}`,
+      });
+    }
   }
 
   for (const d of input.declarations ?? []) {

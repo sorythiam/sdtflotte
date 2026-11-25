@@ -529,3 +529,13 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
   .org-brand img { max-width: 56px; max-height: 32px; }
 }
 .side-foot .copyright { font-size: 11px; opacity: 0.8; }
+
+/* Planning des chauffeurs */
+.drv-cell { margin: 4px; padding: 6px 4px; border-radius: 8px; text-align: center; font-size: 12px; line-height: 15px; text-decoration: none; }
+.drv-cell span { font-size: 11px; }
+.drv-mission { background: var(--atlantique); color: #fff; font-weight: 600; }
+.drv-mission span { color: var(--on-dark-muted); font-weight: 400; }
+.drv-absence { background: #fde9d6; color: var(--ocre-text); font-weight: 600; }
+.drv-free { color: var(--success); background: #e3f4ea; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--atlantique); cursor: pointer; font: inherit; }
+.drv-vtc { background: #e6eef5; color: var(--atlantique); font-weight: 600; }

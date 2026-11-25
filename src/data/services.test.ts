@@ -101,7 +101,10 @@ describe('loueurs touristiques (mode démo)', () => {
     await expect(
       createReservation(store, snap, { vehicleId: 'v-dzire', clientId: 'c-diop', start: day(40), end: day(41), withDriver: true, notes: null, passengers: 6 }),
     ).rejects.toThrow(/4 places passagers pour 6/);
-    const r = await createReservation(store, snap, { vehicleId: 'v-coaster', clientId: 'c-sante', start: day(40), end: day(41), withDriver: false, notes: null, passengers: 25, driverId: 'd-3' });
+    await expect(
+      createReservation(store, snap, { vehicleId: 'v-coaster', clientId: 'c-sante', start: day(40), end: day(41), withDriver: false, notes: null, passengers: 25, driverId: 'd-3' }),
+    ).rejects.toThrow(/permis D ; Cheikh Ndour a : B/);
+    const r = await createReservation(store, snap, { vehicleId: 'v-coaster', clientId: 'c-sante', start: day(40), end: day(41), withDriver: false, notes: null, passengers: 25, driverId: 'd-1' });
     expect(r.withDriver).toBe(true);
     expect(r.passengers).toBe(25);
     expect(r.total).toBe(180000 + 25000);

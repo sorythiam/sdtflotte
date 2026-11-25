@@ -10,6 +10,7 @@ import {
 import type { Reservation } from '../domain/types';
 import { useData } from '../state/DataContext';
 import { flightLabel, flightTrackUrl } from '../domain/flight';
+import { missionSheet } from '../domain/drivers';
 
 const KIND: Record<FollowItem['kind'], [string, string]> = {
   retard: ['Pas rentré', 'badge-danger'],
@@ -78,6 +79,13 @@ export function FollowUp() {
                     {x.kind === 'depart' && (
                       <>
                         <a className="btn btn-sm" target="_blank" rel="noreferrer" href={msg('rappel_depart')}>Rappel de départ</a>
+                        {(() => {
+                          const d = data.drivers.find((x) => x.id === r.driverId);
+                          return d ? (
+                            <a className="btn btn-sm btn-ghost" target="_blank" rel="noreferrer"
+                              href={whatsappLink(d.phone, missionSheet(r, cli.get(r.clientId), v, d, org), cc)}>Feuille de mission à {d.name.split(' ')[0]}</a>
+                          ) : r.withDriver ? <span className="badge badge-warning">Chauffeur à désigner</span> : null;
+                        })()}
                         {pt && !pt.signedAt && (
                           <a className="btn btn-sm btn-ghost" target="_blank" rel="noreferrer"
                             href={wa(r, portalMessage(who(r), org, r, portalUrl(pt.token), 0))}>Renvoyer le lien client</a>

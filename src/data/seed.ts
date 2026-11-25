@@ -1,4 +1,5 @@
 import type { DepositDeclaration, ReservationPortal } from '../domain/portal';
+import type { DriverAbsence } from '../domain/drivers';
 import { billingSettings, buildInvoice, nextInvoiceNumber, type Invoice } from '../domain/billing';
 import type { Client, Driver, MaintenancePlan, VtcContract, VtcPayment, Expense, Incident, Package, Maintenance, Payment, Rate, Reservation, Tables, Vehicle, Season, VtcAdjustment } from '../domain/types';
 
@@ -111,7 +112,7 @@ export function seed(now = new Date()): Db {
     { id: 'm-2', vehicleId: 'v-tucson', label: 'Vidange', start: at(now, 1, 8), end: at(now, 1, 18), cost: 45000 },
   ];
 
-  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now), drivers: seedDrivers(now), packages: seedPackages(now), reservation_changes: [], maintenance_plans: seedPlans(now), ...seedVtc(now), seasons: seedSeasons(now), quotes: [], ...seedPortals(reservations, now) };
+  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now), drivers: seedDrivers(now), packages: seedPackages(now), reservation_changes: [], maintenance_plans: seedPlans(now), ...seedVtc(now), seasons: seedSeasons(now), quotes: [], ...seedPortals(reservations, now), driver_absences: seedAbsences(now) };
 }
 
 /** Factures des réservations d'exemple, numérotées dans l'ordre de création. */
@@ -254,4 +255,13 @@ export function seedPortals(reservations: Reservation[], now = new Date()): { re
     reservation_portals: [{ id: 'pt-1', reservationId: 'r-9', token: 'd'.repeat(64), createdAt: ago(20), createdBy: 'awa.agent@sdt.sn', openedAt: ago(18), submittedAt: null, signerName: null, signature: null, signedAt: null }],
     deposit_declarations: [{ id: 'dd-1', reservationId: 'r-9', amount: Math.round(r9.total / 2), method: 'wave', reference: 'T_8F2KQ7WX', declaredAt: ago(2), status: 'declare' }],
   };
+}
+
+/** Un chauffeur en congé la semaine prochaine. */
+export function seedAbsences(now = new Date()): DriverAbsence[] {
+  const d = (n: number) => {
+    const x = new Date(now.getFullYear(), now.getMonth(), now.getDate() + n);
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  };
+  return [{ id: 'da-1', driverId: 'd-3', kind: 'conge', startDate: d(10), endDate: d(14), note: 'Congé annuel', createdAt: now.toISOString() }];
 }

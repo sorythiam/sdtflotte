@@ -11,6 +11,7 @@ import type { Formula, ReservationStatus } from '../domain/types';
 import { useData } from '../state/DataContext';
 import { FlightFields, NO_FLIGHT, type FlightValue } from '../components/FlightFields';
 import { flightWarning, suggestedPickup } from '../domain/flight';
+import { driverBlocker, driverWarning } from '../domain/drivers';
 import { followUps } from '../domain/portal';
 import { FollowUp } from './FollowUp';
 
@@ -315,9 +316,21 @@ function NewReservation({ onClose }: { onClose: () => void }) {
                   <option value="">À désigner plus tard</option>
                   {drivers.map((d) => {
                     const b = driverBusy(d.id);
-                    return <option key={d.id} value={d.id} disabled={!!b}>{d.name}{d.licenseCategory ? ` · permis ${d.licenseCategory}` : ''}{b ? ` — pris (${b.number})` : ''}</option>;
+                    const block = validPeriod ? driverBlocker(d, vehicle, sIso, eIso, data.driver_absences, data.vtc_contracts) : null;
+                    return (
+                      <option key={d.id} value={d.id} disabled={!!b || !!block}>
+                        {d.name}{d.licenseCategory ? ` · permis ${d.licenseCategory}` : ''}{b ? ` — pris (${b.number})` : block ? ' — indisponible' : ''}
+                      </option>
+                    );
                   })}
                 </select>
+                {(() => {
+                  const d = drivers.find((x) => x.id === driverId);
+                  const msg = d && validPeriod ? driverBlocker(d, vehicle, sIso, eIso, data.driver_absences, data.vtc_contracts) ?? driverWarning(d, vehicle) : null;
+                  return msg ? <span className="hint" style={{ color: 'var(--ocre-text)' }}>{msg}</span> : (
+                    <span className="hint">Les chauffeurs pris, absents ou sans le bon permis{vehicle?.seats && vehicle.seats > 9 ? ' (D1 ou D pour ce véhicule)' : ''} sont grisés.</span>
+                  );
+                })()}
               </label>
               <label className="field">
                 Frais de mission (FCFA)

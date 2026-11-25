@@ -64,3 +64,24 @@ test('transfert aéroport : demande en ligne avec le vol, puis réservation', as
   await expect(page.getByText(/Vol SN205, arrivée prévue le/)).toBeVisible();
   check();
 });
+
+test('chauffeurs : planning de la semaine, absence et feuille de mission', async ({ page }) => {
+  const check = failOnErrors(page);
+  await login(page, 'direction');
+  await page.goto('/chauffeurs?vue=planning');
+  await expect(page.getByRole('tab', { name: 'Planning de la semaine' })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('button', { name: 'Semaine suivante' }).click();
+  await page.getByRole('button', { name: 'Semaine suivante' }).click();
+  await expect(page.locator('.drv-absence').first()).toBeVisible();
+  // Absence ajoutée depuis la fiche du chauffeur.
+  await page.getByRole('button', { name: 'Modou Faye' }).click();
+  const m = page.locator('.modal');
+  await m.getByLabel('Motif').selectOption('maladie');
+  await m.getByRole('button', { name: 'Ajouter l’absence' }).click();
+  await expect(m.getByText(/Maladie du/)).toBeVisible();
+  await m.getByRole('button', { name: 'Annuler' }).click();
+  // Feuille de mission du transfert aéroport de demain.
+  await page.goto('/reservations?vue=suivi');
+  await expect(page.getByRole('link', { name: /Feuille de mission à Ibrahima/ })).toHaveAttribute('href', /wa\.me\/.*AF718/);
+  check();
+});

@@ -6,6 +6,7 @@ import type { Quote, Season, VtcContract } from '../domain/types';
 import type { Client, Driver, Formula, Maintenance, Package, Rate, Reservation, Vehicle } from '../domain/types';
 import type { Store } from './store';
 import { normalizeFlight, validateFlight, type TransferKind } from '../domain/flight';
+import { driverBlocker, type DriverAbsence } from '../domain/drivers';
 
 export interface ReservationInput {
   vehicleId: string;
@@ -38,6 +39,7 @@ export interface DataSnapshot {
   clients?: Client[];
   vtc_contracts?: VtcContract[];
   seasons?: Season[];
+  driver_absences?: DriverAbsence[];
 }
 
 /** Le chauffeur est-il déjà pris sur cette période ? */
@@ -54,6 +56,8 @@ function checkCrew(snap: DataSnapshot, vehicle: DataSnapshot['vehicles'][number]
     const d = snap.drivers?.find((x) => x.id === input.driverId);
     if (!d || !d.active) throw new Error('Chauffeur introuvable ou inactif.');
     if (!input.withDriver) throw new Error('Un chauffeur est choisi mais la location est sans chauffeur.');
+    const blocker = driverBlocker(d, vehicle, input.start, input.end, snap.driver_absences ?? [], snap.vtc_contracts ?? []);
+    if (blocker) throw new Error(blocker);
     const busy = driverConflict(input.driverId, input.start, input.end, snap.reservations, ignoreId);
     if (busy) throw new Error(`${d.name} conduit déjà sur cette période (contrat ${busy.number}).`);
   }

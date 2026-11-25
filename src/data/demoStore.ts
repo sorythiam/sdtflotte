@@ -2,7 +2,7 @@ import { categoryPhotos } from '../domain/photos';
 import { defaultDailyDigest } from '../domain/alerts';
 import type { AuditEntry, Invitation, Member, Organization, Plan, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
 import { addPeriod, checkoutQuote, SAAS_VAT_RATE, vtcQuote, type BillingItem, type SubscriptionPayment } from '../domain/saas';
-import { seed, seedExpenses, seedDrivers, seedIncidents, seedInvoices, seedPackages, seedPlans, seedPortals, seedSeasons, seedVtc } from './seed';
+import { seed, seedExpenses, seedDrivers, seedIncidents, seedInvoices, seedPackages, seedPlans, seedPortals, seedSeasons, seedVtc, seedAbsences } from './seed';
 import { depositTarget, validateDeclaration, validatePortalForm, type DepositMethod, type PortalClient, type PortalInfo } from '../domain/portal';
 import { billingSettings as orgBilling, paidOn } from '../domain/billing';
 import { normalizeFlight } from '../domain/flight';
@@ -138,6 +138,7 @@ export class DemoStore implements Store {
         st.db.vtc_adjustments ??= [];
         if (!st.db.reservation_portals) Object.assign(st.db, seedPortals(st.db.reservations.filter((r) => r.id === 'r-9' && !st.db.payments.some((p) => p.reservationId === 'r-9' && p.kind === 'acompte'))));
         st.db.deposit_declarations ??= [];
+        st.db.driver_absences ??= seedAbsences();
         st.org.bookingSlug ??= 'sdt-demo';
         st.org.bookingEnabled ??= true;
         return st;

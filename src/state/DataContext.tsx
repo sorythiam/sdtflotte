@@ -7,6 +7,7 @@ import type { Invoice } from '../domain/billing';
 import type { Inspection } from '../domain/inspection';
 import type { Client, Driver, Expense, Incident, Maintenance, MaintenancePlan, Package, ReservationChange, VtcContract, VtcPayment, Payment, Rate, Reservation, Role, Vehicle, Season, Quote, VtcAdjustment } from '../domain/types';
 import type { DepositDeclaration, ReservationPortal } from '../domain/portal';
+import type { DriverAbsence } from '../domain/drivers';
 import { billingSettings } from '../domain/billing';
 import { idbGet, idbSet } from '../offline/idb';
 import { isNetworkError, onOutboxChange, pending } from '../offline/outbox';
@@ -51,12 +52,13 @@ export interface Data {
   vtc_adjustments: VtcAdjustment[];
   reservation_portals: ReservationPortal[];
   deposit_declarations: DepositDeclaration[];
+  driver_absences: DriverAbsence[];
   seasons: Season[];
   quotes: Quote[];
   bookingRequests: BookingRequest[];
 }
 
-const empty: Data = { vehicles: [], clients: [], rates: [], reservations: [], payments: [], maintenances: [], expenses: [], invoices: [], inspections: [], incidents: [], drivers: [], packages: [], reservation_changes: [], maintenance_plans: [], vtc_contracts: [], vtc_payments: [], vtc_adjustments: [], reservation_portals: [], deposit_declarations: [], seasons: [], quotes: [], bookingRequests: [] };
+const empty: Data = { vehicles: [], clients: [], rates: [], reservations: [], payments: [], maintenances: [], expenses: [], invoices: [], inspections: [], incidents: [], drivers: [], packages: [], reservation_changes: [], maintenance_plans: [], vtc_contracts: [], vtc_payments: [], vtc_adjustments: [], reservation_portals: [], deposit_declarations: [], driver_absences: [], seasons: [], quotes: [], bookingRequests: [] };
 
 interface Ctx {
   store: Store;
@@ -105,7 +107,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, incidents, drivers, packages, reservation_changes, maintenance_plans, vtc_contracts, vtc_payments, vtc_adjustments, reservation_portals, deposit_declarations, seasons, quotes, bookingRequests] = await Promise.all([
+      const [vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, incidents, drivers, packages, reservation_changes, maintenance_plans, vtc_contracts, vtc_payments, vtc_adjustments, reservation_portals, deposit_declarations, driver_absences, seasons, quotes, bookingRequests] = await Promise.all([
         store.list('vehicles'),
         store.list('clients'),
         store.list('rates'),
@@ -125,12 +127,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         store.list('vtc_adjustments').catch(() => [] as VtcAdjustment[]),
         store.list('reservation_portals').catch(() => [] as ReservationPortal[]),
         store.list('deposit_declarations').catch(() => [] as DepositDeclaration[]),
+        store.list('driver_absences').catch(() => [] as DriverAbsence[]),
         store.list('seasons').catch(() => [] as Season[]),
         store.list('quotes').catch(() => [] as Quote[]),
         // Réservées à la direction et aux agents : les autres profils reçoivent une liste vide.
         store.listBookingRequests().catch(() => [] as BookingRequest[]),
       ]);
-      const fresh = { vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, incidents, drivers, packages, reservation_changes, maintenance_plans, vtc_contracts, vtc_payments, vtc_adjustments, reservation_portals, deposit_declarations, seasons, quotes, bookingRequests };
+      const fresh = { vehicles, clients, rates, reservations, payments, maintenances, expenses, invoices, inspections, incidents, drivers, packages, reservation_changes, maintenance_plans, vtc_contracts, vtc_payments, vtc_adjustments, reservation_portals, deposit_declarations, driver_absences, seasons, quotes, bookingRequests };
       setData(fresh);
       setOffline(navigator.onLine === false);
       setNow(new Date());
