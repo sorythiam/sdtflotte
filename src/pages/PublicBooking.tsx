@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { FlightFields, NO_FLIGHT, type FlightValue } from '../components/FlightFields';
+import { normalizeFlight, suggestedPickup } from '../domain/flight';
 import { CarPlaceholder, Lightbox } from '../components/photos';
 import { Logo, Wordmark } from '../components/ui';
 import type { PublicBookingInfo, PublicCategory } from '../domain/booking';
@@ -33,6 +35,7 @@ export function PublicBooking({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [flight, setFlight] = useState<FlightValue>(NO_FLIGHT);
 
   useEffect(() => {
     store.publicBookingInfo(slug).then(setInfo).catch(() => setInfo(null));
@@ -63,10 +66,13 @@ export function PublicBooking({ slug }: { slug: string }) {
     e.preventDefault();
     setError(null);
     const req = {
-      category: category ?? '', start: dates.start, end: dates.end, withDriver: driverFor(chosen), passengers: pax || null,
+      category: category ?? '', start: dates.start, end: dates.end, withDriver: driverFor(chosen) || !!flight.transferKind, passengers: pax || null,
       name: form.name, phone: form.phone, email: form.email.trim() || null, message: form.message.trim() || null,
       companyName: forCompany ? form.companyName : null,
       companyTaxId: forCompany ? form.companyTaxId.trim() || null : null,
+      transferKind: flight.transferKind,
+      flightNumber: flight.transferKind ? normalizeFlight(flight.flightNumber) : null,
+      flightAt: flight.transferKind && flight.flightAt ? fromLocalInput(flight.flightAt) : null,
     };
     const err = validateBookingRequest(req, new Date());
     if (err) return setError(err);
@@ -126,7 +132,7 @@ export function PublicBooking({ slug }: { slug: string }) {
             <h2 id="quand">1. Vos dates</h2>
             <div className="grid-4">
               <label className="field">
-                Départ
+                {flight.transferKind ? 'Prise en charge' : 'Départ'}
                 <input type="datetime-local" value={toLocalInput(dates.start)} onChange={(e) => e.target.value && setDates({ ...dates, start: fromLocalInput(e.target.value) })} />
               </label>
               <label className="field">
@@ -143,6 +149,12 @@ export function PublicBooking({ slug }: { slug: string }) {
               </label>
             </div>
             {!validDates && <p className="error-text" role="alert">La date de retour doit être après la date de départ.</p>}
+            <FlightFields value={flight} onChange={setFlight}
+              onFlightTime={(local, kind) => {
+                const start = suggestedPickup(kind, fromLocalInput(local));
+                const end = Date.parse(dates.end) > Date.parse(start) ? dates.end : new Date(Date.parse(start) + 3 * 3600000).toISOString();
+                setDates({ start, end });
+              }} />
           </section>
 
           <section className="card" aria-labelledby="quoi">

@@ -1,3 +1,4 @@
+import { flightLabel, flightTrackUrl } from '../domain/flight';
 import { VerificationBadge } from '../components/VerificationBadge';
 import { useBilling } from '../state/useBilling';
 import { useMemo, useState } from 'react';
@@ -59,7 +60,7 @@ export function BookingRequests() {
           const first = req.name.split(' ')[0];
           const waText =
             req.status === 'acceptee' && res
-              ? `Bonjour ${first}, votre réservation ${req.category} du ${dateTime(req.start)} au ${dateTime(req.end)} est confirmée (contrat ${res.number}, total ${money(res.total)}, caution ${money(res.caution)}). ${org.name}`
+              ? `Bonjour ${first}, votre réservation ${req.category}${req.flightNumber ? ` (vol ${req.flightNumber})` : ''} du ${dateTime(req.start)} au ${dateTime(req.end)} est confirmée (contrat ${res.number}, total ${money(res.total)}, caution ${money(res.caution)}). ${org.name}`
               : req.status === 'refusee'
                 ? `Bonjour ${first}, merci pour votre demande. Malheureusement nous ne pouvons pas y donner suite${req.declineReason ? ` : ${req.declineReason}` : ''}. ${org.name}`
                 : `Bonjour ${first}, nous avons bien reçu votre demande de ${req.category} du ${dateTime(req.start)} au ${dateTime(req.end)}. `;
@@ -89,6 +90,9 @@ export function BookingRequests() {
               <div className="grid-3 small">
                 <div><span className="muted">Demande</span><br /><strong>{req.category}</strong>{req.withDriver ? ' avec chauffeur' : ''}{req.passengers ? `, ${req.passengers} passager${req.passengers > 1 ? 's' : ''}` : ''}</div>
                 <div><span className="muted">Période</span><br />{dateTime(req.start)} → {dateTime(req.end)}</div>
+                {flightLabel(req) && (
+                  <div style={{ gridColumn: '1 / -1' }}><span className="muted">Transfert aéroport</span><br /><strong>{flightLabel(req)}</strong> · <a href={flightTrackUrl(req.flightNumber!)} target="_blank" rel="noreferrer">suivre le vol</a></div>
+                )}
                 <div><span className="muted">Prix au tarif actuel</span><br />{q ? <><strong>{money(q.total)}</strong> · {q.days} j · caution {money(q.caution)}</> : 'Pas de tarif pour cette catégorie'}</div>
               </div>
               {req.message && <p className="small" style={{ margin: 0, whiteSpace: 'pre-wrap', background: 'var(--sable)', padding: 'var(--space-3)', borderRadius: 8 }}>{req.message}</p>}
@@ -152,6 +156,7 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
         ));
       const r = await createReservation(store, data, {
         vehicleId, clientId: client.id, start: req.start, end: req.end, withDriver: req.withDriver, passengers: req.passengers ?? null,
+        transferKind: req.transferKind ?? null, flightNumber: req.flightNumber ?? null, flightAt: req.flightAt ?? null,
         notes: [notes.trim(), 'Demande reçue en ligne.'].filter(Boolean).join('\n'),
       }, new Date(), { ...billing, clients: known ? data.clients : [...data.clients, client] });
       await store.updateBookingRequest(req.id, { status: 'acceptee', reservationId: r.id });
@@ -169,7 +174,7 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
   return (
     <Modal title={`Réservation pour ${req.companyName ?? req.name}`} onClose={onClose}>
       <p className="small" style={{ margin: 0 }}>
-        {req.category}{req.withDriver ? ' avec chauffeur' : ''}, du {dateTime(req.start)} au {dateTime(req.end)}.{' '}
+        {req.category}{req.withDriver ? ' avec chauffeur' : ''}, du {dateTime(req.start)} au {dateTime(req.end)}.{flightLabel(req) ? ` ${flightLabel(req)}.` : ''}{' '}
         {known ? (
           <>Client existant : <strong>{known.name}</strong>.</>
         ) : company ? (

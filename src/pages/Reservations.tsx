@@ -9,6 +9,8 @@ import { dateShort, fromLocalInput, money, time, toLocalInput } from '../domain/
 import { balanceDue, findConflicts, lateDays } from '../domain/rules';
 import type { Formula, ReservationStatus } from '../domain/types';
 import { useData } from '../state/DataContext';
+import { FlightFields, NO_FLIGHT, type FlightValue } from '../components/FlightFields';
+import { flightWarning, suggestedPickup } from '../domain/flight';
 import { followUps } from '../domain/portal';
 import { FollowUp } from './FollowUp';
 
@@ -148,6 +150,7 @@ function NewReservation({ onClose }: { onClose: () => void }) {
   const [itinerary, setItinerary] = useState('');
   const [crossBorder, setCrossBorder] = useState('');
   const [notes, setNotes] = useState('');
+  const [flight, setFlight] = useState<FlightValue>(NO_FLIGHT);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -158,7 +161,7 @@ function NewReservation({ onClose }: { onClose: () => void }) {
   const validPeriod = !!sIso && !!eIso && Date.parse(eIso) > Date.parse(sIso);
   const pax = Number(passengers) || 0;
   const vehicle = data.vehicles.find((v) => v.id === vehicleId);
-  const driverOn = withDriver || !!vehicle?.driverRequired || formula === 'forfait';
+  const driverOn = withDriver || !!vehicle?.driverRequired || formula === 'forfait' || !!flight.transferKind;
 
   // Véhicules libres sur la période et assez grands pour le groupe.
   const free = useMemo(
@@ -201,6 +204,7 @@ function NewReservation({ onClose }: { onClose: () => void }) {
           vehicleId, clientId, start: sIso, end: eIso, withDriver: driverOn, notes: notes || null, formula, packageId: packageId || null,
           passengers: pax || null, driverId: driverOn ? driverId || null : null, missionFees: Number(missionFees) || 0, fuelIncluded,
           itinerary, crossBorder,
+          transferKind: flight.transferKind, flightNumber: flight.flightNumber, flightAt: flight.flightAt ? fromLocalInput(flight.flightAt) : null,
         },
         new Date(), billing,
       );
@@ -239,10 +243,15 @@ function NewReservation({ onClose }: { onClose: () => void }) {
             {packages.length === 0 && <span className="hint">Aucun forfait : créez-les dans Flotte › Tarifs.</span>}
           </label>
         )}
+        <FlightFields value={flight} onChange={setFlight}
+          onFlightTime={(local, kind) => setStart(toLocalInput(suggestedPickup(kind, fromLocalInput(local))))} />
         <div className="grid-2">
           <label className="field">
-            Départ
+            {flight.transferKind ? 'Prise en charge' : 'Départ'}
             <input type="datetime-local" required value={start} onChange={(e) => setStart(e.target.value)} />
+            {sIso && flight.flightAt && flightWarning({ transferKind: flight.transferKind, flightAt: fromLocalInput(flight.flightAt) }, sIso) && (
+              <span className="hint" style={{ color: 'var(--ocre-text)' }}>{flightWarning({ transferKind: flight.transferKind, flightAt: fromLocalInput(flight.flightAt) }, sIso)}</span>
+            )}
           </label>
           {formula === 'forfait' ? (
             <div className="field">
@@ -295,7 +304,7 @@ function NewReservation({ onClose }: { onClose: () => void }) {
         <fieldset className="stack form-group">
           <legend>Chauffeur et voyage</legend>
           <label className="check">
-            <input type="checkbox" checked={driverOn} disabled={!!vehicle?.driverRequired || formula === 'forfait'} onChange={(e) => setWithDriver(e.target.checked)} />
+            <input type="checkbox" checked={driverOn} disabled={!!vehicle?.driverRequired || formula === 'forfait' || !!flight.transferKind} onChange={(e) => setWithDriver(e.target.checked)} />
             Avec chauffeur{vehicle?.driverRequired ? ' (obligatoire pour ce véhicule)' : formula === 'forfait' ? ' (inclus dans le forfait)' : ''}
           </label>
           {driverOn && (

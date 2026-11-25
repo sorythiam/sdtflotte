@@ -194,13 +194,22 @@ export function followMessage(
   kind: 'rappel_depart' | 'rappel_retour' | 'prolongation' | 'retard',
   clientName: string,
   orgName: string,
-  r: Pick<Reservation, 'number' | 'start' | 'end' | 'dailyRate'>,
+  r: Pick<Reservation, 'number' | 'start' | 'end' | 'dailyRate'> & Partial<Pick<Reservation, 'transferKind' | 'flightNumber' | 'flightAt'>>,
   vehicle: Pick<Vehicle, 'brand' | 'model' | 'plate'> | undefined,
   now: Date,
 ): string {
   const hello = `Bonjour ${firstName(clientName)},`;
   const car = vehicle ? `${vehicle.brand} ${vehicle.model} (${vehicle.plate})` : 'le véhicule';
   const sign = `\n${orgName}`;
+  if (kind === 'rappel_depart' && r.flightNumber && r.flightAt) {
+    const day = isoDay(now) === localDay(r.start) ? 'aujourd’hui' : 'demain';
+    if (r.transferKind === 'arrivee') {
+      return `${hello} votre chauffeur vous attendra à l’aéroport ${day} à l’arrivée de votre vol ${r.flightNumber}, prévue à ${hourLabel(r.flightAt)} (réservation ${r.number}). Prévenez-nous si votre vol change d’horaire.${sign}`;
+    }
+    if (r.transferKind === 'depart') {
+      return `${hello} nous passerons vous prendre ${day} à ${hourLabel(r.start)} pour votre vol ${r.flightNumber} de ${hourLabel(r.flightAt)} (réservation ${r.number}). Merci d’être prêt avec vos bagages.${sign}`;
+    }
+  }
   switch (kind) {
     case 'rappel_depart':
       return `${hello} nous vous attendons ${isoDay(now) === localDay(r.start) ? 'aujourd’hui' : 'demain'} à ${hourLabel(r.start)} pour la remise de ${car} (réservation ${r.number}). Pensez à votre pièce d’identité et à votre permis.${sign}`;

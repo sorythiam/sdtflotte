@@ -13,6 +13,7 @@ import { dealFor, kmIncludedFor, priceFor } from '../domain/tariff';
 import { payeeLines, payState, payStatusLabel, termsFor } from '../domain/billing';
 import { COUNTRY_CALLING_CODE, whatsappLink } from '../domain/booking';
 import { PortalCard } from '../components/PortalCard';
+import { flightLabel, flightTrackUrl } from '../domain/flight';
 
 export const methodLabel: Record<PaymentMethod, string> = {
   especes: 'Espèces',
@@ -165,6 +166,9 @@ export function ReservationDetail() {
                 {rate && <tr><td className="muted">Kilométrage inclus</td><td className="right">{kmIncl === null ? 'Non compté (forfait)' : `${num(kmIncl)} km, puis ${money(rate.extraKm)}/km`}</td></tr>}
                 <tr><td className="muted">Carburant</td><td className="right">{r.fuelIncluded ? 'Inclus' : 'À la charge du client'}</td></tr>
                 {r.itinerary && <tr><td className="muted">Itinéraire</td><td className="right">{r.itinerary}</td></tr>}
+                {flightLabel(r) && (
+                  <tr><td className="muted">Transfert aéroport</td><td className="right">{flightLabel(r)}<br /><a className="small" href={flightTrackUrl(r.flightNumber!)} target="_blank" rel="noreferrer">Suivre le vol en direct</a></td></tr>
+                )}
                 <tr><td className="muted">Sortie du territoire</td><td className="right">{r.crossBorder ? `Autorisée : ${r.crossBorder}` : 'Non autorisée'}</td></tr>
                 {r.fees > 0 && <tr><td className="muted">Frais constatés au retour</td><td className="right num">{money(r.fees)}</td></tr>}
                 <tr>

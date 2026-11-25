@@ -9,6 +9,7 @@ import {
 } from '../domain/portal';
 import type { Reservation } from '../domain/types';
 import { useData } from '../state/DataContext';
+import { flightLabel, flightTrackUrl } from '../domain/flight';
 
 const KIND: Record<FollowItem['kind'], [string, string]> = {
   retard: ['Pas rentré', 'badge-danger'],
@@ -70,6 +71,9 @@ export function FollowUp() {
                     <span className="small muted">{r.number}</span>
                   </div>
                   <span className="small">{v ? `${v.brand} ${v.model} · ${v.plate}` : ''} · {when}</span>
+                  {flightLabel(r) && (
+                    <span className="small"><strong>{flightLabel(r)}</strong> · <a href={flightTrackUrl(r.flightNumber!)} target="_blank" rel="noreferrer">suivre le vol</a></span>
+                  )}
                   <div className="row" style={{ gap: 'var(--space-2)' }}>
                     {x.kind === 'depart' && (
                       <>

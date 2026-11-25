@@ -1,3 +1,4 @@
+import { validateFlight, type TransferKind } from './flight';
 // Réservation en ligne : page publique de l'entreprise, demandes validées par un agent.
 
 import { isActive, overlaps } from './rules';
@@ -18,13 +19,16 @@ export interface BookingRequest {
   companyName?: string | null; // réservation pour le compte d'une entreprise
   companyTaxId?: string | null; // NINEA ou équivalent, facultatif
   passengers?: number | null;
+  transferKind?: TransferKind | null; // transfert aéroport
+  flightNumber?: string | null;
+  flightAt?: string | null;
   status: BookingStatus;
   reservationId: string | null;
   declineReason: string | null;
   createdAt: string;
 }
 
-export type BookingRequestInput = Pick<BookingRequest, 'category' | 'start' | 'end' | 'withDriver' | 'name' | 'phone' | 'email' | 'message' | 'companyName' | 'companyTaxId' | 'passengers'>;
+export type BookingRequestInput = Pick<BookingRequest, 'category' | 'start' | 'end' | 'withDriver' | 'name' | 'phone' | 'email' | 'message' | 'companyName' | 'companyTaxId' | 'passengers' | 'transferKind' | 'flightNumber' | 'flightAt'>;
 
 export interface PublicCategory {
   category: string;
@@ -113,7 +117,7 @@ export function validateBookingRequest(r: BookingRequestInput, now: Date): strin
   }
   if ((r.companyTaxId ?? '').length > 40) return 'Identifiant fiscal trop long.';
   if (r.passengers != null && !(Number.isInteger(r.passengers) && r.passengers >= 1 && r.passengers <= 99)) return 'Nombre de passagers invalide.';
-  return null;
+  return validateFlight(r, r.start);
 }
 
 /** Retrouve un client existant par téléphone (9 derniers chiffres) ou par email. */

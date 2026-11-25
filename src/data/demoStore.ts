@@ -5,6 +5,7 @@ import { addPeriod, checkoutQuote, SAAS_VAT_RATE, vtcQuote, type BillingItem, ty
 import { seed, seedExpenses, seedDrivers, seedIncidents, seedInvoices, seedPackages, seedPlans, seedPortals, seedSeasons, seedVtc } from './seed';
 import { depositTarget, validateDeclaration, validatePortalForm, type DepositMethod, type PortalClient, type PortalInfo } from '../domain/portal';
 import { billingSettings as orgBilling, paidOn } from '../domain/billing';
+import { normalizeFlight } from '../domain/flight';
 import { invoicePrefix, nextInvoiceNumber, type Invoice } from '../domain/billing';
 import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
 import {
@@ -386,8 +387,9 @@ export class DemoStore implements Store {
     const mustDrive = inCat.length > 0 && inCat.every((v) => v.driverRequired);
     this.state.bookingRequests = [
       {
-        ...req, withDriver: req.withDriver || mustDrive, passengers: req.passengers ?? null, id: uid(), name: req.name.trim(), phone: req.phone.trim(), email: req.email?.trim() || null,
-        message: req.message?.trim() || null, companyName: req.companyName?.trim() || null, companyTaxId: req.companyTaxId?.trim() || null, status: 'nouvelle', reservationId: null, declineReason: null, createdAt: new Date().toISOString(),
+        ...req, withDriver: req.withDriver || mustDrive || !!req.transferKind, passengers: req.passengers ?? null, id: uid(), name: req.name.trim(), phone: req.phone.trim(), email: req.email?.trim() || null,
+        message: req.message?.trim() || null, companyName: req.companyName?.trim() || null, companyTaxId: req.companyTaxId?.trim() || null,
+        transferKind: req.transferKind ?? null, flightNumber: req.transferKind ? normalizeFlight(req.flightNumber ?? '') : null, flightAt: req.transferKind ? req.flightAt ?? null : null, status: 'nouvelle', reservationId: null, declineReason: null, createdAt: new Date().toISOString(),
       },
       ...(this.state.bookingRequests ?? []),
     ];

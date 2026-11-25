@@ -5,6 +5,7 @@ import { dealFor, fitsPassengers, passengerSeats, priceFor } from '../domain/tar
 import type { Quote, Season, VtcContract } from '../domain/types';
 import type { Client, Driver, Formula, Maintenance, Package, Rate, Reservation, Vehicle } from '../domain/types';
 import type { Store } from './store';
+import { normalizeFlight, validateFlight, type TransferKind } from '../domain/flight';
 
 export interface ReservationInput {
   vehicleId: string;
@@ -21,6 +22,9 @@ export interface ReservationInput {
   fuelIncluded?: boolean;
   itinerary?: string | null;
   crossBorder?: string | null;
+  transferKind?: TransferKind | null;
+  flightNumber?: string | null;
+  flightAt?: string | null;
   agreedTotal?: number; // prix convenu (devis accepté) : remplace le calcul de la grille
 }
 
@@ -144,6 +148,8 @@ export async function createReservation(
   if (!(Date.parse(input.end) > Date.parse(input.start))) {
     throw new Error('La date de retour doit être après la date de départ.');
   }
+  const flightError = validateFlight(input, input.start);
+  if (flightError) throw new Error(flightError);
   const conflicts = findConflicts(input.vehicleId, input.start, input.end, snap.reservations, snap.maintenances);
   if (conflicts.length) {
     const c = conflicts[0];
@@ -191,6 +197,9 @@ export async function createReservation(
     fuelIncluded: !!input.fuelIncluded,
     itinerary: input.itinerary?.trim() || null,
     crossBorder: input.crossBorder?.trim() || null,
+    ...(input.transferKind
+      ? { transferKind: input.transferKind, flightNumber: normalizeFlight(input.flightNumber ?? ''), flightAt: input.flightAt ?? null }
+      : {}),
   });
   // La réservation validée est facturée tout de suite, aux modalités du client.
   if (billing) await invoiceReservation(store, billing, created, now);

@@ -1,3 +1,4 @@
+import { flightLabel } from '../domain/flight';
 import { FUEL_LABELS, ZONES } from '../domain/inspection';
 import { payeeLines, termsFor } from '../domain/billing';
 import { useBilling } from '../state/useBilling';
@@ -140,6 +141,7 @@ export function Contract() {
                 <tr><th>Chauffeur</th><td>{driver ? `${driver.name} · ${driver.phone}${driver.licenseCategory ? ` · permis ${driver.licenseCategory}` : ''}` : r.withDriver ? blank : '—'}</td><th>Passagers</th><td>{r.passengers ?? blank}</td></tr>
               )}
               {r.itinerary && (<tr><th>Itinéraire</th><td colSpan={3}>{r.itinerary}</td></tr>)}
+              {flightLabel(r) && (<tr><th>Transfert aéroport</th><td colSpan={3}>{flightLabel(r)}</td></tr>)}
               <tr><th>Carburant</th><td>{r.fuelIncluded ? 'Inclus dans le prix' : 'À la charge du client'}</td><th>Sortie du territoire</th><td>{r.crossBorder ? `Autorisée : ${r.crossBorder}` : 'Non autorisée'}</td></tr>
               <tr><th>Départ</th><td>{dateTime(r.start)}</td><th>Retour prévu</th><td>{dateTime(r.end)}</td></tr>
               <tr><th>Kilométrage départ</th><td>{r.mileageOut != null ? `${num(r.mileageOut)} km` : `${blank} km`}</td><th>Kilométrage retour</th><td>{r.mileageIn != null ? `${num(r.mileageIn)} km` : `${blank} km`}</td></tr>

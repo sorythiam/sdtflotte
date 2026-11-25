@@ -245,6 +245,10 @@ export interface Reservation {
   fuelIncluded?: boolean;
   itinerary?: string | null;
   crossBorder?: string | null; // pays où le véhicule peut aller ; null = territoire national seulement
+  // Transfert aéroport : vol du client
+  transferKind?: import('./flight').TransferKind | null;
+  flightNumber?: string | null;
+  flightAt?: string | null;
 }
 
 export type Formula = 'jour' | 'demi_journee' | 'forfait';

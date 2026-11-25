@@ -84,6 +84,11 @@ export function seed(now = new Date()): Db {
     { ...r('v-hiace', 'c-sante', [5, 8], [9, 18], 'reservee', 95000, 400000), withDriver: true, driverId: 'd-2', passengers: 14, itinerary: 'Dakar, Kaolack, Tambacounda', missionFees: 60000 },
     r('v-lc', 'c-diop', [3, 9], [6, 18], 'reservee', 60000, 400000),
     r('v-picanto', 'c-ndiaye', [1, 9], [2, 18], 'reservee', 25000, 150000),
+    // Transfert aéroport : accueil du client à l'arrivée de son vol, demain.
+    {
+      ...r('v-prado', 'c-teranga', [1, 14], [1, 17], 'reservee', 30000, 0), withDriver: true, driverId: 'd-2', passengers: 3, formula: 'forfait' as const,
+      packageLabel: 'Transfert aéroport AIBD ↔ Dakar', itinerary: 'AIBD → Hôtel Radisson, Dakar', transferKind: 'arrivee' as const, flightNumber: 'AF718', flightAt: at(now, 1, 14),
+    },
   ];
 
   for (const x of reservations) x.total += x.missionFees ?? 0; // frais de mission inclus dans le total

@@ -263,6 +263,7 @@ export class SupabaseStore implements Store {
       p_slug: slug, p_category: req.category, p_start: req.start, p_end: req.end, p_with_driver: req.withDriver,
       p_name: req.name, p_phone: req.phone, p_email: req.email, p_message: req.message,
       p_company_name: req.companyName ?? null, p_company_tax_id: req.companyTaxId ?? null, p_passengers: req.passengers ?? null,
+      p_transfer_kind: req.transferKind ?? null, p_flight_number: req.flightNumber ?? null, p_flight_at: req.flightAt ?? null,
     });
     if (error) throw friendly(error);
   }
@@ -297,7 +298,7 @@ export class SupabaseStore implements Store {
   async listBookingRequests(): Promise<BookingRequest[]> {
     const { data, error } = await this.sb
       .from('booking_requests')
-      .select('id, category, start, end, with_driver, name, phone, email, message, company_name, company_tax_id, passengers, status, reservation_id, decline_reason, created_at')
+      .select('id, category, start, end, with_driver, name, phone, email, message, company_name, company_tax_id, passengers, transfer_kind, flight_number, flight_at, status, reservation_id, decline_reason, created_at')
       .eq('org_id', this.orgId)
       .order('created_at', { ascending: false })
       .limit(300);
