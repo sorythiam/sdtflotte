@@ -1,4 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { utmFrom } from '../domain/platform';
+import { startAdTracking, trackSignup } from '../lib/tracking';
 import { ErrorBox, Logo, Wordmark } from '../components/ui';
 import { useData } from '../state/DataContext';
 
@@ -6,7 +8,11 @@ export function Login() {
   const { store, setSession } = useData();
   const params = new URLSearchParams(window.location.search);
   const invited = params.has('invitation');
-  const [tab, setTab] = useState<'login' | 'signup' | 'join'>(invited ? 'join' : 'login');
+  // Arrivée depuis une publicité ou le site : on ouvre directement l'inscription.
+  const fromAd = params.has('essai') || !!utmFrom(window.location.search);
+  const [tab, setTab] = useState<'login' | 'signup' | 'join'>(invited ? 'join' : fromAd ? 'signup' : 'login');
+  const [contactName, setContactName] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
   const [email, setEmail] = useState(params.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [orgName, setOrgName] = useState('');
@@ -16,6 +22,17 @@ export function Login() {
   const [forgot, setForgot] = useState(false);
   const [sent, setSent] = useState(false);
   const demo = store.mode === 'demo';
+
+  useEffect(() => {
+    // Publicité d'origine, gardée le temps de la visite pour l'attacher à l'inscription.
+    const utm = utmFrom(window.location.search);
+    try {
+      if (utm) sessionStorage.setItem('yoonfleet-utm', utm);
+    } catch {
+      /* navigation privée */
+    }
+    if (!invited) startAdTracking();
+  }, [invited]);
 
   async function sendReset(e: FormEvent) {
     e.preventDefault();
@@ -66,7 +83,17 @@ export function Login() {
     setBusy(true);
     try {
       if (tab === 'login') await store.signIn(email, password);
-      else await store.signUp(email, password, tab === 'join' ? '' : orgName, country);
+      else {
+        if (tab === 'signup' && !demo && contactPhone.replace(/\D/g, '').length < 8) throw new Error('Indiquez votre numéro WhatsApp : notre équipe vous appelle pour vous aider à démarrer.');
+        let source: string | null = null;
+        try {
+          source = sessionStorage.getItem('yoonfleet-utm');
+        } catch {
+          /* navigation privée */
+        }
+        await store.signUp(email, password, tab === 'join' ? '' : orgName, country, tab === 'signup' ? { contactName: contactName.trim(), contactPhone: contactPhone.trim(), source } : undefined);
+        if (tab === 'signup') trackSignup();
+      }
       const s = await store.session();
       if (!s) {
         await store.signOut();
@@ -145,6 +172,17 @@ export function Login() {
                   <option value="CM">Cameroun</option>
                 </select>
               </label>
+              <label className="field">
+                Votre nom
+                <input required={!demo} minLength={2} autoComplete="name" value={contactName} onChange={(e) => setContactName(e.target.value)} />
+              </label>
+              <label className="field">
+                Numéro WhatsApp
+                <input type="tel" required={!demo} inputMode="tel" autoComplete="tel" placeholder="77 123 45 67" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} />
+              </label>
+              <p className="hint" style={{ gridColumn: '1 / -1', margin: 0 }}>
+                Un conseiller Yoon Fleet vous appelle pour configurer votre espace avec vous. Gratuit, sans engagement.
+              </p>
             </div>
           )}
           <label className="field">

@@ -58,6 +58,7 @@ const pages = {
   Subscription: () => import('./pages/Subscription'),
   QuotePage: () => import('./pages/QuotePage'),
   GroupPage: () => import('./pages/GroupPage'),
+  PlatformConsole: () => import('./pages/PlatformConsole'),
   Profitability: () => import('./pages/Profitability'),
 };
 const Clients = lazy(() => pages.Clients().then((m) => ({ default: m.Clients })));
@@ -91,6 +92,7 @@ const SaasInvoicePage = lazy(() => pages.Subscription().then((m) => ({ default: 
 const Quotes = lazy(() => pages.Quotes().then((m) => ({ default: m.Quotes })));
 const QuotePage = lazy(() => pages.QuotePage().then((m) => ({ default: m.QuotePage })));
 const GroupPage = lazy(() => pages.GroupPage().then((m) => ({ default: m.GroupPage })));
+const PlatformConsole = lazy(() => pages.PlatformConsole().then((m) => ({ default: m.PlatformConsole })));
 const Profitability = lazy(() => pages.Profitability().then((m) => ({ default: m.Profitability })));
 
 /** Une fois l'application affichée, on charge les autres pages en tâche de fond :
@@ -133,6 +135,7 @@ function App() {
         <Route path="devis" element={<Quotes />} />
         <Route path="devis/:id" element={<QuotePage />} />
         <Route path="dossiers/:id" element={<GroupPage />} />
+        <Route path="console" element={<PlatformConsole />} />
         <Route path="rentabilite" element={<Profitability />} />
         <Route path="reservations/:id" element={<ReservationDetail />} />
         <Route path="reservations/:id/contrat" element={<Contract />} />

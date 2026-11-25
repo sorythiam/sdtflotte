@@ -86,6 +86,14 @@ export function Layout() {
   }
 
   const orgLogo = org.contract?.logo ?? null;
+  const [staff, setStaff] = useState(false);
+  useEffect(() => {
+    let live = true;
+    store.isPlatformStaff().then((ok) => live && setStaff(ok)).catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [store, session.userEmail]);
   const account = (
     <div className="side-foot">
       <span>
@@ -101,6 +109,7 @@ export function Layout() {
       <span className="side-user">
         {session.userEmail} · {roleLabel[role]}
       </span>
+      {staff && <NavLink to="/console" className="side-console">Console Yoon Fleet</NavLink>}
       <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
         {store.mode === 'demo' && (
           <button type="button" className="btn btn-sm btn-link-quiet" onClick={resetDemo}>

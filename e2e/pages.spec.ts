@@ -121,3 +121,32 @@ test('dossier de groupe : plusieurs véhicules, relevé et paiement global', asy
   await expect(page.locator('table.data tbody tr')).toHaveCount(2);
   check();
 });
+
+test('console Yoon Fleet : inscriptions à appeler et suivi', async ({ page }) => {
+  const check = failOnErrors(page);
+  await page.goto('/');
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.locator('input[type=email]').fill('tbg@yoonfleet.com');
+  await page.locator('input[type=text]').fill('admin');
+  await page.getByRole('button', { name: 'Se connecter' }).last().click();
+  await page.getByRole('link', { name: 'Console Yoon Fleet' }).first().click();
+  await expect(page.getByRole('heading', { name: 'Inscriptions et essais' })).toBeVisible();
+  const first = page.locator('table.data tbody tr').first();
+  await expect(first).toContainText('Dakar Auto Location');
+  await expect(first.getByRole('link', { name: 'WhatsApp' })).toHaveAttribute('href', /wa\.me\/221/);
+  await first.getByRole('button', { name: 'Noter l’appel' }).click();
+  await page.locator('.modal').getByLabel('Note').fill('8 véhicules, saisis ensemble.');
+  await page.locator('.modal').getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByText('Suivi enregistré')).toBeVisible();
+  await page.getByRole('button', { name: 'Toutes les inscriptions' }).click();
+  await expect(page.getByText('8 véhicules, saisis ensemble.')).toBeVisible();
+  check();
+});
+
+test('l’inscription depuis une publicité demande le nom et le WhatsApp du gérant', async ({ page }) => {
+  await page.goto('/?utm_source=facebook&utm_campaign=lancement');
+  await expect(page.getByRole('tab', { name: 'Essai gratuit 30 jours' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByLabel('Numéro WhatsApp')).toBeVisible();
+  await expect(page.getByLabel('Votre nom')).toBeVisible();
+});

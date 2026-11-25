@@ -7,7 +7,8 @@ import { depositTarget, validateDeclaration, validatePortalForm, type DepositMet
 import { billingSettings as orgBilling, paidOn } from '../domain/billing';
 import { normalizeFlight } from '../domain/flight';
 import { invoicePrefix, nextInvoiceNumber, type Invoice } from '../domain/billing';
-import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
+import type { NewRow, OrgPatch, Row, SessionInfo, SignupContact, Store } from './store';
+import type { FollowStatus, SignupRow } from '../domain/platform';
 import {
   availableByCategory, SLUG_RE, validateBookingRequest,
   type BookingRequest, type BookingRequestInput, type BookingStatus, type PublicBookingInfo,
@@ -26,6 +27,21 @@ interface DemoState {
   subscriptionPayments?: SubscriptionPayment[];
   bookingRequests?: BookingRequest[];
   audit?: AuditEntry[];
+  signups?: SignupRow[];
+}
+
+/** Démo : quelques inscriptions fictives pour montrer la console de l'équipe Yoon Fleet. */
+function seedSignups(now = new Date()): SignupRow[] {
+  const ago = (h: number) => new Date(now.getTime() - h * 3600000).toISOString();
+  const inDays = (d: number) => new Date(now.getTime() + d * 86400000).toISOString();
+  const base = { country: 'SN', plan: 'essai', paidUntil: null, members: 1, lastActivity: null, note: null, nextCall: null, followupAt: null, clients: 0 };
+  return [
+    { ...base, orgId: 'o-1', name: 'Dakar Auto Location', createdAt: ago(2), trialEndsAt: inDays(30), contactName: 'Ousmane Fall', contactPhone: '77 451 22 10', adminEmail: 'ousmane@dakarauto.sn', signupSource: 'facebook|lancement-dec', vehicles: 0, reservations: 0, status: 'a_appeler' },
+    { ...base, orgId: 'o-2', name: 'Teranga Cars', createdAt: ago(30), trialEndsAt: inDays(29), contactName: 'Awa Ndiaye', contactPhone: '78 220 14 55', adminEmail: 'awa@terangacars.sn', signupSource: 'linkedin|agences-tourisme', vehicles: 6, reservations: 0, status: 'rappeler', note: 'Rappeler demain 10h, veut saisir ses véhicules avec nous.', nextCall: now.toISOString().slice(0, 10) },
+    { ...base, orgId: 'o-3', name: 'Saly Rent', createdAt: ago(24 * 9), trialEndsAt: inDays(21), contactName: 'Pape Sow', contactPhone: '76 900 33 21', adminEmail: 'pape@salyrent.sn', signupSource: 'facebook|lancement-dec', vehicles: 12, clients: 8, reservations: 5, lastActivity: ago(5), status: 'onboarde', note: 'Formé le 3e jour, très actif.' },
+    { ...base, orgId: 'o-4', name: 'Abidjan Mobility', country: 'CI', createdAt: ago(24 * 25), trialEndsAt: inDays(5), contactName: 'Koffi Yao', contactPhone: '07 08 12 34 56', adminEmail: 'koffi@abjmobility.ci', signupSource: null, vehicles: 3, reservations: 0, status: 'injoignable' },
+    { ...base, orgId: 'o-5', name: 'Thiès Location', createdAt: ago(24 * 40), trialEndsAt: inDays(-10), paidUntil: inDays(355), plan: 'pro', contactName: 'Mariama Diop', contactPhone: '77 100 20 30', adminEmail: 'mariama@thiesloc.sn', signupSource: 'facebook|lancement-dec', vehicles: 15, clients: 40, reservations: 62, lastActivity: ago(3), status: 'onboarde' },
+  ];
 }
 
 /** Libellé lisible d'une ligne pour le journal. */
@@ -178,7 +194,7 @@ export class DemoStore implements Store {
     this.save();
   }
 
-  async signUp(email: string, _password: string, orgName: string, country: string): Promise<void> {
+  async signUp(email: string, _password: string, orgName: string, country: string, _contact?: SignupContact): Promise<void> {
     if (!orgName) {
       // Démo : rejoindre l'équipe d'exemple avec le profil de l'invitation, agent par défaut.
       const inv = (this.state.invitations ?? []).find((i) => i.email === email.trim().toLowerCase());
@@ -205,6 +221,24 @@ export class DemoStore implements Store {
       rowId: (row?.id as string) ?? null, action, label: rowLabel(row), changes,
     };
     this.state.audit = [entry, ...(this.state.audit ?? [])].slice(0, 500);
+  }
+
+  /** Démo : l'adresse tbg@yoonfleet.com ouvre la console de l'équipe Yoon Fleet. */
+  async isPlatformStaff(): Promise<boolean> {
+    return this.state.session?.email === 'tbg@yoonfleet.com';
+  }
+
+  async listSignups(): Promise<SignupRow[]> {
+    if (!(await this.isPlatformStaff())) throw new Error('Réservé à l’équipe Yoon Fleet.');
+    this.state.signups ??= seedSignups();
+    return structuredClone(this.state.signups);
+  }
+
+  async setFollowup(orgId: string, status: FollowStatus, note: string | null, nextCall: string | null): Promise<void> {
+    if (!(await this.isPlatformStaff())) throw new Error('Réservé à l’équipe Yoon Fleet.');
+    this.state.signups ??= seedSignups();
+    this.state.signups = this.state.signups.map((r) => (r.orgId === orgId ? { ...r, status, note: note?.trim() || null, nextCall, followupAt: new Date().toISOString() } : r));
+    this.save();
   }
 
   async listAudit(limit = 200): Promise<AuditEntry[]> {

@@ -3,7 +3,8 @@ import { defaultDailyDigest } from '../domain/alerts';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { AuditEntry, Invitation, Member, Organization, Plan, Role, SubscriptionRequest, TableName } from '../domain/types';
 import type { BillingItem, SubscriptionPayment } from '../domain/saas';
-import type { NewRow, OrgPatch, Row, SessionInfo, Store } from './store';
+import type { NewRow, OrgPatch, Row, SessionInfo, SignupContact, Store } from './store';
+import type { FollowStatus, SignupRow } from '../domain/platform';
 import type { BookingRequest, BookingRequestInput, BookingStatus, PublicBookingInfo } from '../domain/booking';
 import type { DepositMethod, PortalClient, PortalInfo } from '../domain/portal';
 
@@ -74,9 +75,12 @@ export class SupabaseStore implements Store {
         const { data: joined, error: e1 } = await this.sb.rpc('accept_invitations');
         if (e1) throw friendly(e1);
         if (!joined) {
-          const meta = user.user_metadata as { org_name?: string; country?: string };
+          const meta = user.user_metadata as { org_name?: string; country?: string; contact_name?: string; contact_phone?: string; source?: string };
           if (!meta?.org_name) return null;
-          const { error: e2 } = await this.sb.rpc('create_organization', { p_name: meta.org_name, p_country: meta.country ?? 'SN' });
+          const { error: e2 } = await this.sb.rpc('create_organization', {
+            p_name: meta.org_name, p_country: meta.country ?? 'SN',
+            p_contact_name: meta.contact_name ?? null, p_contact_phone: meta.contact_phone ?? null, p_source: meta.source ?? null,
+          });
           if (e2) throw friendly(e2);
         }
       } finally {
@@ -111,11 +115,14 @@ export class SupabaseStore implements Store {
     if (error) throw new Error('Email ou mot de passe incorrect.');
   }
 
-  async signUp(email: string, password: string, orgName: string, country: string): Promise<void> {
+  async signUp(email: string, password: string, orgName: string, country: string, contact?: SignupContact): Promise<void> {
+    const meta = orgName
+      ? { org_name: orgName, country, ...(contact ? { contact_name: contact.contactName, contact_phone: contact.contactPhone, source: contact.source ?? undefined } : {}) }
+      : {};
     const { data, error } = await this.sb.auth.signUp({
       email,
       password,
-      options: { data: orgName ? { org_name: orgName, country } : {}, emailRedirectTo: window.location.origin },
+      options: { data: meta, emailRedirectTo: window.location.origin },
     });
     if (error) throw friendly(error);
     if (!data.session) {
@@ -334,6 +341,22 @@ export class SupabaseStore implements Store {
 
   async inspectionPhotoUrls(paths: string[]): Promise<Record<string, string>> {
     return this.signed(INSPECTION_BUCKET, paths);
+  }
+
+  async isPlatformStaff(): Promise<boolean> {
+    const { data, error } = await this.sb.rpc('is_platform_staff');
+    return !error && data === true;
+  }
+
+  async listSignups(): Promise<SignupRow[]> {
+    const { data, error } = await this.sb.rpc('platform_signups');
+    if (error) throw friendly(error);
+    return ((data ?? []) as Record<string, unknown>[]).map((r) => rowToApp<SignupRow>(r));
+  }
+
+  async setFollowup(orgId: string, status: FollowStatus, note: string | null, nextCall: string | null): Promise<void> {
+    const { error } = await this.sb.rpc('platform_set_followup', { p_org: orgId, p_status: status, p_note: note, p_next_call: nextCall });
+    if (error) throw friendly(error);
   }
 
   async listAudit(limit = 200): Promise<AuditEntry[]> {

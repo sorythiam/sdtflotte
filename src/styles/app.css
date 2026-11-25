@@ -564,3 +564,5 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
   .page-head { gap: var(--space-3); }
   .kpi-value { font-size: 26px; line-height: 32px; }
 }
+.side-console { color: var(--sable) !important; font-size: 13px; }
+.sheet .side-console { color: var(--atlantique) !important; }

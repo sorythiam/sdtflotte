@@ -4,9 +4,17 @@ import type { ContractSettings } from '../domain/contract';
 import type { AuditEntry, Invitation, Member, Organization, Plan, Role, SubscriptionRequest, TableName, Tables } from '../domain/types';
 import type { BillingItem, SubscriptionPayment } from '../domain/saas';
 import type { DepositMethod, PortalClient, PortalInfo } from '../domain/portal';
+import type { FollowStatus, SignupRow } from '../domain/platform';
 
 export type Row<T extends TableName> = Tables[T];
 export type NewRow<T extends TableName> = Omit<Tables[T], 'id'>;
+
+/** Coordonnées du gérant laissées à l'inscription, et publicité d'origine. */
+export interface SignupContact {
+  contactName: string;
+  contactPhone: string;
+  source: string | null;
+}
 
 export interface SessionInfo {
   userId: string;
@@ -23,7 +31,7 @@ export interface Store {
   session(): Promise<SessionInfo | null>;
   signIn(email: string, password: string): Promise<void>;
   /** orgName vide : la personne rejoint une entreprise qui l'a invitée. */
-  signUp(email: string, password: string, orgName: string, country: string): Promise<void>;
+  signUp(email: string, password: string, orgName: string, country: string, contact?: SignupContact): Promise<void>;
   signOut(): Promise<void>;
   list<T extends TableName>(table: T): Promise<Row<T>[]>;
   insert<T extends TableName>(table: T, row: NewRow<T>): Promise<Row<T>>;
@@ -54,6 +62,10 @@ export interface Store {
   uploadClientDocument(image: Blob, clientId: string): Promise<string>;
   // Journal des actions (direction)
   listAudit(limit?: number): Promise<AuditEntry[]>;
+  // Console de l'équipe Yoon Fleet (TBG) : inscriptions et appels d'onboarding
+  isPlatformStaff(): Promise<boolean>;
+  listSignups(): Promise<SignupRow[]>;
+  setFollowup(orgId: string, status: FollowStatus, note: string | null, nextCall: string | null): Promise<void>;
   clientDocumentUrls(paths: string[]): Promise<Record<string, string>>;
   deleteClientDocument(path: string): Promise<void>;
   // Réservation en ligne : pages publiques (sans connexion) et traitement des demandes
