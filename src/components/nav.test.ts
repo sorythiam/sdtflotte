@@ -20,7 +20,7 @@ describe('menu', () => {
     expect(visibleTabs(fin, 'admin')).toHaveLength(3);
   });
   it('garde huit sections', () => {
-    expect(SECTIONS.map((s) => s.label)).toEqual(['Accueil', 'Planning', 'Réservations', 'Flotte', 'Chauffeurs VTC', 'Clients', 'Finances', 'Paramètres']);
+    expect(SECTIONS.map((s) => s.label)).toEqual(['Accueil', 'Planning', 'Réservations', 'Flotte', 'Clients', 'Finances', 'Chauffeurs VTC', 'Paramètres']);
     expect(sectionOf('/vtc/abc').key).toBe('vtc');
   });
 });

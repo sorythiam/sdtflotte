@@ -57,7 +57,6 @@ export const SECTIONS: Section[] = [
       { to: '/tarifs', label: 'Tarifs' },
     ],
   },
-  { key: 'vtc', label: 'Chauffeurs VTC', icon: icons.vtc, tabs: [{ to: '/vtc', label: 'Chauffeurs VTC', roles: ['direction', 'agent', 'comptable'] }] },
   { key: 'clients', label: 'Clients', icon: icons.clients, tabs: [{ to: '/clients', label: 'Clients' }] },
   {
     key: 'finances', label: 'Finances', icon: icons.finances,
@@ -67,6 +66,7 @@ export const SECTIONS: Section[] = [
       { to: '/rentabilite', label: 'Rentabilité', roles: ['direction', 'comptable'] },
     ],
   },
+  { key: 'vtc', label: 'Chauffeurs VTC', icon: icons.vtc, tabs: [{ to: '/vtc', label: 'Chauffeurs VTC', roles: ['direction', 'agent', 'comptable'] }] },
   {
     key: 'settings', label: 'Paramètres', icon: icons.settings,
     tabs: [
