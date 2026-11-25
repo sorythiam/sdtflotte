@@ -83,7 +83,7 @@ export function PlatformConsole() {
         <div className="card kpi"><span className="kpi-label">Inscriptions · 30 j</span><strong className="kpi-value">{f.signups}</strong></div>
         <div className="card kpi"><span className="kpi-label">Accompagnés</span><strong className="kpi-value">{pct(f.called, f.signups)} %</strong><span className="small muted">{f.called} sur {f.signups}</span></div>
         <div className="card kpi"><span className="kpi-label">Première location</span><strong className="kpi-value">{pct(f.firstRental, f.signups)} %</strong><span className="small muted">{f.firstRental} loueur(s) · objectif 60 %</span></div>
-        <div className="card kpi"><span className="kpi-label">Devenus payants</span><strong className="kpi-value">{pct(f.paying, f.signups)} %</strong><span className="small muted">{f.paying} loueur(s) · objectif 30 %</span></div>
+        <div className="card kpi"><span className="kpi-label">Devenus payants</span><strong className="kpi-value">{pct(f.paying, f.signups)} %</strong><span className="small muted">{f.paying} loueur(s) · objectif 20 %</span></div>
       </section>
 
       <div className="tabs" role="group" aria-label="Filtre">
