@@ -264,6 +264,7 @@ export class SupabaseStore implements Store {
       p_name: req.name, p_phone: req.phone, p_email: req.email, p_message: req.message,
       p_company_name: req.companyName ?? null, p_company_tax_id: req.companyTaxId ?? null, p_passengers: req.passengers ?? null,
       p_transfer_kind: req.transferKind ?? null, p_flight_number: req.flightNumber ?? null, p_flight_at: req.flightAt ?? null,
+      p_quantity: req.quantity ?? 1,
     });
     if (error) throw friendly(error);
   }

@@ -90,6 +90,9 @@ export function seed(now = new Date()): Db {
       ...r('v-prado', 'c-teranga', [1, 14], [1, 17], 'reservee', 30000, 0), withDriver: true, driverId: 'd-2', passengers: 3, formula: 'forfait' as const,
       packageLabel: 'Transfert aéroport AIBD ↔ Dakar', itinerary: 'AIBD → Hôtel Radisson, Dakar', transferKind: 'arrivee' as const, flightNumber: 'AF718', flightAt: at(now, 1, 14),
     },
+    // Dossier de groupe : deux véhicules avec chauffeur pour le même circuit d'une agence.
+    { ...r('v-prado', 'c-teranga', [12, 8], [15, 18], 'reservee', 60000, 400000), withDriver: true, driverId: 'd-1', passengers: 4, itinerary: 'Dakar, Lompoul, Saint-Louis', groupId: 'g-1' },
+    { ...r('v-hilux', 'c-teranga', [12, 8], [15, 18], 'reservee', 60000, 400000), withDriver: true, driverId: 'd-2', passengers: 3, itinerary: 'Dakar, Lompoul, Saint-Louis', groupId: 'g-1' },
   ];
 
   for (const x of reservations) x.total += x.missionFees ?? 0; // frais de mission inclus dans le total
@@ -112,7 +115,7 @@ export function seed(now = new Date()): Db {
     { id: 'm-2', vehicleId: 'v-tucson', label: 'Vidange', start: at(now, 1, 8), end: at(now, 1, 18), cost: 45000 },
   ];
 
-  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now), drivers: seedDrivers(now), packages: seedPackages(now), reservation_changes: [], maintenance_plans: seedPlans(now), ...seedVtc(now), seasons: seedSeasons(now), quotes: [], ...seedPortals(reservations, now), driver_absences: seedAbsences(now) };
+  return { rates, vehicles, clients, reservations, payments, maintenances, expenses: seedExpenses(now), invoices: seedInvoices({ rates, vehicles, clients, reservations }, now), inspections: [], incidents: seedIncidents(now), drivers: seedDrivers(now), packages: seedPackages(now), reservation_changes: [], maintenance_plans: seedPlans(now), ...seedVtc(now), seasons: seedSeasons(now), quotes: [], ...seedPortals(reservations, now), driver_absences: seedAbsences(now), reservation_groups: [{ id: 'g-1', number: `DO-${year}-0001`, clientId: 'c-teranga', label: 'Circuit Lompoul et Saint-Louis', notes: null, createdAt: at(now, -2, 10) }] };
 }
 
 /** Factures des réservations d'exemple, numérotées dans l'ordre de création. */

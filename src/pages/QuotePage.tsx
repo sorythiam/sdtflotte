@@ -7,7 +7,7 @@ import { payeeLines, termsFor } from '../domain/billing';
 import { legalLine, taxIdLabel } from '../domain/clients';
 import { contractSettings } from '../domain/contract';
 import { dateLong, money, num } from '../domain/format';
-import { quoteBillTo, quoteLines, quoteMessage, quoteState, quoteStateLabel, quoteTotals } from '../domain/quotes';
+import { quoteBillTo, quoteLines, quoteMessage, quoteSlots, quoteState, quoteStateLabel, quoteSummary, quoteTotals } from '../domain/quotes';
 import { findConflicts } from '../domain/rules';
 import { formulaLabel } from '../domain/tariff';
 import { vtcOverlap } from '../domain/vtc';
@@ -127,7 +127,7 @@ export function QuotePage() {
             <h3>Prestation</h3>
             <dl className="ct-dl">
               <dt>Formule</dt><dd>{formulaLabel(q.formula)}{q.packageLabel ? ` · ${q.packageLabel}` : ''}</dd>
-              <dt>Véhicules</dt><dd>{q.quantity} × {q.category}{q.withDriver ? ', avec chauffeur' : ''}</dd>
+              <dt>Véhicules</dt><dd>{(q.extras ?? []).length ? quoteSummary(q) : `${q.quantity} × ${q.category}`}{q.withDriver ? ', avec chauffeur' : ''}</dd>
               {q.passengers ? <><dt>Passagers</dt><dd>{q.passengers}</dd></> : null}
               <dt>Départ</dt><dd>{d(q.start)}</dd>
               {q.formula === 'jour' && <><dt>Retour</dt><dd>{d(q.end)}</dd></>}
@@ -158,7 +158,9 @@ export function QuotePage() {
             <tr><td>Total HT</td><td>{money(t.totalHt)}</td></tr>
             <tr><td>{t.vatRate ? `TVA ${num(t.vatRate)} %` : 'TVA'}</td><td>{t.vatRate ? money(t.vat) : 'Non applicable'}</td></tr>
             <tr className="ct-total"><td>Total TTC</td><td>{money(t.totalTtc)}</td></tr>
-            {q.caution > 0 && <tr><td>Caution remboursable, par véhicule</td><td>{money(q.caution)}</td></tr>}
+            {(q.extras ?? []).length
+              ? quoteSlots(q).some((x) => x.caution > 0) && <tr><td>Cautions remboursables, au total</td><td>{money(quoteSlots(q).reduce((n, x) => n + x.caution, 0))}</td></tr>
+              : q.caution > 0 && <tr><td>Caution remboursable, par véhicule</td><td>{money(q.caution)}</td></tr>}
           </tbody>
         </table>
 
@@ -189,13 +191,23 @@ function ConvertDialog({ q, onClose }: { q: Quote; onClose: () => void }) {
   const { data, store, refresh, toast } = useData();
   const billing = useBilling();
   const nav = useNavigate();
-  const candidates = data.vehicles
-    .filter((v) => v.category === q.category && !v.outOfService)
-    .map((v) => ({ v, busy: findConflicts(v.id, q.start, q.end, data.reservations, data.maintenances).length > 0 || !!vtcOverlap(v.id, q.start, q.end, data.vtc_contracts) }));
-  const free = candidates.filter((c) => !c.busy);
-  const [picked, setPicked] = useState<string[]>(free.slice(0, q.quantity).map((c) => c.v.id));
+  const slots = quoteSlots(q);
+  const busyOf = (id: string) => findConflicts(id, q.start, q.end, data.reservations, data.maintenances).length > 0 || !!vtcOverlap(id, q.start, q.end, data.vtc_contracts);
+  const candidatesOf = (cat: string) => data.vehicles.filter((v) => v.category === cat && !v.outOfService).map((v) => ({ v, busy: busyOf(v.id) }));
+  // Pré-remplissage : les premiers véhicules libres de chaque catégorie.
+  const [picked, setPicked] = useState<string[]>(() => {
+    const used = new Set<string>();
+    return slots.map((sl) => {
+      const v = candidatesOf(sl.category).find((c) => !c.busy && !used.has(c.v.id));
+      if (v) used.add(v.v.id);
+      return v?.v.id ?? '';
+    });
+  });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const short = [...new Set(slots.map((x) => x.category))]
+    .map((cat) => ({ cat, need: slots.filter((x) => x.category === cat).length, free: candidatesOf(cat).filter((c) => !c.busy).length }))
+    .filter((x) => x.free < x.need);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -204,8 +216,9 @@ function ConvertDialog({ q, onClose }: { q: Quote; onClose: () => void }) {
     try {
       const created = await convertQuote(store, data, q, picked, new Date(), billing);
       await refresh();
-      toast(created.length > 1 ? `${created.length} réservations créées` : `Réservation ${created[0].number} créée`);
-      nav(created.length === 1 ? `/reservations/${created[0].id}` : '/reservations');
+      toast(created.length > 1 ? `${created.length} réservations créées dans un dossier` : `Réservation ${created[0].number} créée`);
+      const gid = created[0]?.groupId;
+      nav(created.length === 1 ? `/reservations/${created[0].id}` : gid ? `/dossiers/${gid}` : '/reservations');
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -217,17 +230,18 @@ function ConvertDialog({ q, onClose }: { q: Quote; onClose: () => void }) {
     <Modal title="Transformer en réservation" onClose={onClose}>
       <form className="stack" onSubmit={submit}>
         <p className="small" style={{ margin: 0 }}>
-          Choisissez {q.quantity} {q.category}. Chaque véhicule devient une réservation au prix du devis ({money(q.unitTotal)} HT), facturée aux modalités du client.
+          Choisissez {slots.length > 1 ? `les ${slots.length} véhicules` : 'le véhicule'}. Chaque véhicule devient une réservation au prix du devis, facturée aux modalités du client
+          {slots.length > 1 ? ', et le tout est réuni dans un dossier de groupe.' : '.'}
         </p>
-        {free.length < q.quantity && (
-          <div className="error">Seulement {free.length} {q.category} libre(s) sur cette période pour {q.quantity} demandé(s). Libérez un véhicule ou modifiez le devis.</div>
-        )}
-        {Array.from({ length: q.quantity }, (_, i) => (
+        {short.map((x) => (
+          <div key={x.cat} className="error">Seulement {x.free} {x.cat} libre(s) sur cette période pour {x.need} demandé(s). Libérez un véhicule ou modifiez le devis.</div>
+        ))}
+        {slots.map((sl, i) => (
           <label key={i} className="field">
-            Véhicule {q.quantity > 1 ? i + 1 : ''}
+            Véhicule {slots.length > 1 ? i + 1 : ''} · {sl.category} ({money(sl.unitTotal)} HT)
             <select required value={picked[i] ?? ''} onChange={(e) => { const p = [...picked]; p[i] = e.target.value; setPicked(p); }}>
               <option value="">Choisir</option>
-              {candidates.map(({ v, busy: b }) => (
+              {candidatesOf(sl.category).map(({ v, busy: b }) => (
                 <option key={v.id} value={v.id} disabled={b || (picked.includes(v.id) && picked[i] !== v.id)}>
                   {v.brand} {v.model} · {v.plate}{v.seats ? ` · ${v.seats} places` : ''}{b ? ' — indisponible' : ''}
                 </option>
@@ -238,7 +252,7 @@ function ConvertDialog({ q, onClose }: { q: Quote; onClose: () => void }) {
         <ErrorBox error={error} />
         <div className="modal-foot">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
-          <button className="btn btn-primary" disabled={busy || picked.filter(Boolean).length !== q.quantity}>Créer {q.quantity > 1 ? `les ${q.quantity} réservations` : 'la réservation'}</button>
+          <button className="btn btn-primary" disabled={busy || picked.filter(Boolean).length !== slots.length}>Créer {slots.length > 1 ? `les ${slots.length} réservations` : 'la réservation'}</button>
         </div>
       </form>
     </Modal>

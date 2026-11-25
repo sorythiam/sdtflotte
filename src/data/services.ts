@@ -7,6 +7,10 @@ import type { Client, Driver, Formula, Maintenance, Package, Rate, Reservation, 
 import type { Store } from './store';
 import { normalizeFlight, validateFlight, type TransferKind } from '../domain/flight';
 import { driverBlocker, type DriverAbsence } from '../domain/drivers';
+import { allocatePayment, groupSummary, nextGroupNumber, splitPassengers, type ReservationGroup } from '../domain/groups';
+import { payState } from '../domain/billing';
+import { quoteSlots } from '../domain/quotes';
+import type { Payment, PaymentMethod } from '../domain/types';
 
 export interface ReservationInput {
   vehicleId: string;
@@ -27,6 +31,7 @@ export interface ReservationInput {
   flightNumber?: string | null;
   flightAt?: string | null;
   agreedTotal?: number; // prix convenu (devis accepté) : remplace le calcul de la grille
+  groupId?: string | null; // dossier de groupe
 }
 
 export interface DataSnapshot {
@@ -40,6 +45,7 @@ export interface DataSnapshot {
   vtc_contracts?: VtcContract[];
   seasons?: Season[];
   driver_absences?: DriverAbsence[];
+  reservation_groups?: ReservationGroup[];
 }
 
 /** Le chauffeur est-il déjà pris sur cette période ? */
@@ -204,6 +210,7 @@ export async function createReservation(
     ...(input.transferKind
       ? { transferKind: input.transferKind, flightNumber: normalizeFlight(input.flightNumber ?? ''), flightAt: input.flightAt ?? null }
       : {}),
+    ...(input.groupId ? { groupId: input.groupId } : {}),
   });
   // La réservation validée est facturée tout de suite, aux modalités du client.
   if (billing) await invoiceReservation(store, billing, created, now);
@@ -255,42 +262,129 @@ export async function amendReservation(store: Store, snap: DataSnapshot, b: Bill
   return { ...r, ...updated };
 }
 
+/** Ouvre un dossier de groupe pour un client. */
+export async function openGroup(store: Store, snap: DataSnapshot, clientId: string, label: string | null, now = new Date()): Promise<ReservationGroup> {
+  const number = nextGroupNumber((snap.reservation_groups ?? []).map((g) => g.number), now.getFullYear());
+  return store.insert('reservation_groups', { number, clientId, label: label?.trim().slice(0, 120) || null, notes: null, createdAt: now.toISOString() });
+}
+
+export interface GroupLine {
+  vehicleId: string;
+  driverId?: string | null;
+  agreedTotal?: number;
+  withDriver?: boolean;
+  missionFees?: number;
+}
+
 /**
- * Transforme un devis accepté en réservations, une par véhicule choisi, au prix du devis.
- * Tous les véhicules sont contrôlés avant de créer quoi que ce soit.
+ * Réserve plusieurs véhicules d'un coup pour un même client (dossier de groupe).
+ * Tout est contrôlé avant de créer quoi que ce soit : véhicules libres, distincts,
+ * chauffeurs distincts et disponibles, places suffisantes pour le groupe.
  */
-export async function convertQuote(
-  store: Store, snap: DataSnapshot, quote: Quote, vehicleIds: string[], now = new Date(), billing?: BillingContext,
-): Promise<Reservation[]> {
-  if (quote.status === 'converti' || quote.status === 'refuse') throw new Error('Ce devis est déjà clos.');
-  const ids = [...new Set(vehicleIds.filter(Boolean))];
-  if (ids.length !== quote.quantity) throw new Error(`Choisissez ${quote.quantity} véhicule${quote.quantity > 1 ? 's différents' : ''}.`);
-  const perVehiclePax = quote.passengers ? Math.ceil(quote.passengers / quote.quantity) : null;
-  for (const id of ids) {
-    const v = snap.vehicles.find((x) => x.id === id);
+export async function createGroupBooking(
+  store: Store, snap: DataSnapshot, base: Omit<ReservationInput, 'vehicleId' | 'driverId' | 'agreedTotal' | 'groupId'>, lines: GroupLine[],
+  label: string | null, now = new Date(), billing?: BillingContext, existingGroupId?: string | null,
+): Promise<{ group: ReservationGroup | null; reservations: Reservation[] }> {
+  const picked = lines.filter((l) => l.vehicleId);
+  if (picked.length < 1) throw new Error('Choisissez au moins un véhicule.');
+  if (new Set(picked.map((l) => l.vehicleId)).size !== picked.length) throw new Error('Le même véhicule est choisi deux fois.');
+  const drivers = picked.map((l) => l.driverId).filter(Boolean);
+  if (new Set(drivers).size !== drivers.length) throw new Error('Le même chauffeur est affecté à deux véhicules.');
+  if (!base.clientId) throw new Error('Choisissez un client.');
+  if (!(Date.parse(base.end) > Date.parse(base.start))) throw new Error('La date de retour doit être après la date de départ.');
+  const vehicles = picked.map((l) => {
+    const v = snap.vehicles.find((x) => x.id === l.vehicleId);
     if (!v) throw new Error('Véhicule introuvable.');
-    if (v.category !== quote.category) throw new Error(`${v.plate ?? 'Ce véhicule'} n’est pas de la catégorie ${quote.category}.`);
-    const c = findConflicts(id, quote.start, quote.end, snap.reservations, snap.maintenances)[0];
-    if (c) throw new Error(`${v.plate ?? 'Un véhicule'} n’est pas libre sur cette période (${c.label}).`);
-    if (vtcOverlap(id, quote.start, quote.end, snap.vtc_contracts)) throw new Error(`${v.plate ?? 'Un véhicule'} est confié à un chauffeur VTC.`);
-    checkCrew(snap, v, { start: quote.start, end: quote.end, withDriver: quote.withDriver, passengers: perVehiclePax });
+    return v;
+  });
+  const driverFor = (l: GroupLine, v: (typeof vehicles)[number]) => !!(l.withDriver ?? base.withDriver) || !!v.driverRequired || base.formula === 'forfait' || !!base.transferKind;
+  const caps = vehicles.map((v, i) => (v.seats ? Math.max(0, v.seats - (driverFor(picked[i], v) ? 1 : 0)) : null));
+  const pax = splitPassengers(base.passengers, caps);
+  if (base.passengers) {
+    const known = caps.every((c) => c !== null);
+    const total = caps.reduce<number>((t, c) => t + (c ?? 0), 0);
+    if (known && total < base.passengers) throw new Error(`Ces véhicules offrent ${total} places passagers pour ${base.passengers} passagers. Ajoutez un véhicule ou choisissez-en de plus grands.`);
   }
+  for (let i = 0; i < picked.length; i++) {
+    const v = vehicles[i];
+    const c = findConflicts(v.id, base.start, base.end, snap.reservations, snap.maintenances)[0];
+    if (c) throw new Error(`${v.plate ?? 'Un véhicule'} n’est pas libre sur cette période (${c.label}).`);
+    if (vtcOverlap(v.id, base.start, base.end, snap.vtc_contracts)) throw new Error(`${v.plate ?? 'Un véhicule'} est confié à un chauffeur VTC.`);
+    checkCrew(snap, v, { start: base.start, end: base.end, withDriver: driverFor(picked[i], v), passengers: pax[i], driverId: picked[i].driverId || null });
+  }
+  const group = existingGroupId ? null : picked.length > 1 ? await openGroup(store, snap, base.clientId, label, now) : null;
+  const groupId = existingGroupId ?? group?.id ?? null;
   const created: Reservation[] = [];
   let reservations = snap.reservations;
-  for (const id of ids) {
+  for (let i = 0; i < picked.length; i++) {
+    const l = picked[i];
     const r = await createReservation(
       store, { ...snap, reservations },
       {
-        vehicleId: id, clientId: quote.clientId, start: quote.start, end: quote.end, withDriver: quote.withDriver,
-        notes: [`Devis ${quote.number}`, quote.notes].filter(Boolean).join(' · '), formula: quote.formula, packageId: quote.packageId,
-        passengers: perVehiclePax, missionFees: quote.missionFees, fuelIncluded: quote.fuelIncluded, itinerary: quote.itinerary,
-        crossBorder: quote.crossBorder, agreedTotal: quote.unitTotal,
+        ...base, vehicleId: l.vehicleId, driverId: l.driverId || null, passengers: pax[i], groupId,
+        withDriver: driverFor(l, vehicles[i]),
+        ...(l.missionFees !== undefined ? { missionFees: l.missionFees } : {}),
+        ...(l.agreedTotal !== undefined ? { agreedTotal: l.agreedTotal } : {}),
       },
       now, billing,
     );
     created.push(r);
     reservations = [...reservations, r];
   }
-  await store.update('quotes', quote.id, { status: 'converti', reservationIds: created.map((r) => r.id) });
-  return created;
+  return { group, reservations: created };
+}
+
+/**
+ * Transforme un devis accepté en réservations, une par véhicule choisi, au prix du devis.
+ * Un devis à plusieurs véhicules ouvre un dossier de groupe. Tout est contrôlé avant de créer.
+ */
+export async function convertQuote(
+  store: Store, snap: DataSnapshot, quote: Quote, vehicleIds: string[], now = new Date(), billing?: BillingContext,
+): Promise<Reservation[]> {
+  if (quote.status === 'converti' || quote.status === 'refuse') throw new Error('Ce devis est déjà clos.');
+  const slots = quoteSlots(quote);
+  const ids = vehicleIds.filter(Boolean);
+  if (ids.length !== slots.length || new Set(ids).size !== ids.length) throw new Error(`Choisissez ${slots.length} véhicule${slots.length > 1 ? 's différents' : ''}.`);
+  ids.forEach((id, i) => {
+    const v = snap.vehicles.find((x) => x.id === id);
+    if (!v) throw new Error('Véhicule introuvable.');
+    if (v.category !== slots[i].category) throw new Error(`${v.plate ?? 'Ce véhicule'} n’est pas de la catégorie ${slots[i].category}.`);
+  });
+  const { reservations } = await createGroupBooking(
+    store, snap,
+    {
+      clientId: quote.clientId, start: quote.start, end: quote.end, withDriver: quote.withDriver,
+      notes: [`Devis ${quote.number}`, quote.notes].filter(Boolean).join(' · '), formula: quote.formula, packageId: quote.packageId,
+      passengers: quote.passengers, fuelIncluded: quote.fuelIncluded, itinerary: quote.itinerary, crossBorder: quote.crossBorder,
+    },
+    ids.map((id, i) => ({ vehicleId: id, agreedTotal: slots[i].unitTotal, withDriver: slots[i].withDriver, missionFees: slots[i].missionFees })),
+    `Devis ${quote.number}`, now, billing,
+  );
+  await store.update('quotes', quote.id, { status: 'converti', reservationIds: reservations.map((r) => r.id) });
+  return reservations;
+}
+
+/**
+ * Encaisse un paiement global pour un dossier : réparti entre les contrats
+ * (acomptes manquants d'abord, puis soldes), un paiement enregistré par contrat.
+ */
+export async function payGroup(
+  store: Store, groupId: string, data: { reservations: Reservation[]; invoices: Invoice[]; payments: Payment[] },
+  amount: number, method: PaymentMethod, reference: string | null, now = new Date(),
+): Promise<Payment[]> {
+  const sum = groupSummary(groupId, data.reservations, data.invoices, data.payments, now);
+  const items = sum.active.map((r) => {
+    const ps = payState(r, data.invoices, data.payments, now);
+    return { reservationId: r.id, remaining: ps.remaining, depositMissing: ps.depositMissing, reserved: r.status === 'reservee' };
+  });
+  const parts = allocatePayment(amount, items);
+  const at = now.toISOString();
+  const out: Payment[] = [];
+  for (const p of parts) {
+    out.push(await store.insert('payments', {
+      reservationId: p.reservationId, kind: p.kind, amount: p.amount, method, status: 'paye', paidAt: at, createdAt: at,
+      reference: method === 'especes' ? null : reference?.trim() || null,
+    }));
+  }
+  return out;
 }

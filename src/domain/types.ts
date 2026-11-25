@@ -134,6 +134,18 @@ export interface Quote {
   notes: string | null;
   createdBy: string | null;
   createdAt: string;
+  extras?: QuoteExtra[]; // autres catégories du même devis (mêmes dates, même formule)
+}
+
+/** Ligne supplémentaire d'un devis : une autre catégorie de véhicule. */
+export interface QuoteExtra {
+  category: string;
+  quantity: number;
+  withDriver: boolean;
+  unitTotal: number; // prix d'un véhicule, hors taxes
+  caution: number; // par véhicule
+  missionFees: number; // par véhicule
+  detail: QuoteDetail;
 }
 
 export interface QuoteDetail {
@@ -249,6 +261,7 @@ export interface Reservation {
   transferKind?: import('./flight').TransferKind | null;
   flightNumber?: string | null;
   flightAt?: string | null;
+  groupId?: string | null; // dossier de groupe : plusieurs véhicules pour un même client
 }
 
 export type Formula = 'jour' | 'demi_journee' | 'forfait';
@@ -409,6 +422,7 @@ export interface Tables {
   reservation_portals: import('./portal').ReservationPortal;
   deposit_declarations: import('./portal').DepositDeclaration;
   driver_absences: import('./drivers').DriverAbsence;
+  reservation_groups: import('./groups').ReservationGroup;
 }
 export type TableName = keyof Tables;
 

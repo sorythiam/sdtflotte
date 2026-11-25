@@ -4,7 +4,7 @@ import { useBilling } from '../state/useBilling';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Empty, ErrorBox, Modal, ScoreBadge } from '../components/ui';
-import { createReservation } from '../data/services';
+import { createGroupBooking } from '../data/services';
 import { fitsPassengers } from '../domain/tariff';
 import { vtcOverlap } from '../domain/vtc';
 import { availableByCategory, COUNTRY_CALLING_CODE, matchClient, whatsappLink, type BookingRequest } from '../domain/booking';
@@ -54,13 +54,14 @@ export function BookingRequests() {
         list.map((req) => {
           const rate = data.rates.find((r) => r.category === req.category);
           const q = rate ? quote(rate, req.start, req.end, req.withDriver) : null;
-          const free = availableByCategory(data.vehicles, data.reservations, data.maintenances, req.start, req.end, req.passengers, data.vtc_contracts)[req.category] ?? 0;
+          const n = req.quantity ?? 1;
+          const free = availableByCategory(data.vehicles, data.reservations, data.maintenances, req.start, req.end, req.passengers ? Math.ceil(req.passengers / n) : null, data.vtc_contracts)[req.category] ?? 0;
           const known = matchClient(data.clients, req.phone, req.email);
           const res = req.reservationId ? data.reservations.find((r) => r.id === req.reservationId) : undefined;
           const first = req.name.split(' ')[0];
           const waText =
             req.status === 'acceptee' && res
-              ? `Bonjour ${first}, votre réservation ${req.category}${req.flightNumber ? ` (vol ${req.flightNumber})` : ''} du ${dateTime(req.start)} au ${dateTime(req.end)} est confirmée (contrat ${res.number}, total ${money(res.total)}, caution ${money(res.caution)}). ${org.name}`
+              ? `Bonjour ${first}, votre réservation ${n > 1 ? `de ${n} × ` : ''}${req.category}${req.flightNumber ? ` (vol ${req.flightNumber})` : ''} du ${dateTime(req.start)} au ${dateTime(req.end)} est confirmée (${n > 1 && res.groupId ? `dossier ${data.reservation_groups.find((g) => g.id === res.groupId)?.number ?? res.number}` : `contrat ${res.number}, total ${money(res.total)}, caution ${money(res.caution)}`}). ${org.name}`
               : req.status === 'refusee'
                 ? `Bonjour ${first}, merci pour votre demande. Malheureusement nous ne pouvons pas y donner suite${req.declineReason ? ` : ${req.declineReason}` : ''}. ${org.name}`
                 : `Bonjour ${first}, nous avons bien reçu votre demande de ${req.category} du ${dateTime(req.start)} au ${dateTime(req.end)}. `;
@@ -80,7 +81,7 @@ export function BookingRequests() {
                   </div>
                 </div>
                 {req.status === 'nouvelle' ? (
-                  <span className={`badge ${free > 0 ? 'badge-success' : 'badge-danger'}`}>{free > 0 ? `${free} véhicule${free > 1 ? 's' : ''} libre${free > 1 ? 's' : ''}` : 'Aucun véhicule libre'}</span>
+                  <span className={`badge ${free >= n ? 'badge-success' : free > 0 ? 'badge-warning' : 'badge-danger'}`}>{free > 0 ? `${free} véhicule${free > 1 ? 's' : ''} libre${free > 1 ? 's' : ''}${n > 1 ? ` pour ${n} demandés` : ''}` : 'Aucun véhicule libre'}</span>
                 ) : req.status === 'acceptee' ? (
                   <span className="badge badge-success">Acceptée</span>
                 ) : (
@@ -88,12 +89,12 @@ export function BookingRequests() {
                 )}
               </div>
               <div className="grid-3 small">
-                <div><span className="muted">Demande</span><br /><strong>{req.category}</strong>{req.withDriver ? ' avec chauffeur' : ''}{req.passengers ? `, ${req.passengers} passager${req.passengers > 1 ? 's' : ''}` : ''}</div>
+                <div><span className="muted">Demande</span><br /><strong>{n > 1 ? `${n} × ` : ''}{req.category}</strong>{req.withDriver ? ' avec chauffeur' : ''}{req.passengers ? `, ${req.passengers} passager${req.passengers > 1 ? 's' : ''}` : ''}</div>
                 <div><span className="muted">Période</span><br />{dateTime(req.start)} → {dateTime(req.end)}</div>
                 {flightLabel(req) && (
                   <div style={{ gridColumn: '1 / -1' }}><span className="muted">Transfert aéroport</span><br /><strong>{flightLabel(req)}</strong> · <a href={flightTrackUrl(req.flightNumber!)} target="_blank" rel="noreferrer">suivre le vol</a></div>
                 )}
-                <div><span className="muted">Prix au tarif actuel</span><br />{q ? <><strong>{money(q.total)}</strong> · {q.days} j · caution {money(q.caution)}</> : 'Pas de tarif pour cette catégorie'}</div>
+                <div><span className="muted">Prix au tarif actuel</span><br />{q ? <><strong>{money(q.total * n)}</strong> · {q.days} j · caution {money(q.caution)}{n > 1 ? ' par véhicule' : ''}</> : 'Pas de tarif pour cette catégorie'}</div>
               </div>
               {req.message && <p className="small" style={{ margin: 0, whiteSpace: 'pre-wrap', background: 'var(--sable)', padding: 'var(--space-3)', borderRadius: 8 }}>{req.message}</p>}
               {req.status === 'refusee' && req.declineReason && <p className="small muted" style={{ margin: 0 }}>Motif du refus : {req.declineReason}</p>}
@@ -101,7 +102,9 @@ export function BookingRequests() {
                 <a className="btn btn-sm" href={whatsappLink(req.phone, waText, cc)} target="_blank" rel="noreferrer">WhatsApp</a>
                 <a className="btn btn-sm" href={`tel:${req.phone.replace(/[^\d+]/g, '')}`}>Appeler {req.phone}</a>
                 {req.email && <a className="btn btn-sm" href={`mailto:${req.email}`}>Email</a>}
-                {res && <Link className="btn btn-sm" to={`/reservations/${res.id}`}>Voir la réservation {res.number}</Link>}
+                {res && (res.groupId && n > 1
+                  ? <Link className="btn btn-sm" to={`/dossiers/${res.groupId}`}>Voir le dossier</Link>
+                  : <Link className="btn btn-sm" to={`/reservations/${res.id}`}>Voir la réservation {res.number}</Link>)}
                 {req.status === 'nouvelle' && canAct && (
                   <>
                     <span style={{ flex: 1 }} />
@@ -127,14 +130,19 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
   const nav = useNavigate();
   const known = matchClient(data.clients, req.phone, req.email);
   const company = !!req.companyName;
+  const n = req.quantity ?? 1;
+  const paxPer = req.passengers ? Math.ceil(req.passengers / n) : null;
   const free = useMemo(
     () =>
       data.vehicles
-        .filter((v) => !v.outOfService && fitsPassengers(v, req.passengers, req.withDriver || !!v.driverRequired) && !vtcOverlap(v.id, req.start, req.end, data.vtc_contracts) && findConflicts(v.id, req.start, req.end, data.reservations, data.maintenances).length === 0)
+        .filter((v) => !v.outOfService && (n > 1 || fitsPassengers(v, paxPer, req.withDriver || !!v.driverRequired)) && !vtcOverlap(v.id, req.start, req.end, data.vtc_contracts) && findConflicts(v.id, req.start, req.end, data.reservations, data.maintenances).length === 0)
         .sort((a, b) => Number(b.category === req.category) - Number(a.category === req.category) || a.plate.localeCompare(b.plate)),
-    [data, req],
+    [data, req, n, paxPer],
   );
-  const [vehicleId, setVehicleId] = useState(free.find((v) => v.category === req.category)?.id ?? '');
+  const [picked, setPicked] = useState<string[]>(() => {
+    const same = free.filter((v) => v.category === req.category).map((v) => v.id);
+    return Array.from({ length: n }, (_, i) => same[i] ?? '');
+  });
   const [notes, setNotes] = useState(req.message ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -154,16 +162,17 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
               }
             : { kind: 'particulier', name: req.name, phone: req.phone, email: req.email, idNumber: null, licenseExpiry: null, score: 'fiable' },
         ));
-      const r = await createReservation(store, data, {
-        vehicleId, clientId: client.id, start: req.start, end: req.end, withDriver: req.withDriver, passengers: req.passengers ?? null,
+      const { group, reservations } = await createGroupBooking(store, { ...data, clients: known ? data.clients : [...data.clients, client] }, {
+        clientId: client.id, start: req.start, end: req.end, withDriver: req.withDriver, passengers: req.passengers ?? null,
         transferKind: req.transferKind ?? null, flightNumber: req.flightNumber ?? null, flightAt: req.flightAt ?? null,
         notes: [notes.trim(), 'Demande reçue en ligne.'].filter(Boolean).join('\n'),
-      }, new Date(), { ...billing, clients: known ? data.clients : [...data.clients, client] });
+      }, picked.map((vehicleId) => ({ vehicleId })), `Demande en ligne de ${req.companyName ?? req.name}`, new Date(), { ...billing, clients: known ? data.clients : [...data.clients, client] });
+      const r = reservations[0];
       await store.updateBookingRequest(req.id, { status: 'acceptee', reservationId: r.id });
       await refresh();
-      toast(`Réservation ${r.number} créée. Pensez à prévenir le client.`);
+      toast(group ? `Dossier ${group.number} créé : ${reservations.length} réservations. Pensez à prévenir le client.` : `Réservation ${r.number} créée. Pensez à prévenir le client.`);
       onClose();
-      nav(`/reservations/${r.id}`);
+      nav(group ? `/dossiers/${group.id}` : `/reservations/${r.id}`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -174,7 +183,7 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
   return (
     <Modal title={`Réservation pour ${req.companyName ?? req.name}`} onClose={onClose}>
       <p className="small" style={{ margin: 0 }}>
-        {req.category}{req.withDriver ? ' avec chauffeur' : ''}, du {dateTime(req.start)} au {dateTime(req.end)}.{flightLabel(req) ? ` ${flightLabel(req)}.` : ''}{' '}
+        {n > 1 ? `${n} × ` : ''}{req.category}{req.withDriver ? ' avec chauffeur' : ''}, du {dateTime(req.start)} au {dateTime(req.end)}.{flightLabel(req) ? ` ${flightLabel(req)}.` : ''}{' '}
         {known ? (
           <>Client existant : <strong>{known.name}</strong>.</>
         ) : company ? (
@@ -183,18 +192,21 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
           <>Nouveau client créé avec ce nom et ce téléphone ; complétez sa pièce et son permis ensuite.</>
         )}
       </p>
-      <label className="field">
-        Véhicule
-        <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
-          <option value="">Choisir un véhicule libre…</option>
-          {free.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.brand} {v.model} · {v.plate} · {v.category}{v.seats ? ` · ${v.seats} places` : ''}{v.category !== req.category ? ' (autre catégorie)' : ''}
-            </option>
-          ))}
-        </select>
-        {free.length === 0 && <span className="hint">Aucun véhicule libre sur ces dates. Proposez d’autres dates au client ou refusez la demande.</span>}
-      </label>
+      {picked.map((vid, i) => (
+        <label key={i} className="field">
+          Véhicule{n > 1 ? ` ${i + 1}` : ''}
+          <select value={vid} onChange={(e) => setPicked(picked.map((x, j) => (j === i ? e.target.value : x)))}>
+            <option value="">Choisir un véhicule libre…</option>
+            {free.map((v) => (
+              <option key={v.id} value={v.id} disabled={v.id !== vid && picked.includes(v.id)}>
+                {v.brand} {v.model} · {v.plate} · {v.category}{v.seats ? ` · ${v.seats} places` : ''}{v.category !== req.category ? ' (autre catégorie)' : ''}
+              </option>
+            ))}
+          </select>
+          {i === 0 && free.length < n && <span className="hint">{free.length ? `Seulement ${free.length} véhicule(s) libre(s) pour ${n} demandés.` : 'Aucun véhicule libre sur ces dates.'} Proposez d’autres dates au client ou refusez la demande.</span>}
+        </label>
+      ))}
+      {n > 1 && <p className="hint" style={{ margin: 0 }}>Les {n} réservations seront réunies dans un dossier de groupe, avec un relevé unique pour le client.</p>}
       <label className="field">
         Notes du contrat
         <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -202,7 +214,7 @@ function AcceptDialog({ req, onClose }: { req: BookingRequest; onClose: () => vo
       <ErrorBox error={error} />
       <div className="modal-foot">
         <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
-        <button type="button" className="btn btn-primary" disabled={!vehicleId || busy} onClick={confirm}>Créer la réservation</button>
+        <button type="button" className="btn btn-primary" disabled={picked.some((x) => !x) || busy} onClick={confirm}>{n > 1 ? `Créer les ${n} réservations` : 'Créer la réservation'}</button>
       </div>
     </Modal>
   );

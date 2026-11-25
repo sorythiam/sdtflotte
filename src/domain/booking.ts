@@ -22,13 +22,14 @@ export interface BookingRequest {
   transferKind?: TransferKind | null; // transfert aéroport
   flightNumber?: string | null;
   flightAt?: string | null;
+  quantity?: number; // nombre de véhicules demandés (même catégorie)
   status: BookingStatus;
   reservationId: string | null;
   declineReason: string | null;
   createdAt: string;
 }
 
-export type BookingRequestInput = Pick<BookingRequest, 'category' | 'start' | 'end' | 'withDriver' | 'name' | 'phone' | 'email' | 'message' | 'companyName' | 'companyTaxId' | 'passengers' | 'transferKind' | 'flightNumber' | 'flightAt'>;
+export type BookingRequestInput = Pick<BookingRequest, 'category' | 'start' | 'end' | 'withDriver' | 'name' | 'phone' | 'email' | 'message' | 'companyName' | 'companyTaxId' | 'passengers' | 'transferKind' | 'flightNumber' | 'flightAt' | 'quantity'>;
 
 export interface PublicCategory {
   category: string;
@@ -105,6 +106,7 @@ export function validateBookingRequest(r: BookingRequestInput, now: Date): strin
   if (s < now.getTime() - 3600000) return 'La date de départ est déjà passée.';
   if (e <= s) return 'La date de retour doit être après la date de départ.';
   if (e - s > 180 * 86400000) return 'Pour plus de 6 mois, contactez directement l’agence.';
+  if (r.quantity != null && !(Number.isInteger(r.quantity) && r.quantity >= 1 && r.quantity <= 20)) return 'Nombre de véhicules : de 1 à 20. Au-delà, contactez directement l’agence.';
   const name = r.name.trim();
   if (name.length < 2 || name.length > 120) return 'Indiquez votre nom.';
   const digits = r.phone.replace(/\D/g, '');

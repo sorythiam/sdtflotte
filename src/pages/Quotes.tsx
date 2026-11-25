@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Empty, ErrorBox, Modal } from '../components/ui';
-import { buildQuote, quoteState, quoteStateLabel, type QuoteState } from '../domain/quotes';
+import { buildQuote, quoteState, quoteStateLabel, quoteSummary, type QuoteState } from '../domain/quotes';
 import { FORMULAS } from '../domain/tariff';
 import { dateShort, fromLocalInput, money, toLocalInput } from '../domain/format';
 import { findConflicts } from '../domain/rules';
@@ -62,7 +62,7 @@ export function Quotes() {
                   <tr key={q.id} className="clickable" onClick={() => nav(`/devis/${q.id}`)}>
                     <td className="num"><strong>{q.number}</strong></td>
                     <td>{cli.get(q.clientId)?.name ?? '—'}</td>
-                    <td>{q.quantity > 1 ? `${q.quantity} × ` : ''}{q.category}{q.packageLabel ? ` · ${q.packageLabel}` : ''}</td>
+                    <td>{quoteSummary(q)}{q.packageLabel ? ` · ${q.packageLabel}` : ''}</td>
                     <td>{dateShort(q.start)}{q.formula === 'jour' ? ` → ${dateShort(q.end)}` : ''}</td>
                     <td className="right num">{money(q.total)}</td>
                     <td>{dateShort(q.validUntil + 'T12:00:00')}</td>
@@ -100,19 +100,22 @@ function NewQuote({ onClose }: { onClose: () => void }) {
   const [crossBorder, setCrossBorder] = useState('');
   const [validUntil, setValidUntil] = useState('');
   const [notes, setNotes] = useState('');
+  const [extras, setExtras] = useState<{ category: string; quantity: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const pkg = data.packages.find((k) => k.id === packageId);
   const sIso = start ? fromLocalInput(start) : '';
   const eIso = formula === 'forfait' ? (sIso && pkg ? new Date(Date.parse(sIso) + pkg.hours * 3600000).toISOString() : '') : end ? fromLocalInput(end) : '';
-  const driverRequired = data.vehicles.some((v) => v.category === category && v.driverRequired) && data.vehicles.filter((v) => v.category === category).every((v) => v.driverRequired);
+  const mustDrive = (cat: string) => data.vehicles.some((v) => v.category === cat && v.driverRequired) && data.vehicles.filter((v) => v.category === cat).every((v) => v.driverRequired);
+  const driverRequired = mustDrive(category);
   const driverOn = withDriver || driverRequired || formula === 'forfait';
   const packages = data.packages.filter((k) => k.active && k.category === category);
   const input = {
     clientId, category, quantity: Number(quantity) || 0, formula, packageId: packageId || null, start: sIso, end: eIso, withDriver: driverOn,
     passengers: Number(passengers) || null, missionFees: Number(missionFees) || 0, fuelIncluded, itinerary, crossBorder,
     validUntil: validUntil || null, notes, driverRequired,
+    extras: formula === 'forfait' ? [] : extras.map((x) => ({ category: x.category, quantity: Number(x.quantity) || 0, driverRequired: mustDrive(x.category) })),
   };
   let preview: ReturnType<typeof buildQuote> | null = null;
   let previewError: string | null = null;
@@ -123,10 +126,11 @@ function NewQuote({ onClose }: { onClose: () => void }) {
       previewError = (e as Error).message;
     }
   }
-  const freeCount = useMemo(() => {
+  const freeOf = useMemo(() => (cat: string) => {
     if (!sIso || !eIso || Date.parse(eIso) <= Date.parse(sIso)) return null;
-    return data.vehicles.filter((v) => v.category === category && !v.outOfService && findConflicts(v.id, sIso, eIso, data.reservations, data.maintenances).length === 0 && !vtcOverlap(v.id, sIso, eIso, data.vtc_contracts)).length;
-  }, [data, category, sIso, eIso]);
+    return data.vehicles.filter((v) => v.category === cat && !v.outOfService && findConflicts(v.id, sIso, eIso, data.reservations, data.maintenances).length === 0 && !vtcOverlap(v.id, sIso, eIso, data.vtc_contracts)).length;
+  }, [data, sIso, eIso]);
+  const freeCount = freeOf(category);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -171,6 +175,31 @@ function NewQuote({ onClose }: { onClose: () => void }) {
             {freeCount !== null && <span className="hint" style={freeCount < (Number(quantity) || 1) ? { color: 'var(--danger)' } : undefined}>{freeCount} {category} libre(s) sur la période aujourd’hui</span>}
           </label>
         </div>
+        {formula !== 'forfait' && extras.map((x, i) => {
+          const fc = freeOf(x.category);
+          return (
+            <div key={i} className="group-line">
+              <label className="field grow">
+                Autre catégorie
+                <select value={x.category} onChange={(e) => setExtras(extras.map((y, j) => (j === i ? { ...y, category: e.target.value } : y)))}>
+                  {data.rates.map((r) => <option key={r.id}>{r.category}</option>)}
+                </select>
+              </label>
+              <label className="field" style={{ minWidth: 120 }}>
+                Nombre
+                <input type="number" min={1} max={50} required value={x.quantity} onChange={(e) => setExtras(extras.map((y, j) => (j === i ? { ...y, quantity: e.target.value } : y)))} />
+                {fc !== null && <span className="hint" style={fc < (Number(x.quantity) || 1) ? { color: 'var(--danger)' } : undefined}>{fc} libre(s)</span>}
+              </label>
+              <button type="button" className="btn btn-ghost" onClick={() => setExtras(extras.filter((_, j) => j !== i))}>Retirer</button>
+            </div>
+          );
+        })}
+        {formula !== 'forfait' && (
+          <button type="button" className="btn btn-ghost" style={{ alignSelf: 'flex-start' }} disabled={extras.length >= 10}
+            onClick={() => setExtras([...extras, { category: data.rates.find((r) => r.category !== category)?.category ?? category, quantity: '1' }])}>
+            + Ajouter une autre catégorie
+          </button>
+        )}
         <div className="grid-2">
           <label className="field">
             Formule
@@ -219,8 +248,10 @@ function NewQuote({ onClose }: { onClose: () => void }) {
         {preview && (
           <div className="notice">
             <strong>{money(preview.total)} HT</strong>
-            {preview.quantity > 1 && ` (${preview.quantity} × ${money(preview.unitTotal)})`}
-            {preview.formula === 'jour' && ` · ${preview.detail.days} jour(s)`} · caution {money(preview.caution)} par véhicule
+            {(preview.extras ?? []).length
+              ? ` (${[{ category: preview.category, quantity: preview.quantity, unitTotal: preview.unitTotal }, ...(preview.extras ?? [])].map((x) => `${x.quantity} × ${x.category} à ${money(x.unitTotal)}`).join(', ')})`
+              : preview.quantity > 1 && ` (${preview.quantity} × ${money(preview.unitTotal)})`}
+            {preview.formula === 'jour' && ` · ${preview.detail.days} jour(s)`} · {(preview.extras ?? []).length ? `cautions ${money(preview.caution * preview.quantity + (preview.extras ?? []).reduce((t, x) => t + x.caution * x.quantity, 0))} au total` : `caution ${money(preview.caution)} par véhicule`}
             {preview.detail.dealNote && <><br /><span className="small" style={{ color: 'var(--success)', fontWeight: 600 }}>{preview.detail.dealNote}</span></>}
             {preview.detail.seasonNote && <><br /><span className="small" style={{ color: 'var(--ocre-text)', fontWeight: 600 }}>Saison : {preview.detail.seasonNote}</span></>}
           </div>

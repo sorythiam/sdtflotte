@@ -21,8 +21,9 @@ test('devis : création, impression, transformation en réservations', async ({ 
   await expect(page.locator('.page-head .badge')).toHaveText('Accepté');
   await page.getByRole('button', { name: 'Transformer en réservation' }).click();
   await page.locator('.modal').getByRole('button', { name: /Créer les 2 réservations/ }).click();
-  await expect(page).toHaveURL(/\/reservations$/);
-  await expect(page.locator('tbody tr', { hasText: 'Mission Teranga Tours' }).first()).toBeVisible();
+  await expect(page).toHaveURL(/\/dossiers\//);
+  await expect(page.locator('table.data tbody tr')).toHaveCount(2);
+  await expect(page.getByRole('link', { name: 'Mission Teranga Tours' }).first()).toBeVisible();
   check();
 });
 

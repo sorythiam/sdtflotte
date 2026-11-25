@@ -139,6 +139,7 @@ export class DemoStore implements Store {
         if (!st.db.reservation_portals) Object.assign(st.db, seedPortals(st.db.reservations.filter((r) => r.id === 'r-9' && !st.db.payments.some((p) => p.reservationId === 'r-9' && p.kind === 'acompte'))));
         st.db.deposit_declarations ??= [];
         st.db.driver_absences ??= seedAbsences();
+        st.db.reservation_groups ??= [];
         st.org.bookingSlug ??= 'sdt-demo';
         st.org.bookingEnabled ??= true;
         return st;
@@ -390,7 +391,7 @@ export class DemoStore implements Store {
       {
         ...req, withDriver: req.withDriver || mustDrive || !!req.transferKind, passengers: req.passengers ?? null, id: uid(), name: req.name.trim(), phone: req.phone.trim(), email: req.email?.trim() || null,
         message: req.message?.trim() || null, companyName: req.companyName?.trim() || null, companyTaxId: req.companyTaxId?.trim() || null,
-        transferKind: req.transferKind ?? null, flightNumber: req.transferKind ? normalizeFlight(req.flightNumber ?? '') : null, flightAt: req.transferKind ? req.flightAt ?? null : null, status: 'nouvelle', reservationId: null, declineReason: null, createdAt: new Date().toISOString(),
+        transferKind: req.transferKind ?? null, flightNumber: req.transferKind ? normalizeFlight(req.flightNumber ?? '') : null, flightAt: req.transferKind ? req.flightAt ?? null : null, quantity: req.quantity ?? 1, status: 'nouvelle', reservationId: null, declineReason: null, createdAt: new Date().toISOString(),
       },
       ...(this.state.bookingRequests ?? []),
     ];

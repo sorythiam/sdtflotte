@@ -2,7 +2,9 @@ import { useBilling } from '../state/useBilling';
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Empty, ErrorBox, Modal, ReservationBadge } from '../components/ui';
-import { createReservation, driverConflict } from '../data/services';
+import { createGroupBooking, createReservation, driverConflict } from '../data/services';
+import { groupCapacity } from '../domain/groups';
+import { passengerSeats } from '../domain/tariff';
 import { vtcOverlap } from '../domain/vtc';
 import { dealFor, FORMULAS, fitsPassengers, priceFor, type Price } from '../domain/tariff';
 import { dateShort, fromLocalInput, money, time, toLocalInput } from '../domain/format';
@@ -39,6 +41,7 @@ export function Reservations() {
   const creating = params.get('nouvelle') === '1';
   const veh = new Map(data.vehicles.map((v) => [v.id, v]));
   const cli = new Map(data.clients.map((c) => [c.id, c]));
+  const grp = new Map(data.reservation_groups.map((g) => [g.id, g]));
 
   const list = data.reservations
     .filter((r) =>
@@ -46,7 +49,7 @@ export function Reservations() {
     )
     .filter((r) => {
       if (!q) return true;
-      const s = `${r.number} ${cli.get(r.clientId)?.name} ${veh.get(r.vehicleId)?.plate} ${veh.get(r.vehicleId)?.model}`.toLowerCase();
+      const s = `${r.number} ${r.groupId ? grp.get(r.groupId)?.number ?? '' : ''} ${cli.get(r.clientId)?.name} ${veh.get(r.vehicleId)?.plate} ${veh.get(r.vehicleId)?.model}`.toLowerCase();
       return s.includes(q.toLowerCase());
     })
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
@@ -100,7 +103,10 @@ export function Reservations() {
                   const due = r.status === 'annulee' ? 0 : balanceDue(r, data.payments, data.invoices);
                   return (
                     <tr key={r.id} className="clickable" onClick={() => nav(`/reservations/${r.id}`)}>
-                      <td className="num"><strong>{r.number}</strong></td>
+                      <td className="num">
+                        <strong>{r.number}</strong>
+                        {r.groupId && grp.get(r.groupId) && <><br /><span className="badge" title="Dossier de groupe">{grp.get(r.groupId)!.number}</span></>}
+                      </td>
                       <td>{cli.get(r.clientId)?.name ?? '—'}</td>
                       <td>
                         {v ? `${v.brand} ${v.model}` : '—'}
@@ -152,8 +158,11 @@ function NewReservation({ onClose }: { onClose: () => void }) {
   const [crossBorder, setCrossBorder] = useState('');
   const [notes, setNotes] = useState('');
   const [flight, setFlight] = useState<FlightValue>(NO_FLIGHT);
+  const [extra, setExtra] = useState<{ vehicleId: string; driverId: string }[]>([]); // dossier de groupe
+  const [groupLabel, setGroupLabel] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const isGroup = extra.length > 0;
 
   const pkg = data.packages.find((k) => k.id === packageId);
   // Forfait : la fin se déduit de la durée du forfait.
@@ -172,11 +181,16 @@ function NewReservation({ onClose }: { onClose: () => void }) {
         .map((v) => ({
           v,
           busy: validPeriod ? findConflicts(v.id, sIso, eIso, data.reservations, data.maintenances).length > 0 || !!vtcOverlap(v.id, sIso, eIso, data.vtc_contracts) : false,
-          small: !fitsPassengers(v, pax, withDriver || !!v.driverRequired || formula === 'forfait'),
+          // En groupe, les passagers se répartissent : on ne grise pas un véhicule trop petit pour tous.
+          small: !isGroup && !fitsPassengers(v, pax, withDriver || !!v.driverRequired || formula === 'forfait'),
         }))
         .sort((a, b) => Number(a.busy || a.small) - Number(b.busy || b.small) || (a.v.seats ?? 0) - (b.v.seats ?? 0) || a.v.category.localeCompare(b.v.category)),
-    [data, sIso, eIso, validPeriod, pax, withDriver, formula, pkg],
+    [data, sIso, eIso, validPeriod, pax, withDriver, formula, pkg, isGroup],
   );
+  const chosen = [vehicleId, ...extra.map((x) => x.vehicleId)].filter(Boolean);
+  const chosenDrivers = [driverId, ...extra.map((x) => x.driverId)].filter(Boolean);
+  const lineVehicles = chosen.map((id) => data.vehicles.find((v) => v.id === id)!).filter(Boolean);
+  const capacity = groupCapacity(lineVehicles.map((v) => passengerSeats(v, driverOn || !!v.driverRequired)));
   const rate = data.rates.find((r) => r.category === vehicle?.category);
   let qt: Price | null = null;
   let priceError: string | null = null;
@@ -189,8 +203,41 @@ function NewReservation({ onClose }: { onClose: () => void }) {
       priceError = (e as Error).message;
     }
   }
+  // Dossier de groupe : prix de chaque véhicule, additionnés.
+  let groupTotal = 0;
+  let groupCaution = 0;
+  if (isGroup && validPeriod) {
+    for (const v of lineVehicles) {
+      try {
+        const p = priceFor({ formula, rate: data.rates.find((r) => r.category === v.category), pkg, start: sIso, end: eIso, withDriver: driverOn || !!v.driverRequired, missionFees: Number(missionFees) || 0, deal: dealFor(client0, v.category, sIso), seasons: data.seasons });
+        groupTotal += p.total;
+        groupCaution += p.caution;
+      } catch (e) {
+        priceError = `${v.plate} : ${(e as Error).message}`;
+      }
+    }
+  }
   const client = data.clients.find((c) => c.id === clientId);
   const drivers = data.drivers.filter((d) => d.active);
+  const driverOptions = (veh: typeof vehicle, current: string) =>
+    drivers.map((d) => {
+      const b = driverBusy(d.id);
+      const block = validPeriod ? driverBlocker(d, veh, sIso, eIso, data.driver_absences, data.vtc_contracts) : null;
+      const taken = d.id !== current && chosenDrivers.includes(d.id);
+      return (
+        <option key={d.id} value={d.id} disabled={!!b || !!block || taken}>
+          {d.name}{d.licenseCategory ? ` · permis ${d.licenseCategory}` : ''}{b ? ` — pris (${b.number})` : block ? ' — indisponible' : taken ? ' — déjà dans ce dossier' : ''}
+        </option>
+      );
+    });
+  const vehicleOptions = (current: string) =>
+    free.map(({ v, busy: b, small }) => (
+      <option key={v.id} value={v.id} disabled={b || small || (v.id !== current && chosen.includes(v.id))}>
+        {v.category} · {v.brand} {v.model} · {v.plate}
+        {v.seats ? ` · ${v.seats} places` : ''}
+        {b ? ' — indisponible' : small ? ' — trop petit' : v.id !== current && chosen.includes(v.id) ? ' — déjà choisi' : ''}
+      </option>
+    ));
   const driverBusy = (id: string) => (validPeriod ? driverConflict(id, sIso, eIso, data.reservations) : undefined);
   const packages = data.packages.filter((k) => k.active).sort((a, b) => a.label.localeCompare(b.label) || a.price - b.price);
 
@@ -199,6 +246,22 @@ function NewReservation({ onClose }: { onClose: () => void }) {
     setError(null);
     setBusy(true);
     try {
+      if (isGroup) {
+        const res = await createGroupBooking(
+          store, data,
+          {
+            clientId, start: sIso, end: eIso, withDriver: driverOn, notes: notes || null, formula, packageId: packageId || null,
+            passengers: pax || null, missionFees: Number(missionFees) || 0, fuelIncluded, itinerary, crossBorder,
+            transferKind: flight.transferKind, flightNumber: flight.flightNumber, flightAt: flight.flightAt ? fromLocalInput(flight.flightAt) : null,
+          },
+          [{ vehicleId, driverId: driverOn ? driverId || null : null }, ...extra.map((x) => ({ vehicleId: x.vehicleId, driverId: driverOn ? x.driverId || null : null }))],
+          groupLabel || null, new Date(), billing,
+        );
+        await refresh();
+        toast(`Dossier ${res.group?.number ?? ''} créé : ${res.reservations.length} réservations`);
+        nav(res.group ? `/dossiers/${res.group.id}` : `/reservations/${res.reservations[0].id}`);
+        return;
+      }
       const r = await createReservation(
         store, data,
         {
@@ -270,19 +333,54 @@ function NewReservation({ onClose }: { onClose: () => void }) {
           Véhicule
           <select required value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
             <option value="">Choisir un véhicule disponible</option>
-            {free.map(({ v, busy: b, small }) => (
-              <option key={v.id} value={v.id} disabled={b || small}>
-                {v.category} · {v.brand} {v.model} · {v.plate}
-                {v.seats ? ` · ${v.seats} places` : ''}
-                {b ? ' — indisponible' : small ? ' — trop petit' : ''}
-              </option>
-            ))}
+            {vehicleOptions(vehicleId)}
           </select>
           <span className="hint">
-            {free.filter((f) => !f.busy && !f.small).length} véhicule(s) libre(s){pax ? ` pour ${pax} passager(s)` : ''} sur la période
-            {vehicle?.luggage != null ? ` · ${vehicle.luggage} bagages` : ''}
+            {free.filter((f) => !f.busy && !f.small).length} véhicule(s) libre(s){pax && !isGroup ? ` pour ${pax} passager(s)` : ''} sur la période
+            {vehicle?.luggage != null && !isGroup ? ` · ${vehicle.luggage} bagages` : ''}
           </span>
         </label>
+        {extra.map((x, i) => {
+          const xv = data.vehicles.find((v) => v.id === x.vehicleId);
+          return (
+            <div key={i} className="group-line">
+              <label className="field grow">
+                Véhicule {i + 2}
+                <select required value={x.vehicleId} onChange={(e) => setExtra(extra.map((y, j) => (j === i ? { ...y, vehicleId: e.target.value } : y)))}>
+                  <option value="">Choisir un véhicule disponible</option>
+                  {vehicleOptions(x.vehicleId)}
+                </select>
+              </label>
+              {(driverOn || xv?.driverRequired) && (
+                <label className="field grow">
+                  Chauffeur
+                  <select value={x.driverId} onChange={(e) => setExtra(extra.map((y, j) => (j === i ? { ...y, driverId: e.target.value } : y)))}>
+                    <option value="">À désigner plus tard</option>
+                    {driverOptions(xv, x.driverId)}
+                  </select>
+                </label>
+              )}
+              <button type="button" className="btn btn-ghost" aria-label={`Retirer le véhicule ${i + 2}`} onClick={() => setExtra(extra.filter((_, j) => j !== i))}>Retirer</button>
+            </div>
+          );
+        })}
+        <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-ghost" onClick={() => setExtra([...extra, { vehicleId: '', driverId: '' }])} disabled={extra.length >= 19}>
+            + Ajouter un véhicule
+          </button>
+          {isGroup && (
+            <span className="hint">
+              Dossier de groupe : {chosen.length} véhicule(s){capacity !== null ? ` · ${capacity} places passagers` : ''}
+              {pax && capacity !== null && capacity < pax ? <strong style={{ color: 'var(--danger)' }}> pour {pax} passagers, il manque des places</strong> : ''}
+            </span>
+          )}
+        </div>
+        {isGroup && (
+          <label className="field">
+            Nom du dossier (facultatif)
+            <input value={groupLabel} maxLength={120} onChange={(e) => setGroupLabel(e.target.value)} placeholder="Ex. : Circuit Casamance, groupe Voyageurs du Monde" />
+          </label>
+        )}
         <label className="field">
           Client
           <select required value={clientId} onChange={(e) => setClientId(e.target.value)}>
@@ -311,18 +409,10 @@ function NewReservation({ onClose }: { onClose: () => void }) {
           {driverOn && (
             <div className="grid-2">
               <label className="field">
-                Chauffeur
+                {isGroup ? 'Chauffeur du véhicule 1' : 'Chauffeur'}
                 <select value={driverId} onChange={(e) => setDriverId(e.target.value)}>
                   <option value="">À désigner plus tard</option>
-                  {drivers.map((d) => {
-                    const b = driverBusy(d.id);
-                    const block = validPeriod ? driverBlocker(d, vehicle, sIso, eIso, data.driver_absences, data.vtc_contracts) : null;
-                    return (
-                      <option key={d.id} value={d.id} disabled={!!b || !!block}>
-                        {d.name}{d.licenseCategory ? ` · permis ${d.licenseCategory}` : ''}{b ? ` — pris (${b.number})` : block ? ' — indisponible' : ''}
-                      </option>
-                    );
-                  })}
+                  {driverOptions(vehicle, driverId)}
                 </select>
                 {(() => {
                   const d = drivers.find((x) => x.id === driverId);
@@ -333,7 +423,7 @@ function NewReservation({ onClose }: { onClose: () => void }) {
                 })()}
               </label>
               <label className="field">
-                Frais de mission (FCFA)
+                Frais de mission{isGroup ? ' par véhicule' : ''} (FCFA)
                 <input type="number" min={0} inputMode="numeric" value={missionFees} onChange={(e) => setMissionFees(e.target.value)} placeholder="Hébergement, repas hors de la ville" />
               </label>
             </div>
@@ -357,7 +447,13 @@ function NewReservation({ onClose }: { onClose: () => void }) {
           Notes (facultatif)
           <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
-        {qt && (
+        {isGroup && validPeriod && lineVehicles.length === chosen.length && chosen.length > 1 && !priceError && (
+          <div className="notice">
+            <strong>{money(groupTotal)}</strong> pour {chosen.length} véhicules · cautions {money(groupCaution)} au total
+            <br /><span className="small">Une réservation et une facture par véhicule, réunies dans un dossier avec un relevé unique pour le client.</span>
+          </div>
+        )}
+        {qt && !isGroup && (
           <div className="notice">
             <strong>{money(qt.total)}</strong>{' '}
             {formula === 'forfait' ? `forfait ${qt.label}` : formula === 'demi_journee' ? 'pour une demi-journée' : `pour ${qt.days} jour(s) à ${money(qt.dailyRate)}/jour`}
@@ -373,8 +469,8 @@ function NewReservation({ onClose }: { onClose: () => void }) {
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             Annuler
           </button>
-          <button className="btn btn-primary" disabled={busy || !qt}>
-            Créer la réservation
+          <button className="btn btn-primary" disabled={busy || !qt || (isGroup && (chosen.length !== extra.length + 1 || !!priceError))}>
+            {isGroup ? `Créer le dossier (${extra.length + 1} véhicules)` : 'Créer la réservation'}
           </button>
         </div>
       </form>

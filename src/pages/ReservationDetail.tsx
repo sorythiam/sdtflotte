@@ -67,6 +67,7 @@ export function ReservationDetail() {
   const canPay = can('direction', 'agent', 'comptable');
   const rules = contractSettings(session!.org.name, session!.org.contract);
   const driver = data.drivers.find((d) => d.id === r.driverId);
+  const group = r.groupId ? data.reservation_groups.find((g) => g.id === r.groupId) : undefined;
   const changes = data.reservation_changes.filter((x) => x.reservationId === r.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const kmIncl = kmIncludedFor(r, rate);
   const gate = r.status === 'reservee' ? departureCheck(c, now, rules.requireVerifiedClient, rules.minDriverAge, r.withDriver) : { ok: true, message: null };
@@ -77,6 +78,7 @@ export function ReservationDetail() {
         <div>
           <span className="small muted">
             <Link to="/reservations">Réservations et contrats</Link> › {r.number}
+            {group && <> · dossier <Link to={`/dossiers/${group.id}`}>{group.number}</Link> ({data.reservations.filter((x) => x.groupId === group.id).length} véhicules)</>}
           </span>
           <div className="row">
             <h1>Contrat {r.number}</h1>

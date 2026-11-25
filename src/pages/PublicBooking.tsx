@@ -27,6 +27,10 @@ export function PublicBooking({ slug }: { slug: string }) {
   const [withDriver, setWithDriver] = useState(false);
   const [passengers, setPassengers] = useState('');
   const pax = Math.max(0, Math.min(99, Math.round(Number(passengers) || 0)));
+  const [quantity, setQuantity] = useState('1');
+  const qty = Math.max(1, Math.min(20, Math.round(Number(quantity) || 1)));
+  // Plusieurs véhicules : les passagers se répartissent entre eux.
+  const paxPer = pax ? Math.ceil(pax / qty) : 0;
   const [avail, setAvail] = useState<Record<string, number> | null>(null);
   const [category, setCategory] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', phone: '', email: '', message: '', companyName: '', companyTaxId: '' });
@@ -46,13 +50,13 @@ export function PublicBooking({ slug }: { slug: string }) {
     if (!info || !validDates) return setAvail(null);
     let live = true;
     const t = setTimeout(() => {
-      store.publicAvailability(slug, dates.start, dates.end, pax || null).then((a) => live && setAvail(a)).catch(() => live && setAvail(null));
+      store.publicAvailability(slug, dates.start, dates.end, paxPer || null).then((a) => live && setAvail(a)).catch(() => live && setAvail(null));
     }, 250);
     return () => {
       live = false;
       clearTimeout(t);
     };
-  }, [store, slug, info, dates, validDates, pax]);
+  }, [store, slug, info, dates, validDates, paxPer]);
 
   useEffect(() => {
     if (info?.name) document.title = `Réserver un véhicule · ${info.name}`;
@@ -66,7 +70,7 @@ export function PublicBooking({ slug }: { slug: string }) {
     e.preventDefault();
     setError(null);
     const req = {
-      category: category ?? '', start: dates.start, end: dates.end, withDriver: driverFor(chosen) || !!flight.transferKind, passengers: pax || null,
+      category: category ?? '', start: dates.start, end: dates.end, withDriver: driverFor(chosen) || !!flight.transferKind, passengers: pax || null, quantity: qty,
       name: form.name, phone: form.phone, email: form.email.trim() || null, message: form.message.trim() || null,
       companyName: forCompany ? form.companyName : null,
       companyTaxId: forCompany ? form.companyTaxId.trim() || null : null,
@@ -143,6 +147,10 @@ export function PublicBooking({ slug }: { slug: string }) {
                 Passagers
                 <input type="number" min={1} max={99} inputMode="numeric" value={passengers} placeholder="Nombre" onChange={(e) => setPassengers(e.target.value)} />
               </label>
+              <label className="field">
+                Nombre de véhicules
+                <input type="number" min={1} max={20} inputMode="numeric" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+              </label>
               <label className="row" style={{ alignSelf: 'end', minHeight: 44, gap: 8 }}>
                 <input type="checkbox" checked={withDriver} onChange={(e) => setWithDriver(e.target.checked)} style={{ width: 18, height: 18 }} />
                 Avec chauffeur
@@ -166,8 +174,8 @@ export function PublicBooking({ slug }: { slug: string }) {
                 {info.categories.map((c) => {
                   const free = avail ? avail[c.category] ?? 0 : null;
                   const q = validDates ? quote(asRate(c), dates.start, dates.end, driverFor(c)) : null;
-                  const small = !!(pax && c.seats && c.seats - (driverFor(c) ? 1 : 0) < pax);
-                  const full = free === 0 || small;
+                  const small = !!(paxPer && c.seats && c.seats - (driverFor(c) ? 1 : 0) < paxPer);
+                  const full = (free !== null && free < qty) || small;
                   const photos = c.photos ?? [];
                   return (
                     <div key={c.category} className={`pub-cat${category === c.category ? ' selected' : ''}${full ? ' full' : ''}`}>
@@ -199,9 +207,9 @@ export function PublicBooking({ slug }: { slug: string }) {
                         </span>
                       )}
                       <span className="pub-cat-price">{money(c.daily + (driverFor(c) ? c.driverDaily : 0))} <span className="small muted">/ jour</span></span>
-                      {q && !full && <span className="small">Total estimé : <strong>{money(q.total)}</strong> pour {q.days} jour{q.days > 1 ? 's' : ''}</span>}
+                      {q && !full && <span className="small">Total estimé : <strong>{money(q.total * qty)}</strong> pour {qty > 1 ? `${qty} véhicules, ` : ''}{q.days} jour{q.days > 1 ? 's' : ''}</span>}
                       <span className={`badge ${full ? 'badge-muted' : free === null ? '' : 'badge-success'}`}>
-                        {free === null ? '…' : small ? 'Trop petit' : full ? 'Complet sur ces dates' : category === c.category ? 'Choisi' : 'Disponible · choisir'}
+                        {free === null ? '…' : small ? 'Trop petit' : full ? (free > 0 ? `${free} seulement sur ces dates` : 'Complet sur ces dates') : category === c.category ? 'Choisi' : 'Disponible · choisir'}
                       </span>
                     </button>
                     </div>
@@ -225,8 +233,8 @@ export function PublicBooking({ slug }: { slug: string }) {
               )}
               {estimate && (
                 <div className="notice" style={{ margin: 0 }}>
-                  <strong>{chosen.category}{driverFor(chosen) ? ' avec chauffeur' : ''}{pax ? `, ${pax} passager${pax > 1 ? 's' : ''}` : ''}</strong> · {estimate.days} jour{estimate.days > 1 ? 's' : ''} ·
-                  total estimé <strong>{money(estimate.total)}</strong> · caution {money(estimate.caution)} · {num(estimate.kmIncluded)} km inclus,
+                  <strong>{qty > 1 ? `${qty} × ` : ''}{chosen.category}{driverFor(chosen) ? ' avec chauffeur' : ''}{pax ? `, ${pax} passager${pax > 1 ? 's' : ''}` : ''}</strong> · {estimate.days} jour{estimate.days > 1 ? 's' : ''} ·
+                  total estimé <strong>{money(estimate.total * qty)}</strong> · caution {money(estimate.caution)}{qty > 1 ? ' par véhicule' : ''} · {num(estimate.kmIncluded)} km inclus,
                   puis {money(chosen.extraKm)} par km. Prix indicatif, confirmé par l’agence.
                 </div>
               )}

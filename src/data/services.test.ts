@@ -253,5 +253,60 @@ describe('convertQuote (mode démo)', () => {
     expect(after.status).toBe('converti');
     expect(after.reservationIds).toEqual(made.map((r) => r.id));
     await expect(convertQuote(store, data, after, ['v-hilux', 'v-prado'])).rejects.toThrow(/clos/);
+    // Plusieurs véhicules : un dossier de groupe les réunit.
+    expect(made[0].groupId).toBeTruthy();
+    expect(made[1].groupId).toBe(made[0].groupId);
+    const groups = await store.list('reservation_groups');
+    expect(groups.find((g) => g.id === made[0].groupId)?.clientId).toBe('c-teranga');
+  });
+
+  it('devis à plusieurs catégories : chaque véhicule prend le prix de sa ligne', async () => {
+    const { buildQuote, quoteSlots } = await import('../domain/quotes');
+    const { convertQuote } = await import('./services');
+    const store = new DemoStore(memory());
+    const data = { ...(await snapshot(store)), clients: await store.list('clients'), packages: await store.list('packages'), seasons: await store.list('seasons'), quotes: [] };
+    const start = new Date(Date.now() + 40 * 86400000);
+    start.setHours(9, 0, 0, 0);
+    const end = new Date(start.getTime() + 2 * 86400000);
+    const draft = buildQuote({ clientId: 'c-teranga', category: '4x4', quantity: 1, formula: 'jour', start: start.toISOString(), end: end.toISOString(), withDriver: true, extras: [{ category: 'Berline', quantity: 1 }] }, data, new Date(), null);
+    expect(draft.extras).toHaveLength(1);
+    expect(draft.total).toBe(draft.unitTotal + draft.extras![0].unitTotal);
+    const q = await store.insert('quotes', draft);
+    expect(quoteSlots(q).map((x) => x.category)).toEqual(['4x4', 'Berline']);
+    await expect(convertQuote(store, data, q, ['v-dzire', 'v-prado'])).rejects.toThrow(/catégorie 4x4/);
+    const made = await convertQuote(store, data, q, ['v-prado', 'v-dzire']);
+    expect(made.map((r) => r.total)).toEqual([draft.unitTotal, draft.extras![0].unitTotal]);
+    expect(made[0].groupId).toBe(made[1].groupId);
+  });
+});
+
+describe('dossier de groupe (mode démo)', () => {
+  it('réserve plusieurs véhicules, répartit les passagers, puis un paiement global', async () => {
+    const { createGroupBooking, payGroup } = await import('./services');
+    const { billingSettings } = await import('../domain/billing');
+    const { groupSummary } = await import('../domain/groups');
+    const store = new DemoStore(memory());
+    const base = await snapshot(store);
+    const snap = { ...base, clients: await store.list('clients'), drivers: await store.list('drivers') };
+    const billing = { settings: billingSettings('SDT', null), clients: snap.clients, vehicles: snap.vehicles, rates: snap.rates, invoices: await store.list('invoices') };
+    const start = new Date(Date.now() + 50 * 86400000);
+    start.setHours(9, 0, 0, 0);
+    const end = new Date(start.getTime() + 2 * 86400000);
+    const input = { clientId: 'c-sante', start: start.toISOString(), end: end.toISOString(), withDriver: true, notes: null, passengers: 7 };
+    await expect(createGroupBooking(store, snap, input, [{ vehicleId: 'v-prado' }, { vehicleId: 'v-prado' }], null)).rejects.toThrow(/deux fois/);
+    await expect(createGroupBooking(store, snap, input, [{ vehicleId: 'v-prado', driverId: 'd-1' }, { vehicleId: 'v-hilux', driverId: 'd-1' }], null)).rejects.toThrow(/même chauffeur/);
+    const { group, reservations } = await createGroupBooking(store, snap, input, [{ vehicleId: 'v-prado', driverId: 'd-1' }, { vehicleId: 'v-hilux' }], 'Mission Tamba', new Date(), billing);
+    expect(group?.number).toMatch(/^DO-\d{4}-\d{4}$/);
+    expect(group?.label).toBe('Mission Tamba');
+    expect(reservations).toHaveLength(2);
+    expect(reservations.reduce((n, r) => n + (r.passengers ?? 0), 0)).toBe(7);
+    const data = { reservations: await store.list('reservations'), invoices: await store.list('invoices'), payments: await store.list('payments') };
+    const before = groupSummary(group!.id, data.reservations, data.invoices, data.payments, new Date());
+    expect(before.remaining).toBeGreaterThan(0);
+    await expect(payGroup(store, group!.id, data, before.remaining + 1, 'wave', 'X1')).rejects.toThrow(/reste dû/);
+    const paid = await payGroup(store, group!.id, data, before.remaining, 'virement', 'VIR-77');
+    expect(paid.reduce((n, p) => n + p.amount, 0)).toBe(before.remaining);
+    const after = groupSummary(group!.id, data.reservations, data.invoices, await store.list('payments'), new Date());
+    expect(after.remaining).toBe(0);
   });
 });

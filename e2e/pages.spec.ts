@@ -4,7 +4,7 @@ import { failOnErrors, login } from './helpers';
 const routes = [
   '/', '/planning', '/reservations', '/reservations/r-1', '/reservations/r-1/contrat', '/demandes', '/vehicules', '/vehicules/v-hiace',
   '/chauffeurs', '/maintenance', '/depenses', '/tarifs', '/clients', '/clients/c-sante', '/factures', '/rapports', '/parametres',
-  '/equipe', '/journal', '/vtc', '/vtc/vtc-1',
+  '/equipe', '/journal', '/vtc', '/vtc/vtc-1', '/dossiers/g-1',
 ];
 
 for (const role of ['admin', 'agent', 'comptable', 'mecanicien'] as const) {
@@ -83,5 +83,41 @@ test('chauffeurs : planning de la semaine, absence et feuille de mission', async
   // Feuille de mission du transfert aéroport de demain.
   await page.goto('/reservations?vue=suivi');
   await expect(page.getByRole('link', { name: /Feuille de mission à Ibrahima/ })).toHaveAttribute('href', /wa\.me\/.*AF718/);
+  check();
+});
+
+test('dossier de groupe : plusieurs véhicules, relevé et paiement global', async ({ page }) => {
+  const check = failOnErrors(page);
+  await login(page, 'direction');
+  // Dossier d'exemple : deux véhicules pour Mission Teranga Tours.
+  await page.goto('/dossiers/g-1');
+  await expect(page.getByRole('heading', { name: /Dossier DO-\d{4}-0001/ })).toBeVisible();
+  await expect(page.locator('table.data tbody tr')).toHaveCount(2);
+  await expect(page.getByText('Relevé de dossier')).toBeVisible();
+  await page.getByRole('button', { name: 'Encaisser pour le dossier' }).click();
+  const m = page.locator('.modal');
+  await expect(m.getByText(/Répartition/)).toBeVisible();
+  await m.getByLabel('Moyen de paiement').selectOption('wave');
+  await m.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByText(/encaissés sur 2 contrat/)).toBeVisible();
+
+  // Nouvelle réservation à deux véhicules : un dossier est créé.
+  await page.goto('/reservations?nouvelle=1');
+  const f = page.locator('.modal');
+  const start = new Date(Date.now() + 30 * 86400000);
+  const end = new Date(Date.now() + 32 * 86400000);
+  const local = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T09:00`;
+  await f.getByLabel('Départ', { exact: true }).fill(local(start));
+  await f.getByLabel('Retour prévu').fill(local(end));
+  await f.getByLabel('Passagers').fill('6');
+  await f.getByLabel('Véhicule').first().selectOption({ index: 1 });
+  await f.getByRole('button', { name: '+ Ajouter un véhicule' }).click();
+  await f.getByLabel(/^Véhicule 2/).selectOption({ index: 2 });
+  await f.getByLabel('Client').selectOption('c-sante');
+  await f.getByLabel('Nom du dossier (facultatif)').fill('Mission Kaolack');
+  await f.getByRole('button', { name: /Créer le dossier \(2 véhicules\)/ }).click();
+  await expect(page).toHaveURL(/\/dossiers\//);
+  await expect(page.getByText('Mission Kaolack').first()).toBeVisible();
+  await expect(page.locator('table.data tbody tr')).toHaveCount(2);
   check();
 });
