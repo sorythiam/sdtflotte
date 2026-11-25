@@ -77,7 +77,7 @@ export function Layout() {
   async function logout() {
     await store.signOut();
     setSession(null);
-    nav('/');
+    nav('/?connexion=1');
   }
   async function resetDemo() {
     (store as DemoStore).reset();

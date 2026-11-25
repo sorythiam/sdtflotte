@@ -124,7 +124,7 @@ test('dossier de groupe : plusieurs véhicules, relevé et paiement global', asy
 
 test('console Yoon Fleet : inscriptions à appeler et suivi', async ({ page }) => {
   const check = failOnErrors(page);
-  await page.goto('/');
+  await page.goto('/?connexion=1');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.locator('input[type=email]').fill('tbg@yoonfleet.com');
@@ -144,9 +144,17 @@ test('console Yoon Fleet : inscriptions à appeler et suivi', async ({ page }) =
   check();
 });
 
-test('l’inscription depuis une publicité demande le nom et le WhatsApp du gérant', async ({ page }) => {
+test('la page d’accueil mène à l’inscription, qui demande le nom et le WhatsApp du gérant', async ({ page }) => {
+  const check = failOnErrors(page);
+  await page.goto('/');
+  await page.evaluate(() => localStorage.clear());
   await page.goto('/?utm_source=facebook&utm_campaign=lancement');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Votre flotte, sur la bonne route.');
+  await expect(page.getByText('Sénégal Découverte Touristique')).toBeVisible();
+  await page.getByRole('link', { name: 'Essai gratuit 30 jours' }).click();
   await expect(page.getByRole('tab', { name: 'Essai gratuit 30 jours' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByLabel('Numéro WhatsApp')).toBeVisible();
   await expect(page.getByLabel('Votre nom')).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem('yoonfleet-utm'))).toBe('facebook|lancement');
+  check();
 });

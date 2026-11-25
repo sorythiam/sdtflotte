@@ -9,7 +9,7 @@ export function Login() {
   const params = new URLSearchParams(window.location.search);
   const invited = params.has('invitation');
   // Arrivée depuis une publicité ou le site : on ouvre directement l'inscription.
-  const fromAd = params.has('essai') || !!utmFrom(window.location.search);
+  const fromAd = params.has('essai');
   const [tab, setTab] = useState<'login' | 'signup' | 'join'>(invited ? 'join' : fromAd ? 'signup' : 'login');
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');

@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 /** Connexion en mode démo avec un profil, données d'exemple neuves. */
 export async function login(page: Page, role: 'admin' | 'direction' | 'agent' | 'comptable' | 'mecanicien' = 'admin') {
-  await page.goto('/');
+  await page.goto('/?connexion=1');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.locator('input[type=email]').fill(`${role}@sdt.sn`);

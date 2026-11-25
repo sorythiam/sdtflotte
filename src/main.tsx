@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
+import { Landing } from './pages/Landing';
 import { NewPassword } from './pages/NewPassword';
 import { VtcGate } from './components/VtcGate';
 import { DataProvider, useData } from './state/DataContext';
@@ -120,7 +121,13 @@ function App() {
   // Espace client d'une réservation : le lien envoyé par WhatsApp suffit.
   const portal = pathname.match(/^\/c\/([a-f0-9]{64})\/?$/);
   if (portal) return <Suspense fallback={<Loading />}><ClientPortal token={portal[1]} /></Suspense>;
-  if (!session) return <Login />;
+  if (!session) {
+    // yoonfleet.com : la page d'accueil, sauf pour qui vient se connecter, s'inscrire ou rejoindre une équipe.
+    const q = new URLSearchParams(window.location.search);
+    const wantsForm = ['connexion', 'essai', 'invitation', 'email'].some((k) => q.has(k)) || window.location.hash.includes('access_token');
+    if (pathname === '/' && !wantsForm) return <Landing />;
+    return <Login />;
+  }
   return (
     <Suspense fallback={<Loading />}>
     <Routes>
