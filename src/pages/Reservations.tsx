@@ -7,7 +7,7 @@ import { groupCapacity } from '../domain/groups';
 import { passengerSeats } from '../domain/tariff';
 import { vtcOverlap } from '../domain/vtc';
 import { dealFor, FORMULAS, fitsPassengers, priceFor, type Price } from '../domain/tariff';
-import { dateShort, periodShort, fromLocalInput, money, time, toLocalInput } from '../domain/format';
+import { dateShort, dayHour, fromLocalInput, money, time, toLocalInput } from '../domain/format';
 import { balanceDue, findConflicts, lateDays } from '../domain/rules';
 import type { Formula, ReservationStatus } from '../domain/types';
 import { useData } from '../state/DataContext';
@@ -113,9 +113,9 @@ export function Reservations() {
                         <span className="muted">{v?.plate}</span>
                       </td>
                       <td className="nowrap">
-                        {periodShort(r.start, r.end)}
+                        {dayHour(r.start)}
                         <br />
-                        <span className="muted small">{time(r.start)} – {time(r.end)}</span>
+                        → {dayHour(r.end)}
                       </td>
                       <td className="right num nowrap">
                         {money(r.total)}

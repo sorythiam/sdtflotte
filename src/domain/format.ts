@@ -56,3 +56,10 @@ export function periodShort(startIso: string, endIso: string): string {
   const sameMonth = s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear();
   return sameMonth ? `${s.getDate()} → ${e.getDate()} ${month(e)}` : `${s.getDate()} ${month(s)} → ${e.getDate()} ${month(e)}`;
 }
+
+/** « 22 nov. 12h », « 19 nov. 9h30 » : date courte et heure à la française. */
+export function dayHour(iso: string): string {
+  const d = new Date(iso);
+  const m = d.getMinutes();
+  return `${d.getDate()} ${d.toLocaleDateString('fr-FR', { month: 'short' })} ${d.getHours()}h${m ? String(m).padStart(2, '0') : ''}`;
+}
