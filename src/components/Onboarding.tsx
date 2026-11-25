@@ -32,6 +32,7 @@ export function Onboarding() {
   const org = session!.org;
   const [st, setSt] = useState(() => readState(org.id));
   const [team, setTeam] = useState<boolean | null>(null);
+  const [open, setOpen] = useState(false);
   const manager = can('direction');
 
   useEffect(() => {
@@ -89,6 +90,27 @@ export function Onboarding() {
     setSt(n);
     writeState(org.id, n);
   };
+
+  // Une fois la moitié du chemin faite, l'assistant tient sur une ligne : il ne cache plus le tableau de bord.
+  if (doneCount >= steps.length / 2 && !open) {
+    const left = steps.length - doneCount;
+    return (
+      <section className="card onboarding onboarding-compact" aria-labelledby="demarrer">
+        <div className="onb-compact">
+          <div className="grow">
+            <h2 id="demarrer" className="onb-compact-title">Bien démarrer avec Yoon Fleet</h2>
+            <span className="small muted">
+              Encore {left} étape{left > 1 ? 's' : ''} : <strong style={{ color: 'var(--ink)' }}>{next.title.toLowerCase()}</strong>
+            </span>
+          </div>
+          <Link to={next.actions[0].to} className="btn btn-sm btn-primary" onClick={() => visit(next.key)}>{next.actions[0].label}</Link>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={() => setOpen(true)}>Tout voir</button>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={hide}>Masquer</button>
+        </div>
+        <div className="onb-bar" aria-hidden="true"><span style={{ width: `${(doneCount / steps.length) * 100}%` }} /></div>
+      </section>
+    );
+  }
 
   return (
     <section className="card onboarding" aria-labelledby="demarrer">

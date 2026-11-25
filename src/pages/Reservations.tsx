@@ -7,7 +7,7 @@ import { groupCapacity } from '../domain/groups';
 import { passengerSeats } from '../domain/tariff';
 import { vtcOverlap } from '../domain/vtc';
 import { dealFor, FORMULAS, fitsPassengers, priceFor, type Price } from '../domain/tariff';
-import { dateShort, fromLocalInput, money, time, toLocalInput } from '../domain/format';
+import { dateShort, periodShort, fromLocalInput, money, time, toLocalInput } from '../domain/format';
 import { balanceDue, findConflicts, lateDays } from '../domain/rules';
 import type { Formula, ReservationStatus } from '../domain/types';
 import { useData } from '../state/DataContext';
@@ -92,8 +92,7 @@ export function Reservations() {
                   <th>Client</th>
                   <th>Véhicule</th>
                   <th>Période</th>
-                  <th className="right">Total</th>
-                  <th className="right">Reste dû</th>
+                  <th className="right">Montant</th>
                   <th>Statut</th>
                 </tr>
               </thead>
@@ -113,12 +112,15 @@ export function Reservations() {
                         <br />
                         <span className="muted">{v?.plate}</span>
                       </td>
-                      <td>
-                        {dateShort(r.start)} {time(r.start)} → {dateShort(r.end)} {time(r.end)}
+                      <td className="nowrap">
+                        {periodShort(r.start, r.end)}
+                        <br />
+                        <span className="muted small">{time(r.start)} – {time(r.end)}</span>
                       </td>
-                      <td className="right num">{money(r.total)}</td>
-                      <td className="right num" style={{ color: due ? 'var(--ocre-text)' : undefined, fontWeight: due ? 600 : 400 }}>
-                        {due ? money(due) : 'Soldé'}
+                      <td className="right num nowrap">
+                        {money(r.total)}
+                        <br />
+                        {due ? <span className="small" style={{ color: 'var(--ink)', fontWeight: 700 }}>reste {money(due)}</span> : <span className="small muted">soldé</span>}
                       </td>
                       <td>
                         <ReservationBadge status={r.status} late={lateDays(r, now)} />

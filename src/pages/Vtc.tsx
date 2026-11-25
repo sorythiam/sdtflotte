@@ -58,7 +58,7 @@ export function Vtc() {
       <div className="kpis">
         <div className="card kpi"><span className="kpi-label">Attendu aujourd’hui</span><span className="kpi-value">{money(dueToday)}</span><span className="small muted">{active.filter((r) => r.b.todayDue > 0).length} chauffeur(s) au travail</span></div>
         <div className="card kpi"><span className="kpi-label">Reçu aujourd’hui</span><span className="kpi-value" style={{ color: paidToday >= dueToday && dueToday > 0 ? 'var(--success)' : undefined }}>{money(paidToday)}</span><span className="small muted">{dueToday ? `${Math.round((paidToday / dueToday) * 100)} % de l’attendu` : 'jour de repos'}</span></div>
-        <div className="card kpi"><span className="kpi-label">Reste dû par les chauffeurs</span><span className="kpi-value" style={{ color: owed ? 'var(--ocre-text)' : undefined }}>{money(owed)}</span><span className="small muted">{late} chauffeur(s) en retard de 2 jours ou plus</span></div>
+        <div className="card kpi"><span className="kpi-label">Reste dû par les chauffeurs</span><span className="kpi-value" style={{ color: owed ? 'var(--ink)' : undefined }}>{money(owed)}</span><span className="small muted">{late} chauffeur(s) en retard de 2 jours ou plus</span></div>
       </div>
 
       <section className="card">
@@ -79,7 +79,7 @@ export function Vtc() {
                 <Link to={`/vtc/${c.id}`} className="vtc-card">
                   <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
                     <strong>{d?.name ?? '—'}</strong>
-                    <span style={{ color: b.balance > 0 ? 'var(--ocre-text)' : 'var(--success)', fontWeight: 700 }}>{b.balance > 0 ? money(b.balance) : b.balance < 0 ? `+${money(-b.balance)}` : 'À jour'}</span>
+                    <span style={{ color: b.balance > 0 ? 'var(--ink)' : 'var(--success)', fontWeight: 700 }}>{b.balance > 0 ? money(b.balance) : b.balance < 0 ? `+${money(-b.balance)}` : 'À jour'}</span>
                   </div>
                   <span className="small muted">{v ? `${v.model} ${v.plate}` : ''} · {money(c.dailyAmount)}/jour{b.daysBehind > 0 ? ` · ${b.daysBehind} j de retard` : ''}{b.progress !== null ? ` · payé à ${Math.round(b.progress * 100)} %` : ''}</span>
                 </Link>
@@ -107,7 +107,7 @@ export function Vtc() {
                       <td>
                         {b.todayDue === 0 ? <span className="muted small">Repos</span> : b.paidToday >= b.todayDue ? <span className="badge badge-success">Reçu</span> : <span className="badge badge-warning">Attendu</span>}
                       </td>
-                      <td className="right num" style={{ color: b.balance > 0 ? 'var(--ocre-text)' : 'var(--success)', fontWeight: 600 }}>
+                      <td className="right num" style={{ color: b.balance > 0 ? 'var(--ink)' : 'var(--success)', fontWeight: 600 }}>
                         {b.balance > 0 ? money(b.balance) : b.balance < 0 ? `+${money(-b.balance)}` : 'À jour'}
                         {b.daysBehind > 0 && <><br /><span className="small muted" style={{ fontWeight: 400 }}>{b.daysBehind} jour(s)</span></>}
                         {b.progress !== null && <><br /><span className="small muted" style={{ fontWeight: 400 }}>véhicule payé à {Math.round(b.progress * 100)} %</span></>}
@@ -184,7 +184,7 @@ export function VtcPaymentForm({ contractId, onClose }: { contractId: string; on
     <Modal title={`Versement · ${d?.name ?? c.number}`} onClose={onClose}>
       <form className="stack" onSubmit={submit}>
         <p className="small muted" style={{ margin: 0 }}>
-          {money(c.dailyAmount)} par jour · solde actuel {b.balance > 0 ? <strong style={{ color: 'var(--ocre-text)' }}>{money(b.balance)} dû</strong> : b.balance < 0 ? `${money(-b.balance)} d’avance` : 'à jour'}
+          {money(c.dailyAmount)} par jour · solde actuel {b.balance > 0 ? <strong style={{ color: 'var(--ink)' }}>{money(b.balance)} dû</strong> : b.balance < 0 ? `${money(-b.balance)} d’avance` : 'à jour'}
         </p>
         <div className="grid-2">
           <label className="field">Montant reçu (FCFA)<input type="number" min={1} inputMode="numeric" required value={amount} onChange={(e) => setAmount(e.target.value)} /></label>

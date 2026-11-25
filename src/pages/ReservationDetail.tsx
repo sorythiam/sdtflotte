@@ -85,28 +85,21 @@ export function ReservationDetail() {
             <ReservationBadge status={r.status} late={late} />
           </div>
         </div>
-        <div className="row">
-          {r.status === 'reservee' && canRent && (
-            <>
-              <button className="btn btn-danger" onClick={() => setDialog('cancel')}>Annuler</button>
-              {gate.ok && <button className="btn btn-ghost" onClick={() => setDialog('checkout')} title="Sans photos ni signature">Départ rapide</button>}
-              {gate.ok ? (
-                <Link className="btn btn-primary" to={`/reservations/${r.id}/depart`}>État des lieux et remise des clés</Link>
-              ) : (
-                c && <Link className="btn btn-primary" to={`/clients/${c.id}`}>Compléter le dossier client</Link>
-              )}
-            </>
-          )}
-          {r.status === 'en_cours' && canRent && (
-            <>
-              <button className="btn btn-ghost" onClick={() => setDialog('checkin')} title="Sans photos ni signature">Retour rapide</button>
-              <Link className="btn btn-primary" to={`/reservations/${r.id}/retour`}>État des lieux de retour</Link>
-            </>
-          )}
+        {/* Un seul bouton principal : l'étape suivante. Le reste, en boutons discrets de même style. */}
+        <div className="row head-actions">
+          {r.status === 'reservee' && canRent && <button className="btn btn-ghost btn-ghost-danger" onClick={() => setDialog('cancel')}>Annuler</button>}
           {(r.status === 'reservee' || r.status === 'en_cours') && canRent && (
-            <button className="btn" onClick={() => setDialog('amend')}>{r.status === 'en_cours' ? 'Prolonger' : 'Modifier'}</button>
+            <button className="btn btn-ghost" onClick={() => setDialog('amend')}>{r.status === 'en_cours' ? 'Prolonger' : 'Modifier'}</button>
           )}
-          <Link className="btn" to={`/reservations/${r.id}/contrat`}>Contrat PDF</Link>
+          <Link className="btn btn-ghost" to={`/reservations/${r.id}/contrat`}>Contrat PDF</Link>
+          {r.status === 'reservee' && canRent && gate.ok && <button className="btn btn-ghost" onClick={() => setDialog('checkout')} title="Sans photos ni signature">Départ rapide</button>}
+          {r.status === 'en_cours' && canRent && <button className="btn btn-ghost" onClick={() => setDialog('checkin')} title="Sans photos ni signature">Retour rapide</button>}
+          {r.status === 'reservee' && canRent && (gate.ok ? (
+            <Link className="btn btn-primary" to={`/reservations/${r.id}/depart`}>État des lieux et remise des clés</Link>
+          ) : (
+            c && <Link className="btn btn-primary" to={`/clients/${c.id}`}>Compléter le dossier client</Link>
+          ))}
+          {r.status === 'en_cours' && canRent && <Link className="btn btn-primary" to={`/reservations/${r.id}/retour`}>État des lieux de retour</Link>}
         </div>
       </header>
 
@@ -120,7 +113,7 @@ export function ReservationDetail() {
         <div className="col-2 stack" style={{ gap: 'var(--space-6)' }}>
           <section className="grid-2" aria-label="Client et véhicule">
             <div className="card" style={{ gap: 'var(--space-2)' }}>
-              <span className="kpi-label" style={{ color: 'var(--ocre-text)' }}>Client</span>
+              <span className="kpi-label">Client</span>
               <h3>{c?.name ?? '—'}</h3>
               <span className="small muted">
                 {c?.kind === 'entreprise' ? 'Entreprise' : 'Particulier'} · {c?.phone}
@@ -134,7 +127,7 @@ export function ReservationDetail() {
               {c && <ScoreBadge score={c.score} />}
             </div>
             <div className="card" style={{ gap: 'var(--space-2)' }}>
-              <span className="kpi-label" style={{ color: 'var(--ocre-text)' }}>Véhicule</span>
+              <span className="kpi-label">Véhicule</span>
               <h3>{v ? `${v.brand} ${v.model} · ${v.plate}` : '—'}</h3>
               <span className="small muted">
                 {v?.category}
@@ -223,7 +216,7 @@ export function ReservationDetail() {
           <div className="grid-2" style={{ gap: 'var(--space-2)' }}>
             <div>
               <div className="kpi-label">Reste dû</div>
-              <div className="num" style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 22, color: due ? 'var(--ocre-text)' : 'var(--success)' }}>
+              <div className="num" style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 22, color: due ? 'var(--ink)' : 'var(--success)' }}>
                 {due ? money(due) : 'Soldé'}
               </div>
             </div>

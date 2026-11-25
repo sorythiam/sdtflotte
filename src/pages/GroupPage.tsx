@@ -93,7 +93,7 @@ export function GroupPage() {
         <div className="card kpi"><span className="kpi-label">Déjà réglé</span><strong className="kpi-value">{money(sum.paid)}</strong></div>
         <div className="card kpi">
           <span className="kpi-label">Reste à payer</span>
-          <strong className="kpi-value" style={{ color: sum.remaining ? 'var(--ocre-text)' : undefined }}>{money(sum.remaining)}</strong>
+          <strong className="kpi-value" style={{ color: sum.remaining ? 'var(--ink)' : 'var(--success)' }}>{money(sum.remaining)}</strong>
           {sum.depositMissing > 0 && <span className="small muted">dont acompte attendu {money(sum.depositMissing)}</span>}
         </div>
       </section>

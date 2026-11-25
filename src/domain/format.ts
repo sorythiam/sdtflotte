@@ -45,3 +45,14 @@ export function toLocalInput(iso: string): string {
 export function fromLocalInput(v: string): string {
   return new Date(v).toISOString();
 }
+
+/** Période courte sur une ligne : « 19 → 24 nov. », « 28 nov. → 1 déc. », « 26 nov. » si un seul jour. */
+export function periodShort(startIso: string, endIso: string): string {
+  const s = new Date(startIso);
+  const e = new Date(endIso);
+  const month = (d: Date) => d.toLocaleDateString('fr-FR', { month: 'short' });
+  const sameDay = s.toDateString() === e.toDateString();
+  if (sameDay) return `${s.getDate()} ${month(s)}`;
+  const sameMonth = s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear();
+  return sameMonth ? `${s.getDate()} → ${e.getDate()} ${month(e)}` : `${s.getDate()} ${month(s)} → ${e.getDate()} ${month(e)}`;
+}

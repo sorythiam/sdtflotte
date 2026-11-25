@@ -215,7 +215,7 @@ export function ClientDetail() {
               <dl className="facts">
                 <div><dt>Facturé TTC</dt><dd>{money(fin.billed)}</dd></div>
                 <div><dt>Encaissé</dt><dd>{money(fin.paid)}</dd></div>
-                <div><dt>Reste dû</dt><dd style={{ color: fin.due > 0 ? 'var(--ocre-text)' : 'var(--success)' }}>{fin.due > 0 ? money(fin.due) : 'Rien'}</dd></div>
+                <div><dt>Reste dû</dt><dd style={{ color: fin.due > 0 ? 'var(--ink)' : 'var(--success)', fontWeight: 700 }}>{fin.due > 0 ? money(fin.due) : 'Rien'}</dd></div>
                 {fin.late > 0 && <div><dt>Dont en retard</dt><dd style={{ color: 'var(--danger)' }}>{money(fin.late)}</dd></div>}
               </dl>
               {clientInvoices.length > 0 && (

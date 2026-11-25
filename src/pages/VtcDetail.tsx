@@ -94,7 +94,7 @@ export function VtcDetail() {
       <div className="kpis">
         <div className="card kpi">
           <span className="kpi-label">Solde du chauffeur</span>
-          <span className="kpi-value" style={{ color: b.balance > 0 ? 'var(--ocre-text)' : 'var(--success)' }}>{b.balance > 0 ? money(b.balance) : b.balance < 0 ? `+${money(-b.balance)}` : 'À jour'}</span>
+          <span className="kpi-value" style={{ color: b.balance > 0 ? 'var(--ink)' : 'var(--success)' }}>{b.balance > 0 ? money(b.balance) : b.balance < 0 ? `+${money(-b.balance)}` : 'À jour'}</span>
           <span className="small muted">{b.balance > 0 ? `${b.daysBehind} jour(s) de retard` : b.balance < 0 ? 'd’avance' : 'rien à réclamer'}</span>
         </div>
         <div className="card kpi">

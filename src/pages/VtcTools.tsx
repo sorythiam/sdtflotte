@@ -101,7 +101,7 @@ export function VtcToday() {
         <div className="card kpi"><span className="kpi-label">Attendu {day === today ? 'aujourd’hui' : `le ${dateShort(day)}`}</span><span className="kpi-value num">{money(due, '')}</span><span className="small muted">FCFA · {rows.filter((r) => r.today.due > 0).length} chauffeur(s) au travail</span></div>
         <div className="card kpi"><span className="kpi-label">Reçu</span><span className="kpi-value num" style={{ color: due && got >= due ? 'var(--success)' : undefined }}>{money(got, '')}</span><span className="small muted">FCFA{due ? ` · ${Math.round((got / due) * 100)} % de l’attendu` : ''}</span></div>
         <div className="card kpi"><span className="kpi-label">Pas encore versé</span><span className="kpi-value">{rows.filter((r) => r.today.state === 'non_paye' || r.today.state === 'partiel').length}</span><span className="small muted">chauffeur(s) ce jour</span></div>
-        <div className="card kpi"><span className="kpi-label">Reste dû au total</span><span className="kpi-value num" style={{ color: 'var(--ocre-text)' }}>{money(rows.reduce((s, r) => s + Math.max(0, r.b.balance), 0), '')}</span><span className="small muted">FCFA · {late.length} chauffeur(s)</span></div>
+        <div className="card kpi"><span className="kpi-label">Reste dû au total</span><span className="kpi-value num" style={{ color: 'var(--ink)' }}>{money(rows.reduce((s, r) => s + Math.max(0, r.b.balance), 0), '')}</span><span className="small muted">FCFA · {late.length} chauffeur(s)</span></div>
       </div>
 
       <section className="card">
@@ -120,7 +120,7 @@ export function VtcToday() {
                       <tr key={c.id}>
                         <td><Link to={`/vtc/${c.id}`}><strong>{d?.name ?? c.number}</strong></Link><br /><span className="muted small">{v?.plate} · {money(c.dailyAmount)}/jour</span></td>
                         <td><span className={`badge ${cls}`}>{label}</span>{t.paid > 0 && <><br /><span className="small muted">{money(t.paid)} reçus</span></>}</td>
-                        <td className="right num" style={{ color: b.balance > 0 ? 'var(--ocre-text)' : 'var(--success)', fontWeight: 600 }}>
+                        <td className="right num" style={{ color: b.balance > 0 ? 'var(--ink)' : 'var(--success)', fontWeight: 600 }}>
                           {b.balance > 0 ? money(b.balance) : b.balance < 0 ? `+${money(-b.balance)}` : 'À jour'}
                           {b.daysBehind > 0 && <><br /><span className="small muted" style={{ fontWeight: 400 }}>{b.daysBehind} j</span></>}
                         </td>

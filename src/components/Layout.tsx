@@ -37,6 +37,25 @@ export function Layout() {
   const sections = SECTIONS.filter((s) => visibleTabs(s, role).length > 0);
   const current = sectionOf(pathname);
   const tabs = visibleTabs(current, role);
+  // Un onglet porte déjà le nom de la page : le grand titre identique est masqué à l'écran
+  // (gardé pour les lecteurs d'écran), le contenu remonte d'une ligne.
+  const tabLabels = tabs.length > 1 ? tabs.map((t) => t.label).join('|') : '';
+  useEffect(() => {
+    const main = document.getElementById('contenu');
+    if (!main) return;
+    const labels = tabLabels ? tabLabels.split('|') : [];
+    const mark = () => {
+      main.querySelectorAll('.page-head h1').forEach((h) => {
+        const dup = labels.includes((h.textContent ?? '').trim());
+        h.classList.toggle('title-dup', dup);
+        h.closest('.page-head')?.classList.toggle('page-head-dup', dup);
+      });
+    };
+    mark();
+    const mo = new MutationObserver(mark);
+    mo.observe(main, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, [tabLabels, pathname]);
   const bottom = sections.filter((s) => BOTTOM.includes(s.key));
   const more = sections.filter((s) => !BOTTOM.includes(s.key));
   const moreActive = more.some((s) => s.key === current.key);
@@ -70,8 +89,7 @@ export function Layout() {
   const account = (
     <div className="side-foot">
       <span>
-        <strong className="org-name">{org.name}</strong>
-        <br />
+        <strong className="org-name">{org.name}<br /></strong>
         Formule {planLabel[org.plan]} · {data.vehicles.length}/{org.vehicleQuota} véhicules
         {trialDays !== null && trialDays >= 0 && (
           <>
@@ -85,11 +103,11 @@ export function Layout() {
       </span>
       <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
         {store.mode === 'demo' && (
-          <button type="button" className="btn btn-sm" onClick={resetDemo}>
+          <button type="button" className="btn btn-sm btn-link-quiet" onClick={resetDemo}>
             Réinitialiser la démo
           </button>
         )}
-        <button type="button" className="btn btn-sm" onClick={logout}>
+        <button type="button" className="btn btn-sm btn-link-quiet" onClick={logout}>
           Se déconnecter
         </button>
       </div>
