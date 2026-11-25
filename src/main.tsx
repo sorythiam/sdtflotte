@@ -17,6 +17,17 @@ import '@fontsource/sora/latin-600.css';
 import '@fontsource/sora/latin-700.css';
 import '@fontsource/sora/latin-800.css';
 import './styles/app.css';
+
+// Après une mise en ligne, un onglet resté ouvert demande des fichiers de l'ancienne version,
+// qui n'existent plus : la page restait blanche. On recharge alors une fois pour prendre la nouvelle.
+window.addEventListener('vite:preloadError', (event) => {
+  const key = 'yoonfleet-reloaded-at';
+  const last = Number(sessionStorage.getItem(key) ?? 0);
+  if (Date.now() - last < 60_000) return; // déjà rechargé il y a moins d'une minute : on n'insiste pas
+  event.preventDefault();
+  sessionStorage.setItem(key, String(Date.now()));
+  window.location.reload();
+});
 // Pages chargées à la demande : premier affichage plus rapide sur un petit téléphone en 3G.
 const pages = {
   Clients: () => import('./pages/Clients'),
