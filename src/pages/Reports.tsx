@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Empty, ErrorBox } from '../components/ui';
 import { money, num } from '../domain/format';
 import { expenseLabel, expensesIn } from '../domain/expenses';
-import { byCategory, computeLosses, computeReport, DEFAULT_ACCOUNTS, journalEntries, monthlyRevenue, type AccountPlan, type Period } from '../domain/reports';
+import { byCategory, computeLosses, computeReport, DEFAULT_ACCOUNTS, journalEntries, monthlyRevenue, odooCsv, padAccount, sageCsv, toWindows1252, unbalancedPieces, type AccountPlan, type Period } from '../domain/reports';
 import { useData } from '../state/DataContext';
 import { payState } from '../domain/billing';
 
@@ -69,7 +69,27 @@ export function Reports() {
     [data, period, now],
   );
   const maxMonth = Math.max(1, ...months.map((m) => m.revenue));
-  const journal = useMemo(() => journalEntries(data.payments, data.reservations, data.clients, period, plan, data.invoices), [data, period, plan]);
+  const journal = useMemo(
+    () => journalEntries(data.payments, data.reservations, data.clients, period, plan, data.invoices, {
+      expenses: data.expenses, maintenance: data.maintenances, vehicles: data.vehicles,
+      vtcPayments: data.vtc_payments, vtcContracts: data.vtc_contracts, drivers: data.drivers,
+    }),
+    [data, period, plan],
+  );
+  const unbalanced = useMemo(() => unbalancedPieces(journal), [journal]);
+
+  function download(name: string, content: BlobPart, type: string) {
+    const url = URL.createObjectURL(new Blob([content], { type }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  const exportSage = () => download(`ecritures_sage100_${fileTag}.csv`, toWindows1252(sageCsv(journal, plan)), 'text/csv;charset=windows-1252');
+  const exportOdoo = () => download(`ecritures_odoo_${fileTag}.csv`, '\ufeff' + odooCsv(journal, plan), 'text/csv;charset=utf-8');
   const label = `${new Date(period.from).toLocaleDateString('fr-FR')} – ${new Date(Date.parse(period.to) - 1).toLocaleDateString('fr-FR')}`;
   const fileTag = `${period.from.slice(0, 10)}_${new Date(Date.parse(period.to) - 1).toISOString().slice(0, 10)}`;
 
@@ -149,15 +169,15 @@ export function Reports() {
       const write = (await import('write-excel-file/browser')).default;
       const H = (v: string) => ({ value: v, fontWeight: 'bold' as const });
       const rows = [
-        [H('Date'), H('Journal'), H('N° pièce'), H('Compte'), H('Libellé'), H('Débit'), H('Crédit')],
+        [H('Date'), H('Journal'), H('N° pièce'), H('Compte'), H('Tiers'), H('Libellé'), H('Débit'), H('Crédit')],
         ...journal.map((l) => [
           { value: new Date(l.date + 'T00:00:00'), type: Date, format: 'dd/mm/yyyy' },
-          { value: l.journal }, { value: l.piece }, { value: l.account }, { value: l.label },
+          { value: l.journal }, { value: l.piece }, { value: padAccount(l.account, plan.accountLength) }, { value: l.thirdParty ?? '' }, { value: l.label },
           l.debit ? { value: l.debit, type: Number, format: '#,##0' } : { value: '' },
           l.credit ? { value: l.credit, type: Number, format: '#,##0' } : { value: '' },
         ]),
       ];
-      await write(rows as never, { sheet: 'Journal', columns: [{ width: 12 }, { width: 9 }, { width: 15 }, { width: 10 }, { width: 46 }, { width: 14 }, { width: 14 }] } as never).toFile(
+      await write(rows as never, { sheet: 'Journal', columns: [{ width: 12 }, { width: 9 }, { width: 15 }, { width: 10 }, { width: 12 }, { width: 46 }, { width: 14 }, { width: 14 }] } as never).toFile(
         `journal_syscohada_${fileTag}.xlsx`,
       );
     } catch (e) {
@@ -180,6 +200,15 @@ export function Reports() {
     ['deposits', 'Cautions reçues'],
     ['customers', 'Clients'],
     ['vat', 'TVA facturée'],
+    ['vtcRevenue', 'Produits VTC (versements chauffeurs)'],
+    ['suppliers', 'Fournisseurs'],
+    ['fuel', 'Carburant'],
+    ['upkeep', 'Entretien, réparations, pièces, pneus, lavage'],
+    ['insurance', 'Assurances'],
+    ['taxes', 'Impôts et taxes'],
+    ['fines', 'Amendes'],
+    ['tolls', 'Péages'],
+    ['otherExpenses', 'Autres dépenses'],
   ];
 
   return (
@@ -192,6 +221,8 @@ export function Reports() {
         <div className="row">
           <button className="btn" onClick={exportReport}>Exporter le rapport (Excel)</button>
           <button className="btn btn-dark" onClick={exportJournal}>Journal SYSCOHADA (Excel)</button>
+          <button className="btn" onClick={exportSage}>Pour Sage 100 (CSV)</button>
+          <button className="btn" onClick={exportOdoo}>Pour Odoo (CSV)</button>
         </div>
       </header>
       <div className="row">
@@ -348,41 +379,62 @@ export function Reports() {
 
       <section className="card" aria-labelledby="journal">
         <div className="row" style={{ justifyContent: 'space-between' }}>
-          <h2 id="journal">Journal des ventes et encaissements (SYSCOHADA)</h2>
+          <h2 id="journal">Journal comptable (SYSCOHADA)</h2>
           <button type="button" className="btn btn-sm" onClick={() => setShowPlan(!showPlan)}>
             {showPlan ? 'Masquer le plan de comptes' : 'Plan de comptes'}
           </button>
         </div>
         <p className="small muted" style={{ margin: 0 }}>
-          Journal des ventes (VT) pour les factures et avoirs émis, et une écriture par paiement reçu : CA caisse, BQ banque et chèques, MM mobile money.
+          Ventes (VT) pour les factures et avoirs, une écriture par paiement reçu et par versement VTC (CA caisse, BQ banque et chèques, MM mobile money),
+          et achats (AC) pour les dépenses et entretiens à régler aux fournisseurs. Le compte client porte un code tiers par client pour le lettrage.
           Les comptes proposés sont à faire valider par votre comptable.
         </p>
         {showPlan && (
           <div className="grid-2">
-            {accountFields.map(([k, l]) => (
+            {accountFields.filter(([k]) => k !== 'accountLength').map(([k, l]) => (
               <label key={k} className="field">
                 {l}
                 <input value={plan[k]} inputMode="numeric" onChange={(e) => savePlan({ ...plan, [k]: e.target.value.replace(/\s/g, '') })} />
               </label>
             ))}
+            <label className="field">
+              Longueur des comptes chez le comptable
+              <select value={plan.accountLength} onChange={(e) => savePlan({ ...plan, accountLength: e.target.value })}>
+                <option value="6">6 chiffres (411100)</option>
+                <option value="8">8 chiffres (41110000)</option>
+                <option value="10">10 chiffres</option>
+              </select>
+            </label>
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>
               <button type="button" className="btn btn-ghost" onClick={() => savePlan(DEFAULT_ACCOUNTS)}>Revenir aux comptes par défaut</button>
             </div>
           </div>
         )}
+        {unbalanced.length > 0 && <p className="error-text" role="alert">Pièces déséquilibrées : {unbalanced.join(', ')}. Signalez-le avant l’import.</p>}
+        <details className="small">
+          <summary>Comment importer chez votre comptable</summary>
+          <p style={{ margin: '8px 0 0' }}>
+            <strong>Sage 100</strong> : fichier CSV séparé par des points-virgules, en Windows-1252. Le comptable crée une fois un « format paramétrable » d’import d’écritures avec les colonnes
+            Date (JJ/MM/AAAA), Code journal, N° pièce, N° compte général, N° compte tiers, Libellé, Débit, Crédit. Les journaux, comptes et tiers doivent exister dans Sage.
+          </p>
+          <p style={{ margin: '8px 0 0' }}>
+            <strong>Odoo</strong> : Comptabilité › Écritures comptables › Importer, avec le fichier CSV. Chaque pièce occupe une première ligne (date, journal, référence) suivie de ses lignes.
+            Les codes journaux (VT, CA, BQ, MM, AC), les comptes et les clients doivent exister dans Odoo ; videz la colonne partenaire si vos clients n’y sont pas.
+          </p>
+        </details>
         {journal.length === 0 ? (
-          <Empty>Aucun encaissement sur la période.</Empty>
+          <Empty>Aucune écriture sur la période.</Empty>
         ) : (
           <div className="table-wrap" style={{ maxHeight: 360, overflowY: 'auto' }}>
             <table className="data">
               <thead>
-                <tr><th>Date</th><th>Journal</th><th>Pièce</th><th>Compte</th><th>Libellé</th><th className="right">Débit</th><th className="right">Crédit</th></tr>
+                <tr><th>Date</th><th>Journal</th><th>Pièce</th><th>Compte</th><th>Tiers</th><th>Libellé</th><th className="right">Débit</th><th className="right">Crédit</th></tr>
               </thead>
               <tbody>
                 {journal.map((l, i) => (
                   <tr key={i}>
                     <td>{new Date(l.date + 'T00:00:00').toLocaleDateString('fr-FR')}</td>
-                    <td>{l.journal}</td><td className="num">{l.piece}</td><td className="num">{l.account}</td><td>{l.label}</td>
+                    <td>{l.journal}</td><td className="num">{l.piece}</td><td className="num">{padAccount(l.account, plan.accountLength)}</td><td className="num small">{l.thirdParty ?? ''}</td><td>{l.label}</td>
                     <td className="right num">{l.debit ? num(l.debit) : ''}</td>
                     <td className="right num">{l.credit ? num(l.credit) : ''}</td>
                   </tr>

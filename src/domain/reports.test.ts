@@ -132,3 +132,56 @@ describe('journal avec factures et TVA', () => {
     expect(j[j.length - 1].label).toContain('réf. 0012345');
   });
 });
+
+describe('journal complet et exports comptables', () => {
+  const extras = {
+    expenses: [
+      { id: 'e1abcdef99', vehicleId: 'v1', date: '2026-11-03', kind: 'carburant' as const, amount: 30000, label: 'Plein', chargedTo: undefined },
+      { id: 'e2', vehicleId: 'v1', date: '2026-11-04', kind: 'amende' as const, amount: 5000, label: null, chargedTo: 'chauffeur' as const },
+    ],
+    maintenance: [{ id: 'm1', vehicleId: 'v1', label: 'Vidange', start: '2026-11-06T08:00:00Z', cost: 45000, provider: 'Garage Diop' }],
+    vehicles: [{ id: 'v1', plate: 'DK-1' }],
+    vtcPayments: [{ id: 'vp1', contractId: 'k1', paidOn: '2026-11-07', amount: 15000, method: 'wave' as const, reference: 'W9' }],
+    vtcContracts: [{ id: 'k1', number: 'VTC-2026-0001', driverId: 'd1' }],
+    drivers: [{ id: 'd1', name: 'Modou Faye' }],
+  };
+  const j = journalEntries([], [], clients, NOV, undefined, [], extras);
+
+  it('reprend versements VTC, dépenses et entretiens du propriétaire', () => {
+    expect(j.map((l) => [l.journal, l.account, l.debit, l.credit])).toEqual([
+      ['MM', '521800', 15000, 0], ['MM', '706200', 0, 15000],
+      ['AC', '605300', 30000, 0], ['AC', '401100', 0, 30000],
+      ['AC', '624100', 45000, 0], ['AC', '401100', 0, 45000],
+    ]);
+    expect(j[4].label).toBe('Entretien Vidange DK-1 (Garage Diop)');
+  });
+
+  it('code tiers sur le compte client et pièces équilibrées', async () => {
+    const { unbalancedPieces } = await import('./reports');
+    const pay: Payment[] = [{ id: 'p', reservationId: '9', kind: 'solde', amount: 1000, method: 'especes', status: 'paye', paidAt: '2026-11-12T10:00:00Z', createdAt: '' }];
+    const { buildInvoice, billingSettings } = await import('./billing');
+    const r = res('9', { start: '2026-11-10T09:00:00Z', end: '2026-11-11T09:00:00Z', total: 1000 });
+    const inv = { ...buildInvoice(r, clients[0], undefined, undefined, billingSettings('SDT', {}), new Date('2026-11-05T10:00:00Z')), id: 'i', number: 'FA-2026-0002' };
+    const k = journalEntries(pay, [r], clients, NOV, undefined, [inv]);
+    expect(k.filter((l) => l.account === '411100').map((l) => l.thirdParty)).toEqual(['CC1', 'CC1']);
+    expect(unbalancedPieces([...k, ...j])).toEqual([]);
+  });
+
+  it('CSV Sage 100 : point-virgule, comptes sur 8 chiffres, Windows-1252', async () => {
+    const { sageCsv, toWindows1252, padAccount } = await import('./reports');
+    const csv = sageCsv(j, { ...(await import('./reports')).DEFAULT_ACCOUNTS, accountLength: '8' });
+    expect(csv.split('\r\n')[0]).toBe('Date;Code journal;N° pièce;N° compte général;N° compte tiers;Libellé;Débit;Crédit');
+    expect(csv.split('\r\n')[1]).toBe('07/11/2026;MM;VTC-2026-0001;52180000;;Versement VTC VTC-2026-0001 Modou Faye réf. W9;15000;');
+    expect(padAccount('411100', '6')).toBe('411100');
+    const bytes = toWindows1252('é’€');
+    expect([...bytes]).toEqual([0xe9, 0x92, 0x80]);
+  });
+
+  it('CSV Odoo : une première ligne par pièce, puis ses lignes', async () => {
+    const { odooCsv, DEFAULT_ACCOUNTS } = await import('./reports');
+    const rows = odooCsv(j, DEFAULT_ACCOUNTS).trim().split('\n');
+    expect(rows[0]).toBe('date,journal_id,ref,line_ids/account_id,line_ids/partner_id,line_ids/name,line_ids/debit,line_ids/credit');
+    expect(rows[1].startsWith('2026-11-07,MM,VTC-2026-0001,521800,')).toBe(true);
+    expect(rows[2].startsWith(',,,706200,')).toBe(true);
+  });
+});

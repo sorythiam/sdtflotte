@@ -7,7 +7,7 @@
 
 import type { Invoice } from './billing';
 import { expensesIn } from './expenses';
-import type { Client, Expense, Maintenance, Payment, PaymentMethod, Reservation, Vehicle } from './types';
+import type { Client, Driver, Expense, ExpenseKind, Maintenance, Payment, PaymentMethod, Reservation, Vehicle, VtcContract, VtcPayment } from './types';
 
 const DAY = 86400000;
 
@@ -175,6 +175,16 @@ export interface AccountPlan {
   deposits: string; // cautions reçues
   customers: string; // clients (factures émises, encaissements)
   vat: string; // TVA facturée
+  vtcRevenue: string; // versements des chauffeurs VTC
+  suppliers: string; // fournisseurs (dépenses et entretiens à régler)
+  fuel: string; // carburant
+  upkeep: string; // entretiens, réparations, pièces, pneus, lavage
+  insurance: string; // assurances
+  taxes: string; // impôts et taxes
+  fines: string; // amendes
+  tolls: string; // péages
+  otherExpenses: string; // autres dépenses
+  accountLength: string; // longueur des comptes chez le comptable : '6' ou '8'
 }
 
 /** Comptes proposés par défaut, à valider par le comptable. */
@@ -186,6 +196,16 @@ export const DEFAULT_ACCOUNTS: AccountPlan = {
   deposits: '165000',
   customers: '411100',
   vat: '443100',
+  vtcRevenue: '706200',
+  suppliers: '401100',
+  fuel: '605300',
+  upkeep: '624100',
+  insurance: '625200',
+  taxes: '641000',
+  fines: '658100',
+  tolls: '618400',
+  otherExpenses: '638000',
+  accountLength: '6',
 };
 
 export interface JournalLine {
@@ -196,7 +216,33 @@ export interface JournalLine {
   label: string;
   debit: number;
   credit: number;
+  thirdParty?: string; // code du client sur les lignes du compte client
+  thirdPartyName?: string;
 }
+
+/** Code tiers stable d'un client, pour le lettrage chez le comptable. */
+export function clientCode(c: Pick<Client, 'id'>): string {
+  return 'C' + c.id.replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase();
+}
+
+/** Ce que le journal peut aussi reprendre : dépenses, entretiens et versements VTC. */
+export interface JournalExtras {
+  expenses?: Pick<Expense, 'id' | 'vehicleId' | 'date' | 'kind' | 'amount' | 'label' | 'chargedTo'>[];
+  maintenance?: Pick<Maintenance, 'id' | 'vehicleId' | 'label' | 'start' | 'cost' | 'provider'>[];
+  vehicles?: Pick<Vehicle, 'id' | 'plate'>[];
+  vtcPayments?: Pick<VtcPayment, 'id' | 'contractId' | 'paidOn' | 'amount' | 'method' | 'reference'>[];
+  vtcContracts?: Pick<VtcContract, 'id' | 'number' | 'driverId'>[];
+  drivers?: Pick<Driver, 'id' | 'name'>[];
+}
+
+const expenseAccount = (k: ExpenseKind, a: AccountPlan): string =>
+  k === 'carburant' ? a.fuel
+  : k === 'assurance' ? a.insurance
+  : k === 'taxes' ? a.taxes
+  : k === 'amende' ? a.fines
+  : k === 'peage' ? a.tolls
+  : k === 'autre' ? a.otherExpenses
+  : a.upkeep; // pneus, réparation, pièces, lavage
 
 function treasuryAccount(m: PaymentMethod, plan: AccountPlan): { account: string; journal: string } {
   if (m === 'especes') return { account: plan.cash, journal: 'CA' };
@@ -232,6 +278,7 @@ export function journalEntries(
   p: Period,
   plan: AccountPlan = DEFAULT_ACCOUNTS,
   invoices: Invoice[] = [],
+  extras: JournalExtras = {},
 ): JournalLine[] {
   const ps = Date.parse(p.from);
   const pe = Date.parse(p.to);
@@ -249,7 +296,9 @@ export function journalEntries(
         debit: (clientSide ? amount : -amount) > 0 ? Math.abs(amount) : 0,
         credit: (clientSide ? amount : -amount) < 0 ? Math.abs(amount) : 0,
       };
-    for (const l of [line(acc.customers, inv.totalTtc, true), line(acc.revenue, inv.totalHt, false), line(acc.vat, inv.vat, false)]) if (l) out.push(l);
+    const tiers = { thirdParty: clientCode({ id: inv.clientId }), thirdPartyName: inv.billTo.name };
+    const cl = line(acc.customers, inv.totalTtc, true);
+    for (const l of [cl ? { ...cl, ...tiers } : null, line(acc.revenue, inv.totalHt, false), line(acc.vat, inv.vat, false)]) if (l) out.push(l);
   }
   const invoiced = new Set(invoices.map((i) => i.reservationId));
   const list = payments
@@ -264,15 +313,103 @@ export function journalEntries(
     const label = `${kindText[x.kind]} ${piece} ${c?.name ?? ''}${x.reference ? ` réf. ${x.reference}` : ''}`.trim();
     // Réservation facturée : l'encaissement solde le compte client ; sinon (ancien fonctionnement) il va en produits.
     const other = x.kind === 'caution' || x.kind === 'remboursement_caution' ? acc.deposits : invoiced.has(x.reservationId) ? acc.customers : acc.revenue;
+    const tiers = other === acc.customers && c ? { thirdParty: clientCode(c), thirdPartyName: c.name } : {};
     if (x.kind === 'remboursement_caution' || x.kind === 'remboursement') {
-      out.push({ date, journal: t.journal, piece, account: other, label, debit: x.amount, credit: 0 });
+      out.push({ date, journal: t.journal, piece, account: other, label, debit: x.amount, credit: 0, ...tiers });
       out.push({ date, journal: t.journal, piece, account: t.account, label, debit: 0, credit: x.amount });
     } else {
       out.push({ date, journal: t.journal, piece, account: t.account, label, debit: x.amount, credit: 0 });
-      out.push({ date, journal: t.journal, piece, account: other, label, debit: 0, credit: x.amount });
+      out.push({ date, journal: t.journal, piece, account: other, label, debit: 0, credit: x.amount, ...tiers });
     }
   }
+
+  // Versements des chauffeurs VTC : trésorerie au débit, produits VTC au crédit.
+  for (const v of (extras.vtcPayments ?? []).filter((y) => y.paidOn >= firstDay && y.paidOn <= lastDay).sort((a, b) => a.paidOn.localeCompare(b.paidOn))) {
+    const k = extras.vtcContracts?.find((y) => y.id === v.contractId);
+    const d = extras.drivers?.find((y) => y.id === k?.driverId);
+    const t = treasuryAccount(v.method, plan);
+    const piece = k?.number ?? '';
+    const label = `Versement VTC ${piece} ${d?.name ?? ''}${v.reference ? ` réf. ${v.reference}` : ''}`.trim();
+    out.push({ date: v.paidOn, journal: t.journal, piece, account: t.account, label, debit: v.amount, credit: 0 });
+    out.push({ date: v.paidOn, journal: t.journal, piece, account: acc.vtcRevenue, label, debit: 0, credit: v.amount });
+  }
+
+  // Journal des achats (AC) : dépenses et entretiens du propriétaire, à régler au fournisseur.
+  const plate = (id: string) => extras.vehicles?.find((y) => y.id === id)?.plate ?? '';
+  for (const e of (extras.expenses ?? []).filter((y) => y.chargedTo !== 'chauffeur' && y.amount > 0 && y.date >= firstDay && y.date <= lastDay).sort((a, b) => a.date.localeCompare(b.date))) {
+    const label = `${e.label || e.kind} ${plate(e.vehicleId)}`.trim();
+    const piece = `DEP-${e.id.slice(0, 8).toUpperCase()}`;
+    out.push({ date: e.date, journal: 'AC', piece, account: expenseAccount(e.kind, acc), label, debit: e.amount, credit: 0 });
+    out.push({ date: e.date, journal: 'AC', piece, account: acc.suppliers, label, debit: 0, credit: e.amount });
+  }
+  for (const m of (extras.maintenance ?? []).filter((y) => y.cost > 0 && localDate(y.start) >= firstDay && localDate(y.start) <= lastDay).sort((a, b) => a.start.localeCompare(b.start))) {
+    const date = localDate(m.start);
+    const label = `Entretien ${m.label} ${plate(m.vehicleId)}${m.provider ? ` (${m.provider})` : ''}`.trim();
+    const piece = `ENT-${m.id.slice(0, 8).toUpperCase()}`;
+    out.push({ date, journal: 'AC', piece, account: acc.upkeep, label, debit: m.cost, credit: 0 });
+    out.push({ date, journal: 'AC', piece, account: acc.suppliers, label, debit: 0, credit: m.cost });
+  }
   return out;
+}
+
+// ---------------------------------------------------------------- exports vers Sage 100 et Odoo
+
+/** Complète un numéro de compte à la longueur du plan du comptable (411100 → 41110000 sur 8 chiffres). */
+export function padAccount(account: string, length: string | number): string {
+  const n = Number(length);
+  return Number.isInteger(n) && n > account.length && n <= 13 ? account.padEnd(n, '0') : account;
+}
+
+const csvCell = (v: string, sep: string) => (/["\n\r]/.test(v) || v.includes(sep) ? `"${v.replace(/"/g, '""')}"` : v);
+const ddmmyyyy = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+
+/** CSV pour l'import « format paramétrable » de Sage 100 : séparateur point-virgule, une ligne par mouvement. */
+export function sageCsv(lines: JournalLine[], plan: AccountPlan): string {
+  const head = ['Date', 'Code journal', 'N° pièce', 'N° compte général', 'N° compte tiers', 'Libellé', 'Débit', 'Crédit'];
+  const rows = lines.map((l) => [
+    ddmmyyyy(l.date), l.journal, l.piece, padAccount(l.account, plan.accountLength), l.thirdParty ?? '', l.label.slice(0, 69),
+    l.debit ? String(l.debit) : '', l.credit ? String(l.credit) : '',
+  ]);
+  return [head, ...rows].map((r) => r.map((v) => csvCell(v, ';')).join(';')).join('\r\n') + '\r\n';
+}
+
+/** CSV pour l'import des pièces comptables d'Odoo : une pièce par journal, numéro et date, lignes en dessous. */
+export function odooCsv(lines: JournalLine[], plan: AccountPlan): string {
+  const head = ['date', 'journal_id', 'ref', 'line_ids/account_id', 'line_ids/partner_id', 'line_ids/name', 'line_ids/debit', 'line_ids/credit'];
+  const rows: string[][] = [];
+  let last = '';
+  for (const l of lines) {
+    const key = `${l.journal}|${l.piece}|${l.date}`;
+    const first = key !== last;
+    last = key;
+    rows.push([
+      first ? l.date : '', first ? l.journal : '', first ? l.piece : '',
+      padAccount(l.account, plan.accountLength), l.thirdPartyName ?? '', l.label, String(l.debit), String(l.credit),
+    ]);
+  }
+  return [head, ...rows].map((r) => r.map((v) => csvCell(v, ',')).join(',')).join('\n') + '\n';
+}
+
+/** Sage 100 lit les fichiers en Windows-1252 : on y convertit le texte (les caractères hors table deviennent leur équivalent simple). */
+export function toWindows1252(text: string): Uint8Array {
+  const special: Record<string, number> = { '€': 0x80, '‚': 0x82, '„': 0x84, '…': 0x85, '‘': 0x91, '’': 0x92, '“': 0x93, '”': 0x94, '–': 0x96, '—': 0x97, 'œ': 0x9c, 'Œ': 0x8c };
+  const out = new Uint8Array(text.length);
+  let i = 0;
+  for (const ch of text) {
+    const c = ch.codePointAt(0)!;
+    out[i++] = special[ch] ?? (c === 0x202f || c === 0x2009 ? 0x20 : c < 0x100 ? c : 0x3f);
+  }
+  return out.slice(0, i);
+}
+
+/** Vérifie que chaque pièce est équilibrée (débit = crédit), comme l'exigent Sage et Odoo. */
+export function unbalancedPieces(lines: JournalLine[]): string[] {
+  const sums = new Map<string, number>();
+  for (const l of lines) {
+    const k = `${l.journal}|${l.piece}|${l.date}`;
+    sums.set(k, (sums.get(k) ?? 0) + l.debit - l.credit);
+  }
+  return [...sums].filter(([, v]) => v !== 0).map(([k]) => k);
 }
 
 // ---------------------------------------------------------------- occupation par catégorie
