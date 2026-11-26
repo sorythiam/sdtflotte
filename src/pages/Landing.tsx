@@ -50,7 +50,7 @@ export function Landing() {
           <span className="lp-word">yoon <span>fleet</span></span>
         </a>
         <nav aria-label="Sections">
-          <a href="#fonctions">Fonctions</a>
+          <a href="#fonctions">Fonctionnalités</a>
           <a href="#tarifs">Tarifs</a>
           <a href="#questions">Questions</a>
         </nav>
