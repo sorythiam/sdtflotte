@@ -110,7 +110,7 @@ export function Landing() {
 
         <section id="tarifs" className="lp-section">
           <h2>Un prix par véhicule, en FCFA</h2>
-          <p className="lp-sub">Licence annuelle hors taxes. Paiement mensuel possible par mobile money (+20 %).</p>
+          <p className="lp-sub">Prix hors taxes, en abonnement annuel. Paiement au mois possible par mobile money (+20 %).</p>
           <div className="lp-plans">
             {(['essentiel', 'pro', 'entreprise'] as const).map((k) => {
               const p = PLAN_INFO[k];
@@ -118,8 +118,14 @@ export function Landing() {
                 <article key={k} className={`lp-plan${k === 'pro' ? ' lp-plan-main' : ''}`}>
                   {k === 'pro' && <span className="lp-badge">Recommandé</span>}
                   <h3>{p.label}</h3>
-                  <p className="lp-price"><strong>{fmt(p.perVehicleYear)} FCFA</strong> par véhicule et par an</p>
-                  <p className="lp-small">soit {fmt(Math.round(p.perVehicleYear / 12))} FCFA par mois · dès {p.minVehicles} véhicules</p>
+                  <p className="lp-price">
+                    {k === 'entreprise' && <span className="lp-from">À partir de </span>}
+                    <strong>{fmt(Math.round(p.perVehicleYear / 12))} FCFA</strong> par véhicule et par mois
+                  </p>
+                  <p className="lp-small">
+                    soit {fmt(p.perVehicleYear)} FCFA par véhicule et par an · dès {p.minVehicles} véhicules
+                    {k === 'entreprise' && <><br />Sur devis au-delà de 100 véhicules</>}
+                  </p>
                   <p>{p.summary}</p>
                   <p className="lp-small">{p.users}</p>
                 </article>

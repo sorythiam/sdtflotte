@@ -635,3 +635,4 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
   .lp-nav-cta .btn-sm { padding: 6px 10px; }
   .lp-cta .btn { width: 100%; }
 }
+.lp-from { display: block; font-size: 13px; color: var(--ink-muted); font-weight: 600; }
