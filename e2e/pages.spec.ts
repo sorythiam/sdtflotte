@@ -150,7 +150,7 @@ test('la page d’accueil mène à l’inscription, qui demande le nom et le Wha
   await page.evaluate(() => localStorage.clear());
   await page.goto('/?utm_source=facebook&utm_campaign=lancement');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Votre flotte, sur la bonne route.');
-  await expect(page.getByText('Sénégal Découverte Touristique')).toBeVisible();
+  await expect(page.getByText('Pensé pour les loueurs d’Afrique de l’Ouest :')).toBeVisible();
   await page.getByRole('link', { name: 'Essai gratuit 30 jours' }).click();
   await expect(page.getByRole('tab', { name: 'Essai gratuit 30 jours' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByLabel('Numéro WhatsApp')).toBeVisible();

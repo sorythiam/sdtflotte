@@ -81,7 +81,7 @@ export function Landing() {
         </section>
 
         <section className="lp-proof" aria-label="Référence">
-          <p><strong>Sénégal Découverte Touristique</strong> gère sa flotte de voitures, 4x4, minibus et bus avec Yoon Fleet.</p>
+          <p><strong>Pensé pour les loueurs d’Afrique de l’Ouest :</strong> paiements Wave et Orange Money, location avec chauffeur, prix en FCFA.</p>
         </section>
 
         <section id="fonctions" className="lp-section">
