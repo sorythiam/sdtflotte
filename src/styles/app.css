@@ -636,3 +636,4 @@ label.check input { width: 20px; height: 20px; accent-color: var(--atlantique); 
   .lp-cta .btn { width: 100%; }
 }
 .lp-from { display: block; font-size: 13px; color: var(--ink-muted); font-weight: 600; }
+.lp-mail { font-size: 15px; } .lp-final .lp-mail a { color: #fff; text-decoration: underline; text-underline-offset: 3px; }

@@ -5,6 +5,7 @@ import { PLAN_INFO } from '../domain/pricing';
 import { startAdTracking } from '../lib/tracking';
 
 const SUPPORT = (import.meta.env.VITE_SUPPORT_WHATSAPP as string | undefined)?.replace(/\D/g, '') || null;
+const EMAIL = 'contact@yoonfleet.com';
 const fmt = (n: number) => new Intl.NumberFormat('fr-FR').format(n);
 
 const PAINS: { pain: string; answer: string }[] = [
@@ -155,6 +156,7 @@ export function Landing() {
         <section className="lp-final">
           <h2>Essayez Yoon Fleet sur vos vrais véhicules</h2>
           <p>30 jours gratuits, accompagnés par un conseiller.</p>
+          <p className="lp-mail">Une question ? Écrivez-nous à <a href={`mailto:${EMAIL}`}>{EMAIL}</a></p>
           <div className="lp-cta lp-center">
             <a href={trial} className="btn btn-primary">Créer mon espace</a>
             {wa && <a href={wa} className="btn btn-on-dark" target="_blank" rel="noreferrer">WhatsApp</a>}
@@ -163,7 +165,7 @@ export function Landing() {
       </main>
 
       <footer className="lp-foot">
-        <span>© {new Date().getFullYear()} Tabibou Business Group · Yoon Fleet</span>
+        <span>© {new Date().getFullYear()} Tabibou Business Group · Yoon Fleet · <a href={`mailto:${EMAIL}`}>{EMAIL}</a></span>
         <span>Cette page mesure l’efficacité de nos publicités (Meta, LinkedIn). Aucune donnée de vos clients n’est concernée.</span>
       </footer>
     </div>
