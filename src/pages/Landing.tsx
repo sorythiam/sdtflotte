@@ -81,7 +81,7 @@ export function Landing() {
         </section>
 
         <section className="lp-proof" aria-label="Référence">
-          <p><strong>Pensé pour les loueurs d’Afrique de l’Ouest :</strong> paiements Wave et Orange Money, location avec chauffeur, prix en FCFA.</p>
+          <p><strong>Pensé pour les loueurs en Afrique :</strong> paiements par mobile money, location avec chauffeur, tout depuis le téléphone.</p>
         </section>
 
         <section id="fonctions" className="lp-section">
