@@ -28,7 +28,7 @@ export const PLAN_INFO: Record<Plan, { label: string; perVehicleYear: number; mi
 export const MONTHLY_SURCHARGE = 0.2; // paiement mensuel par mobile money : +20 %
 export const VOLUME_THRESHOLD = 100; // -20 % sur chaque véhicule au-delà du 100e
 export const VOLUME_DISCOUNT = 0.2;
-export const QUOTE_LIMIT = 300; // au-delà : sur devis
+export const QUOTE_LIMIT = 100; // au-delà : sur devis (grands comptes, négociés par l'équipe)
 
 export type Billing = 'annuel' | 'mensuel';
 
@@ -39,7 +39,7 @@ export interface PriceQuote {
   yearly: number; // licence annuelle, FCFA HT
   perMonth: number; // équivalent mensuel (annuel) ou mensualité (mensuel)
   billing: Billing;
-  onQuote: boolean; // au-delà de 300 véhicules
+  onQuote: boolean; // au-delà de 100 véhicules
 }
 
 export function priceFor(plan: Plan, vehicles: number, billing: Billing = 'annuel'): PriceQuote {

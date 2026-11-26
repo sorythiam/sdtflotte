@@ -143,7 +143,7 @@ export function checkoutQuote(
   const vat = Math.round((amountHt * vatRate) / 100);
   const start = now.toISOString();
   let error: string | null = null;
-  if (q.onQuote) error = 'Au-delà de 300 véhicules, le prix se fait sur devis.';
+  if (q.onQuote) error = 'Au-delà de 100 véhicules, l’abonnement se fait sur devis : écrivez-nous et un conseiller vous fait une offre.';
   else if (!(input.vehicles >= 1)) error = 'Indiquez votre nombre de véhicules.';
   else if (amountHt + vat < MIN_PAYMENT)
     error = 'Votre abonnement en cours couvre déjà cette formule. Choisissez plus de véhicules ou une formule supérieure, ou renouvelez à l’échéance.';

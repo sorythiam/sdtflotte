@@ -19,8 +19,8 @@ describe('grille tarifaire', () => {
     expect(priceFor('pro', 15, 'annuel').perMonth).toBe(45000);
     expect(priceFor('pro', 15, 'mensuel').perMonth).toBe(54000);
   });
-  it('passe sur devis au-delà de 300 véhicules', () => {
-    expect(priceFor('entreprise', 300).onQuote).toBe(false);
-    expect(priceFor('entreprise', 301).onQuote).toBe(true);
+  it('passe sur devis au-delà de 100 véhicules', () => {
+    expect(priceFor('entreprise', 100).onQuote).toBe(false);
+    expect(priceFor('entreprise', 101).onQuote).toBe(true);
   });
 });

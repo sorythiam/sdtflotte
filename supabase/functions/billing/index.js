@@ -15,20 +15,20 @@ var PLAN_INFO = {
     perVehicleYear: 36e3,
     minVehicles: 10,
     users: "Utilisateurs illimit\xE9s",
-    summary: "Essentiel + maintenance, frais au retour. \xC0 venir : \xE9tat des lieux mobile, mobile money, export SYSCOHADA"
+    summary: "Essentiel + maintenance, frais au retour"
   },
   entreprise: {
     label: "Entreprise",
     perVehicleYear: 48e3,
     minVehicles: 30,
     users: "Utilisateurs illimit\xE9s",
-    summary: "Pro + support prioritaire. \xC0 venir : multi-agences et multi-pays, portail client"
+    summary: "Pro + support prioritaire"
   }
 };
 var MONTHLY_SURCHARGE = 0.2;
 var VOLUME_THRESHOLD = 100;
 var VOLUME_DISCOUNT = 0.2;
-var QUOTE_LIMIT = 300;
+var QUOTE_LIMIT = 100;
 function priceFor(plan, vehicles, billing = "annuel") {
   const info = PLAN_INFO[plan];
   const n = Math.max(0, Math.floor(vehicles));
@@ -87,7 +87,7 @@ function checkoutQuote(input, current, now, vatRate = 0) {
   const vat = Math.round(amountHt * vatRate / 100);
   const start = now.toISOString();
   let error = null;
-  if (q.onQuote) error = "Au-del\xE0 de 300 v\xE9hicules, le prix se fait sur devis.";
+  if (q.onQuote) error = "Au-del\xE0 de 100 v\xE9hicules, l\u2019abonnement se fait sur devis : \xE9crivez-nous et un conseiller vous fait une offre.";
   else if (!(input.vehicles >= 1)) error = "Indiquez votre nombre de v\xE9hicules.";
   else if (amountHt + vat < MIN_PAYMENT)
     error = "Votre abonnement en cours couvre d\xE9j\xE0 cette formule. Choisissez plus de v\xE9hicules ou une formule sup\xE9rieure, ou renouvelez \xE0 l\u2019\xE9ch\xE9ance.";
