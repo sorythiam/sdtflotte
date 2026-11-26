@@ -22,7 +22,7 @@ const FAQ: { q: string; a: string }[] = [
   { q: 'Je n’ai pas le temps de tout saisir.', a: 'Un conseiller vous appelle après l’inscription et saisit vos véhicules avec vous, à partir de votre Excel ou de votre cahier. Comptez vingt minutes.' },
   { q: 'Mes données m’appartiennent-elles ?', a: 'Oui. Vous les exportez à tout moment : clients, contrats, factures et journal comptable SYSCOHADA, pour Sage ou Odoo.' },
   { q: 'Et après l’essai ?', a: 'Vous choisissez une formule et payez par Wave, Orange Money ou carte. Sans abonnement, l’accès est suspendu mais vos données sont conservées : elles réapparaissent dès le paiement. Aucune carte bancaire n’est demandée pour l’essai.' },
-  { q: 'Dans quels pays ?', a: 'Sénégal, Côte d’Ivoire, Guinée, Mauritanie, Mali, Burkina Faso, Bénin, Togo et Cameroun, en FCFA.' },
+  { q: 'Dans quels pays ?', a: 'Toute la zone franc CFA : Sénégal, Côte d’Ivoire, Mali, Burkina Faso, Bénin, Togo, Niger, Guinée-Bissau, Cameroun, Gabon, Congo, Tchad, Centrafrique et Guinée équatoriale, ainsi que la Guinée et la Mauritanie. Les montants sont affichés en FCFA.' },
 ];
 
 /** Page d'accueil publique de yoonfleet.com : là où arrivent les publicités. */

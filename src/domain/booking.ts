@@ -144,5 +144,5 @@ export function whatsappLink(phone: string, text: string, defaultCountryCode = '
 }
 
 export const COUNTRY_CALLING_CODE: Record<string, string> = {
-  SN: '221', CI: '225', GN: '224', MR: '222', ML: '223', BF: '226', BJ: '229', TG: '228', NE: '227', CM: '237', GA: '241', CG: '242', MA: '212',
+  SN: '221', CI: '225', GN: '224', MR: '222', ML: '223', BF: '226', BJ: '229', TG: '228', NE: '227', CM: '237', GA: '241', CG: '242', GW: '245', TD: '235', CF: '236', GQ: '240', MA: '212',
 };

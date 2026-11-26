@@ -67,5 +67,6 @@ export function taxIdLabel(country: string): string {
   if (country === 'SN') return 'NINEA';
   if (country === 'CI') return 'NCC';
   if (country === 'BJ' || country === 'BF') return 'IFU';
+  if (country === 'CM') return 'NIU';
   return 'NIF';
 }

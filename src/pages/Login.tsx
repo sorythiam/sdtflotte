@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { utmFrom } from '../domain/platform';
+import { COUNTRIES } from '../domain/countries';
 import { startAdTracking, trackSignup } from '../lib/tracking';
 import { ErrorBox, Logo, Wordmark } from '../components/ui';
 import { useData } from '../state/DataContext';
@@ -161,15 +162,7 @@ export function Login() {
               <label className="field">
                 Pays
                 <select value={country} onChange={(e) => setCountry(e.target.value)}>
-                  <option value="SN">Sénégal</option>
-                  <option value="CI">Côte d’Ivoire</option>
-                  <option value="GN">Guinée</option>
-                  <option value="MR">Mauritanie</option>
-                  <option value="ML">Mali</option>
-                  <option value="BF">Burkina Faso</option>
-                  <option value="BJ">Bénin</option>
-                  <option value="TG">Togo</option>
-                  <option value="CM">Cameroun</option>
+                  {COUNTRIES.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
                 </select>
               </label>
               <label className="field">

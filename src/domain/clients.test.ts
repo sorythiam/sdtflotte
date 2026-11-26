@@ -22,6 +22,6 @@ describe('fiche client', () => {
     expect(legalLine({ taxId: '005123456', tradeRegister: 'SN-DKR-2019-B-1234' })).toBe('NINEA 005123456 · RCCM SN-DKR-2019-B-1234');
     expect(legalLine({ taxId: null, tradeRegister: null })).toBe('');
     expect(taxIdLabel('SN')).toBe('NINEA');
-    expect(taxIdLabel('CM')).toBe('NIF');
+    expect(taxIdLabel('CM')).toBe('NIU');
   });
 });

@@ -8,12 +8,10 @@ import { subscriptionStatus, subStateLabel } from '../domain/saas';
 import { ErrorBox, roleLabel } from '../components/ui';
 import { dateLong } from '../domain/format';
 import { PLAN_INFO } from '../domain/pricing';
+import { COUNTRIES } from '../domain/countries';
 import { useData } from '../state/DataContext';
 
-const countries: [string, string][] = [
-  ['SN', 'Sénégal'], ['CI', 'Côte d’Ivoire'], ['GN', 'Guinée'], ['MR', 'Mauritanie'], ['ML', 'Mali'],
-  ['BF', 'Burkina Faso'], ['BJ', 'Bénin'], ['TG', 'Togo'], ['NE', 'Niger'], ['CM', 'Cameroun'], ['GA', 'Gabon'], ['CG', 'Congo'], ['MA', 'Maroc'],
-];
+const countries: [string, string][] = [...COUNTRIES, ['MA', 'Maroc']];
 
 
 export function Settings() {
